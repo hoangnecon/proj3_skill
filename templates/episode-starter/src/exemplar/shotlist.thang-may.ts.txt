@@ -1,0 +1,497 @@
+// Phân cảnh "Thang máy ăn bí mật" — neo theo từng chữ của giọng Hải Đăng.
+// Mọi cú đi bộ dùng path (bàn chân dán sàn), mọi cú bấm nút dùng reach (lấy đà → chạm → nhấn → thả).
+import type {Actor, ShotDef} from './engine';
+import {carBtn, floorY, stairY, CORR_Y} from './geo';
+
+const btn = (n: number) => {
+  const [x, y] = carBtn(n);
+  return {x, y};
+};
+const sy = (x: number) => stairY(x);
+const FY = (f: number) => floorY(f) + 46;
+
+// người trong buồng thang: nhìn chính diện, đứng gần bảng nút bên phải
+const rider = (id: string, look: string, x = 700, extra: Partial<Actor> = {}): Actor => ({id, look, x, y: 1830, s: 1.12, ...extra});
+
+export const SHOTS: ShotDef[] = [
+  // ============ s1: mở — toà nhà, luật chơi ============
+  {
+    at: 's1', name: 'toà nhà mặt cắt', set: 'building', cam: [540, 820, 1.05], cam2: [540, 980, 1.0], ease: 'out',
+    o: {carFloor: 0},
+    over: [
+      {k: 'title', text: 'THANG MÁY ĂN BÍ MẬT', sub: 'chung cư B5 · 17 tầng', x: 540, y: 330, until: 's1@Thang-0.1', s: 0.92},
+      {k: 'label', text: '17 TẦNG', x: 900, y: 200, at: 's1@mười', world: true, s: 0.8, c: 'pink'},
+    ],
+  },
+  {
+    at: 's1@Thang', name: 'sảnh: tờ giấy dán', set: 'lobby', cam: [560, 1150, 1.0], cam2: [880, 1080, 1.55], ease: 'io',
+    actors: [{id: 'bv', look: 'n6', x: 1050, y: 1700, s: 0.95, p: 'cross', e: 'deadpan'}],
+    over: [{k: 'stamp', text: 'KHÔNG CẦN THẺ', x: 540, y: 520, at: 's1@thẻ', s: 0.8}],
+  },
+  {
+    at: 's1@Nó', name: 'cận giấy dán', set: 'lobby', cam: [945, 1060, 2.6], cam2: [945, 1060, 2.8], punch: 0.06,
+  },
+  // ============ s2: bước vào, nói thật, cửa đóng ============
+  {
+    at: 's2@Bước', name: 'cô đi vào thang', set: 'lobby', cam: [470, 1250, 1.05], cam2: [540, 1200, 1.45], ease: 'io',
+    doorKeys: [[1, 0], [0, 's2@cửa']],
+    actors: [
+      {id: 'a', look: 'n2', x: 0, y: 0, s: 0.95, path: [[120, 1700, 0], [470, 1676, 's2@vào+0.45'], [540, 1546, 's2@nói+0.15']], view: [['side', 0], ['front', 's2@nói+0.2']], e: [['neutral', 0], ['sly', 's2@nói']], p: [['idle', 0], ['confess', 's2@nói+0.3']], talk: [['s2@nói', 's2@thật']]},
+    ],
+    over: [{k: 'bubble', text: 'Em đọc trộm tin nhắn', x: 560, y: 760, at: 's2@nói+0.25', until: 's2@cửa', s: 0.72, tail: [-40, 160]}],
+  },
+  {
+    at: 's2@bí#2', name: 'bí mật to lên cao', set: 'building', cam: [540, 1000, 1.0], cam2: [540, 800, 1.12], ease: 'io',
+    floors: [0, 0.2, 's2@cao+0.3'], floorsTo: 12,
+    over: [{k: 'label', text: 'BÍ MẬT CÀNG TO', x: 540, y: 1780, s: 0.85}, {k: 'arrow', x: 960, y: 900, r: 180, at: 's2@thang', s: 0.9}],
+  },
+  // ============ s3: nói dối — đứng im, đèn chớp ============
+  {
+    at: 's3@Nói', name: 'chú nói dối', set: 'car', cam: [600, 1300, 1.1],
+    actors: [rider('b', 'n1', 600, {e: 'smug', p: 'hip', talk: [['s3@Nói', 's3@im']]})],
+    over: [{k: 'bubble', text: 'Tôi chưa từng nói dối', x: 520, y: 600, s: 0.75, tail: [-40, 170]}],
+  },
+  {
+    at: 's3@đèn', name: 'đèn chớp chớp', set: 'car', cam: [640, 1250, 1.1], cam2: [700, 1200, 1.3], shake: 2,
+    o: {flicker: 1, disp: 'G'},
+    actors: [rider('b', 'n1', 600, {e: [['shock', 0], ['deadpan', 1.0]], p: 'idle'})],
+  },
+  // ============ s3b: mỗi bí mật dùng một lần ============
+  {
+    at: 's3b@Và', name: 'bí mật lần 1', set: 'car', cam: [640, 1300, 1.1],
+    floors: [0, 's3b@lần', 's3b@lần+1.0'], floorsTo: 4,
+    actors: [rider('c', 'n4', 640, {e: [['shh', 0], ['joy', 's3b@lần']], p: 'confess', talk: [['s3b@Và', 's3b@lần']]})],
+    over: [{k: 'bubble', text: 'Em sợ gián', x: 560, y: 620, until: 's3b@lần', tail: [-40, 160]}],
+  },
+  {
+    at: 's3b@Nói', name: 'bí mật lần 2: hết', set: 'car', cam: [640, 1250, 1.2],
+    o: {flicker: 0.7, disp: 'G'},
+    actors: [rider('c', 'n4', 640, {e: [['eager', 0], ['sad', 's3b@hết']], p: 'confess', talk: [['s3b@Nói', 's3b@rồi']]})],
+    over: [
+      {k: 'bubble', text: 'Em sợ gián!', x: 560, y: 620, until: 's3b@hết', tail: [-40, 160]},
+      {k: 'stamp', text: 'ĐÃ DÙNG', x: 540, y: 700, at: 's3b@hết'},
+    ],
+  },
+  // ============ s4: tháng đầu, bà Hạnh ============
+  {
+    at: 's4@Tháng', name: 'sảnh vui như hội', set: 'lobby', cam: [540, 1180, 1.0], cam2: [560, 1160, 1.08],
+    doorKeys: [[1, 0], [0, 1.0]],
+    actors: [
+      {id: 'w1', look: 'n3', x: 0, y: 0, s: 0.95, path: [[-150, 1760, 0], [1250, 1780, 4.5]], e: 'joy'},
+      {id: 'w2', look: 'r3', x: 0, y: 0, s: 0.9, path: [[1250, 1640, 0.2], [-200, 1650, 5]], e: 'joy', arms: 'phone'},
+      {id: 'h1', look: 'r1', x: 860, y: 1840, s: 1.0, p: 'clap', e: 'joy', hop: 14},
+      {id: 'h2', look: 'n5', x: 180, y: 1850, s: 0.95, p: 'cheer', e: 'joy', hop: 22},
+    ],
+    over: [{k: 'year', text: 'THÁNG ĐẦU', x: 540, y: 330, s: 0.8, c: 'teal'}],
+  },
+  {
+    at: 's4@Bà', name: 'bà Hạnh thú nhận', set: 'car', cam: [640, 1300, 1.1],
+    actors: [rider('h', 'baHanh', 640, {e: [['shh', 0], ['sly', 's4@thú']], p: 'confess', talk: [['s4@thú', 's4@quy']]})],
+    over: [{k: 'bubble', text: 'Tôi chưa đọc hết nội quy', x: 540, y: 600, at: 's4@thú', s: 0.7, tail: [-40, 180]}],
+  },
+  {
+    at: 's4@Thang', name: 'lên đúng tầng 5', set: 'building', cam: [540, 1300, 1.5], cam2: [540, 1250, 1.6],
+    floors: [0, 0.05, 's4@đúng+0.2'], floorsTo: 5,
+    o: {hl: [{f: 5, c: 'yellow'}]},
+    over: [{k: 'label', text: 'TẦNG 5 · BÀ HẠNH', x: 540, y: FY(5) - 120, world: true, at: 's4@năm#2', s: 0.6, c: 'pink'}],
+  },
+  // ============ s5: anh Toàn, túi rác 902 ============
+  {
+    at: 's5@Anh', name: 'anh Toàn khai', set: 'car', cam: [640, 1300, 1.1],
+    actors: [rider('t', 'anhToan', 640, {e: [['sly', 0], ['joy', 's5@hai']], p: 'confess', talk: [['s5@khai', 's5@hai']]})],
+    over: [{k: 'bubble', text: 'Tôi vứt rác ở cửa 902', x: 540, y: 600, at: 's5@khai', s: 0.72, tail: [-40, 180]}],
+  },
+  {
+    at: 's5@Thang', name: 'hành lang tầng 9: cửa mở', set: 'corridor', cam: [2480, 1150, 1.0], cam2: [2250, 1150, 1.0], ease: 'io',
+    o: {floorNo: 9, door902: 1, trash: true},
+    floors: [1, 0, 's5@chín#2'], floorsTo: 9,
+    doorKeys: [[0, 0], [1, 's5@Cửa#2']],
+    actors: [
+      {id: 't', look: 'anhToan', x: 0, y: 0, s: 1.0, enter: 's5@Cửa#2+0.3', path: [[2630, CORR_Y, 's5@mở'], [2630, CORR_Y, 's5@mở+0.15'], [2230, CORR_Y, 's5@chủ+0.1']], e: [['joy', 0], ['shock', 's5@chủ']]},
+      {id: 'o', look: 'chu902', x: 830, y: CORR_Y - 2, s: 1.0, p: 'cross', e: 'angry'},
+    ],
+  },
+  {
+    at: 's5@chủ', name: 'chủ 902 đứng đợi', set: 'corridor', cam: [1080, 1250, 1.35], cam2: [1000, 1250, 1.45],
+    o: {floorNo: 9, door902: 1, trash: true},
+    actors: [
+      {id: 'o', look: 'chu902', x: 830, y: CORR_Y - 2, s: 1.0, p: [['cross', 0], ['pointL', 's5@đứng']], e: 'angry', hop: 6},
+      {id: 't', look: 'anhToan', x: 0, y: 0, s: 1.0, path: [[1500, CORR_Y, 0], [1300, CORR_Y, 0.7]], e: 'shock', lean: -6, arms: 'down'},
+    ],
+  },
+  // ============ s6: xếp hàng, nhẩm bí mật, chép lòng bàn tay ============
+  {
+    at: 's6@Từ', name: 'xếp hàng buổi sáng', set: 'lobby', cam: [420, 1180, 1.05], cam2: [400, 1200, 1.12],
+    actors: [
+      ...(['n2', 'r1', 'anhKhoa', 'n6', 'chiLan', 'r2'] as const).map((lk, i): Actor => {
+        const x0 = 470 - i * 150;
+        return {id: 'q' + i, look: lk, x: 0, y: 0, s: 0.92, path: [[x0, 1700 + (i % 2) * 8, 0], [x0, 1700 + (i % 2) * 8, 's6@xếp+0.1'], [x0 + 110, 1700 + (i % 2) * 8, 's6@hàng+0.5']], e: i % 2 ? 'stern' : 'deadpan', arms: i === 3 ? 'phone' : i === 1 ? 'hold' : 'down'};
+      }),
+    ],
+    over: [{k: 'year', text: '6:45 SÁNG', x: 540, y: 330, s: 0.8, c: 'blue'}],
+  },
+  {
+    at: 's6@Người', name: 'nhẩm như học bài', set: 'lobby', cam: [330, 1250, 1.7], cam2: [270, 1250, 1.8],
+    actors: [
+      {id: 'q1', look: 'r1', x: 470, y: 1700, s: 0.92, view: 'side', arms: 'hold', e: 'stern', talk: [['s6@nhẩm', 's6@bài']], look2: -6},
+      {id: 'q2', look: 'anhKhoa', x: 320, y: 1708, s: 0.92, view: 'side', arms: 'down', e: 'deadpan', talk: [['s6@ta', 's6@bài']], look2: 8},
+      {id: 'q3', look: 'n6', x: 170, y: 1700, s: 0.92, view: 'side', arms: 'phone', e: 'stern', talk: [['s6@bí', 's6@học']]},
+    ],
+    over: [
+      {k: 'label', text: 'nhẩm… nhẩm…', x: 360, y: 760, s: 0.6, c: 'white', at: 's6@nhẩm'},
+    ],
+  },
+  {
+    at: 's6@có', name: 'chép lòng bàn tay', set: 'palm', cam: [540, 960, 1.0], cam2: [540, 900, 1.12], bg: 'wallB',
+    palm: ['Giấu vợ', '2 triệu', 'quỹ đen!'],
+  },
+  // ============ s7: thằng cu tầng 3 ============
+  {
+    at: 's7@Trẻ', name: 'thằng cu khai', set: 'car', cam: [620, 1420, 1.25],
+    floors: [0, 's7@Là', 's7@nơi+0.2'], floorsTo: 3,
+    lights: [[3, 's7@Là-0.25']],
+    actors: [{id: 'k', look: 'cu', x: 640, y: 1840, s: 1.15, e: [['shh', 0], ['joy', 's7@Là']], p: [['idle', 0], ['shh', 's7@con#2'], ['cheer', 's7@Là']], talk: [['s7@con#2', 's7@tập']], hop: 0}],
+    over: [{k: 'bubble', text: 'Con chưa làm bài tập', x: 560, y: 820, at: 's7@con#2', until: 's7@Là', s: 0.75, tail: [-30, 160]}],
+  },
+  // ============ s8: ông Bảy leo bộ ============
+  {
+    at: 's8@Người', name: 'ông Bảy trong thang', set: 'car', cam: [620, 1300, 1.15],
+    o: {disp: 'G'},
+    actors: [rider('b7', 'ongBay', 620, {e: [['stern', 0], ['sad', 's8@chẳng']], p: 'idle'})],
+    over: [
+      {k: 'label', text: 'ÔNG BẢY · TẦNG 16', x: 540, y: 420, at: 's8@Ông', s: 0.7, c: 'yellow'},
+      {k: 'bubble', text: '…', x: 520, y: 640, at: 's8@sống', tail: [-30, 160]},
+    ],
+  },
+  {
+    at: 's8@chẳng', name: 'leo bộ, ngồi thở tầng 11', set: 'stairs', cam: [520, 1260, 1.2], cam2: [640, 1180, 1.3], ease: 'io',
+    o: {floorNo: 11},
+    actors: [
+      {id: 'b7', look: 'ongBay', x: 0, y: 0, s: 0.95, slope: -0.6, path: [[330, sy(330), 0], [600, sy(600), 's8@ngồi']], legs: [['walk', 0], ['sit', 's8@ngồi']], seatH: 96, arms: [['cane', 0], ['down', 's8@ngồi']], prop: 'cane', e: 'sad', lean: 7, pant: true},
+    ],
+  },
+  // ============ s8b: con trai cõng bố ============
+  {
+    at: 's8b@Con', name: 'con cõng bố vào thang', set: 'lobby', cam: [440, 1250, 1.15], cam2: [540, 1200, 1.3],
+    o: {door: 1},
+    actors: [
+      {id: 'son', look: 'conBay', x: 0, y: 0, s: 0.95, path: [[200, 1700, 0], [460, 1680, 's8b@vào+0.25'], [540, 1546, 's8b@thang+0.35']], arms: 'carry', e: 'stern'},
+      {id: 'dad', look: 'ongBay', x: 0, y: 0, ride: 'son', e: 'angry'},
+    ],
+  },
+  {
+    at: 's8b@khai', name: 'con khai hộ bí mật của bố', set: 'car', cam: [600, 1300, 1.1],
+    actors: [
+      rider('son', 'conBay', 720, {e: 'sly', p: 'confess', talk: [['s8b@khai', 's8b@bố#2']]}),
+      {id: 'dad', look: 'ongBay', x: 420, y: 1800, s: 1.05, e: [['sad', 0], ['shock', 's8b@bố#2'], ['angry', 's8b@bố#2+0.5']], p: 'idle', shake: 0},
+    ],
+    over: [{k: 'bubble', text: 'Bố tôi ███████', x: 640, y: 620, at: 's8b@khai+0.2', s: 0.8, tail: [40, 170]}],
+  },
+  {
+    at: 's8b@Thang#2', name: 'lên tầng 16 thật', set: 'building', cam: [540, 900, 1.15], cam2: [540, 600, 1.25],
+    floors: [0, 0, 's8b@thật'], floorsTo: 16,
+    o: {hl: [{f: 16, c: 'yellow'}]},
+  },
+  {
+    at: 's8b@Từ', name: 'bố bỏ đi, không nói nữa', set: 'corridor', cam: [1000, 1200, 1.0], cam2: [880, 1200, 1.05],
+    o: {floorNo: 16, door: 0},
+    night: 0.35,
+    actors: [
+      {id: 'dad', look: 'ongBay', x: 0, y: 0, s: 0.95, path: [[1250, CORR_Y, 0], [1250, CORR_Y, 0.3], [560, CORR_Y, 's8b@nữa+0.3']], arms: 'cane', prop: 'cane', e: 'angry', lean: 5},
+      {id: 'son', look: 'conBay', x: 1330, y: CORR_Y, s: 1.0, view: 'side', face: -1, arms: [['down', 0], ['raise', 's8b@nói'], ['down', 's8b@trai#2']], e: 'sad'},
+    ],
+  },
+  // ============ s9: ba tháng sau ============
+  {
+    at: 's9@Ba', name: 'cạn bí mật', set: 'lobby', cam: [540, 1180, 1.05], cam2: [540, 1220, 1.15],
+    o: {door: 0},
+    actors: [
+      {id: 'p1', look: 'n6', x: 260, y: 1780, s: 0.95, e: 'deadpan', p: 'cross'},
+      {id: 'p2', look: 'r1', x: 540, y: 1800, s: 0.95, e: 'sad', p: 'idle'},
+      {id: 'p3', look: 'n1', x: 820, y: 1790, s: 0.95, e: 'deadpan', p: 'hip'},
+    ],
+    over: [
+      {k: 'year', text: '3 THÁNG SAU', x: 540, y: 330, s: 0.8, c: 'red'},
+      {k: 'bubble', text: '…', x: 300, y: 980, at: 's9@cạn', tail: [-20, 130]},
+      {k: 'bubble', text: '…', x: 780, y: 990, at: 's9@sạch', tail: [20, 130]},
+    ],
+  },
+  // ============ s10: nghĩ ra cách ============
+  {
+    at: 's10@Rồi', name: 'nghĩ ra cách', set: 'solid', bg: 'yellow', cam: [540, 1100, 1.0], cam2: [540, 1100, 1.06],
+    actors: [{id: 'k', look: 'anhKhoa', x: 540, y: 1700, s: 1.2, e: [['stern', 0], ['sly', 's10@cách']], p: [['cross', 0], ['pointUp', 's10@cách']]}],
+    over: [
+      {k: 'label', text: 'KHÔNG CÓ BÍ MẬT?', x: 540, y: 360, at: 's10@Không', s: 0.85, c: 'white'},
+      {k: 'label', text: '→ LÀM RA BÍ MẬT', x: 540, y: 500, at: 's10@làm', s: 0.85, c: 'pink'},
+    ],
+  },
+  // ============ s11: anh Khoa tầng 14 ============
+  {
+    at: 's11@Anh', name: 'Khoa rón rén', set: 'corridor', cam: [1100, 1200, 1.0], cam2: [950, 1200, 1.05], night: 0.55,
+    o: {floorNo: 14, door902: [0, 1][1]},
+    actors: [
+      {id: 'k', look: 'anhKhoa', x: 0, y: 0, s: 1.0, path: [[1450, CORR_Y, 0], [980, CORR_Y, 's11@tình+0.3']], tip: true, arms: 'down', e: 'sly', look2: 4},
+      {id: 'w', look: 'n4', x: 830, y: CORR_Y - 2, s: 0.95, e: 'smug', p: 'wave', enter: 's11@tầng'},
+    ],
+  },
+  {
+    at: 's11@Không', name: 'vì ở tầng 14', set: 'car', cam: [640, 1300, 1.1],
+    floors: [0, 's11@Vì#2', 's11@bốn#2+0.3'], floorsTo: 14,
+    actors: [rider('k', 'anhKhoa', 640, {e: [['deadpan', 0], ['smug', 's11@Vì#2']], p: [['shrug', 0], ['thumb', 's11@Vì#2']]})],
+    over: [{k: 'label', text: 'KHÔNG PHẢI VÌ YÊU', x: 540, y: 420, s: 0.7, c: 'pink'}],
+  },
+  // ============ s12: chị Lan vay nợ ============
+  {
+    at: 's12@Chị', name: 'Lan vay lén', set: 'corridor', cam: [920, 1250, 1.25], cam2: [900, 1230, 1.3],
+    o: {floorNo: 12},
+    actors: [
+      {id: 'shark', look: 'tho15', x: 1080, y: CORR_Y, s: 1.0, e: 'sly', p: 'idle', prop: 'env', reach: [{at: 's12@vay', x: 930, y: CORR_Y - 260, hold: 0.9, hand: 'l'}]},
+      {id: 'lan', look: 'chiLan', x: 770, y: CORR_Y, s: 0.98, e: [['shh', 0], ['sly', 's12@nợ']], p: 'idle', reach: [{at: 's12@vay+0.2', x: 930, y: CORR_Y - 260, hold: 0.7}]},
+    ],
+    over: [{k: 'label', text: 'VAY NÓNG 24H', x: 940, y: 980, world: true, r: -4, s: 0.55, c: 'white'}],
+  },
+  {
+    at: 's12@Không', name: 'chỉ để có cái mà khai', set: 'car', cam: [640, 1300, 1.1],
+    floors: [0, 's12@khai', 's12@khai+0.8'], floorsTo: 12,
+    actors: [rider('lan', 'chiLan', 640, {e: [['deadpan', 0], ['joy', 's12@khai']], p: [['shrug', 0], ['confess', 's12@chỉ']], talk: [['s12@chỉ', 's12@khai']]})],
+    over: [{k: 'bubble', text: 'Em nợ 50 triệu', x: 540, y: 620, at: 's12@chỉ', tail: [-30, 170], s: 0.8}],
+  },
+  // ============ s13: tầng 15 chuyện mờ ám ============
+  {
+    at: 's13@Tầng', name: 'tầng 15 mờ ám', set: 'corridor', cam: [1150, 1200, 1.05], cam2: [900, 1200, 1.05], night: 0.6,
+    o: {floorNo: 15},
+    actors: [0, 1, 2].map((i): Actor => ({id: 'm' + i, look: i === 1 ? 'banBM' : 'tho15', x: 0, y: 0, s: 0.95, path: [[1500 + i * 190, CORR_Y, 0], [700 + i * 190, CORR_Y, 3.8]], tip: true, arms: 'hold', prop: 'box', e: 'sly'})),
+    over: [{k: 'year', text: 'SÁNG THỨ HAI', x: 540, y: 330, at: 's13@sáng', s: 0.75, c: 'blue'}],
+  },
+  {
+    at: 's13@để', name: 'cả tuần đi thang cho nhàn', set: 'car', cam: [600, 1300, 1.1],
+    floors: [0, 's13@tuần', 's13@nhàn'], floorsTo: 15,
+    actors: [
+      rider('m0', 'tho15', 380, {e: 'smug', p: 'cross'}),
+      rider('m1', 'banBM', 600, {e: 'joy', p: 'thumb', y: 1860}),
+      rider('m2', 'tho15', 800, {e: 'smug', p: 'hip', y: 1810}),
+    ],
+  },
+  // ============ s14: quầy bán bí mật ============
+  {
+    at: 's14@Bí', name: 'quầy bí mật mọc ra', set: 'lobby', cam: [460, 1150, 1.0], cam2: [420, 1180, 1.1],
+    o: {kiosk: true, poster: false},
+    actors: [
+      {id: 'sell', look: 'banBM', x: 310, y: 1700, s: 0.95, e: 'sly', p: [['argue', 0], ['pointR', 's14@giá']], talk: [['s14@giá', 's14@tầng']]},
+      {id: 'c1', look: 'n3', x: 0, y: 0, s: 0.95, path: [[1300, 1830, 0], [700, 1830, 's14@quầy+0.4']], e: 'eager', arms: 'down'},
+      {id: 'c2', look: 'n4', x: 0, y: 0, s: 0.92, path: [[1500, 1880, 0.4], [880, 1880, 's14@mật#2+0.5']], e: 'eager'},
+    ],
+    over: [{k: 'label', text: 'BÍ MẬT THÀNH TIỀN', x: 540, y: 300, s: 0.8, c: 'gold'}],
+  },
+  {
+    at: 's14@Tầng#2', name: 'bảng giá', set: 'lobby', cam: [320, 950, 2.4], cam2: [320, 950, 2.5],
+    o: {kiosk: true, poster: false},
+    over: [
+      {k: 'arrow', x: 112, y: 900, r: -90, world: true, s: 0.35, until: 's14@Tầng#3'},
+      {k: 'arrow', x: 112, y: 1024, r: -90, world: true, s: 0.35, at: 's14@Tầng#3'},
+    ],
+  },
+  // ============ s15: bí mật mua -> xuống hầm ============
+  {
+    at: 's15@Nhưng', name: 'đọc bí mật mua', set: 'car', cam: [640, 1300, 1.1],
+    actors: [rider('r', 'n6', 640, {e: [['smug', 0], ['eager', 's15@Ai']], p: 'write', prop: 'clip', talk: [['s15@Ai', 's15@khác']]})],
+    over: [{k: 'label', text: 'BÍ MẬT ĐI MUA', x: 540, y: 420, at: 's15@mua', s: 0.7, c: 'gold'}],
+  },
+  {
+    at: 's15@thang#2', name: 'chở thẳng xuống hầm', set: 'building', cam: [540, 1450, 1.3], cam2: [540, 1600, 1.5], ease: 'in', shake: 3,
+    floors: [8, 0, 's15@hầm'], floorsTo: -1,
+    o: {hl: [{f: -1, c: 'red'}]},
+  },
+  {
+    at: 's15@rồi', name: 'tắt đèn', set: 'car', cam: [640, 1300, 1.1], cam2: [640, 1250, 1.2],
+    of: (u, ts) => ({dark: Math.min(1, Math.max(0, (ts - 0.2) / 0.25)), disp: 'B'}),
+    actors: [rider('r', 'n6', 640, {e: 'shock', p: 'holdHigh', prop: 'clip', shake: 2})],
+  },
+  // ============ s15b: nhóm chờ dưới hầm ============
+  {
+    at: 's15b@Giờ', name: 'nhóm ngồi đợi dưới hầm', set: 'basement', cam: [540, 1200, 1.0], cam2: [540, 1240, 1.1],
+    extras: [0, 1, 2, 3, 4].map((i) => ({k: 'stool' as const, x: 120 + i * 210, y: 1720 + (i % 2) * 70 - 1, s: 1, c: ['red', 'blue', 'teal', 'red', 'blue'][i]})),
+    actors: (['n6', 'n3', 'r2', 'n4', 'anhToan'] as const).map((lk, i): Actor => ({id: 'g' + i, look: lk, x: 120 + i * 210, y: 1720 + (i % 2) * 70, s: 0.9, p: ['sitPhone', 'sitCross', 'sitHold', 'sit', 'sitPhone'][i], e: ['deadpan', 'sad', 'stern', 'sad', 'deadpan'][i] as Actor['e'], prop: i === 2 ? 'clip' : undefined})),
+  },
+  {
+    at: 's15b@Toàn', name: 'chưa ai dám khai thật', set: 'basement', cam: [430, 1300, 1.7], cam2: [470, 1300, 1.8],
+    extras: [1, 2].map((i) => ({k: 'stool' as const, x: 120 + i * 210, y: 1720 + (i % 2) * 70 - 1, c: ['blue', 'teal'][i - 1]})),
+    actors: [
+      {id: 'g1', look: 'n3', x: 330, y: 1790, s: 0.9, p: 'sitCross', e: 'sad'},
+      {id: 'g2', look: 'r2', x: 540, y: 1720, s: 0.9, p: 'sitHold', prop: 'clip', e: [['stern', 0], ['shock', 's15b@dám']], shake: 1.5},
+    ],
+    over: [{k: 'label', text: 'ĐÃ MUA · CHƯA DÁM', x: 540, y: 520, at: 's15b@chưa', s: 0.7, c: 'white'}],
+  },
+  // ============ s16-17: hai vợ chồng ============
+  {
+    at: 's16@Có', name: 'vợ chồng chung chuyến', set: 'car', cam: [580, 1300, 1.1],
+    actors: [rider('v', 'vo', 430, {e: 'neutral', p: 'idle', y: 1820}), rider('c', 'chong', 700, {e: 'neutral', p: 'idle', y: 1840})],
+  },
+  {
+    at: 's16@Chồng#2', name: 'chồng nói: lên 1 tầng', set: 'car', cam: [640, 1300, 1.2],
+    floors: [0, 's16@thang', 's16@tầng'], floorsTo: 1,
+    actors: [rider('v', 'vo', 430, {e: [['neutral', 0], ['angry', 's16@câu']], p: 'idle', y: 1820}), rider('c', 'chong', 700, {e: 'sly', p: 'confess', talk: [['s16@nói', 's16@câu']], y: 1840})],
+    over: [{k: 'bubble', text: 'Anh giấu quỹ đen', x: 640, y: 620, at: 's16@nói', until: 's16@Vợ#2', tail: [40, 170], s: 0.8}],
+  },
+  {
+    at: 's16@Vợ#2', name: 'vợ nói: lên 3 tầng', set: 'car', cam: [520, 1300, 1.2],
+    floors: [1, 's16@thang#2', 's16@tầng#2+0.3'], floorsTo: 4,
+    actors: [rider('v', 'vo', 430, {e: 'smug', p: 'confess', talk: [['s16@nói#2', 's16@câu#2']], y: 1820}), rider('c', 'chong', 700, {e: [['neutral', 0], ['shock', 's16@thang#2']], p: 'idle', y: 1840})],
+    over: [{k: 'bubble', text: 'Em lấy anh vì nhà có thang máy', x: 480, y: 620, at: 's16@nói#2', tail: [-40, 170], s: 0.62}],
+  },
+  {
+    at: 's17@Hai', name: 'hai tầng khác nhau', set: 'building', cam: [540, 1450, 1.6], cam2: [540, 1430, 1.65],
+    o: {carFloor: 4, hl: [{f: 1, c: 'blue'}, {f: 4, c: 'pink'}]},
+    over: [
+      {k: 'label', text: 'CHỒNG · TẦNG 1', x: 690, y: FY(1) + 4, world: true, s: 0.5, c: 'blue', at: 's17@ra'},
+      {k: 'label', text: 'VỢ · TẦNG 4', x: 690, y: FY(4) + 4, world: true, s: 0.5, c: 'pink', at: 's17@tầng'},
+    ],
+  },
+  {
+    at: 's17@Đến', name: 'chồng ăn mì một mình', set: 'corridor', cam: [800, 1300, 1.35], cam2: [820, 1300, 1.45], night: 0.6,
+    o: {floorNo: 1},
+    extras: [{k: 'stool', x: 900, y: CORR_Y - 1, c: 'blue'}],
+    actors: [{id: 'c', look: 'chong', x: 900, y: CORR_Y, s: 0.95, p: 'sitHold', prop: 'noodle', e: 'sad'}],
+  },
+  // ============ s18: họp phường ============
+  {
+    at: 's18@Cuối', name: 'hội nghị cư dân', set: 'hall', cam: [540, 1050, 1.0], cam2: [540, 1080, 1.05],
+    o: {hallView: 'stage'},
+    actors: [
+      {id: 'tk', look: 'n4', x: 260, y: 1620, s: 0.85, p: 'write', e: 'neutral'},
+      {id: 'cb', look: 'canBo', x: 540, y: 1620, s: 0.9, p: 'cross', e: 'stern'},
+      {id: 'tt', look: 'n6', x: 820, y: 1620, s: 0.85, p: 'idle', e: 'deadpan'},
+    ],
+  },
+  {
+    at: 's18@toà#2', name: 'biểu đồ ly hôn', set: 'hall', cam: [930, 1000, 2.0], cam2: [930, 980, 2.15],
+    o: {hallView: 'stage'},
+    over: [{k: 'stamp', text: 'CAO NHẤT QUẬN', x: 540, y: 520, at: 's18@nhất', s: 0.85}],
+  },
+  {
+    at: 's18@số', name: 'cãi nhau hành lang', set: 'corridor', cam: [1000, 1250, 1.05], cam2: [1000, 1250, 1.12],
+    o: {floorNo: 7},
+    actors: [
+      {id: 'a1', look: 'vo', x: 640, y: CORR_Y + 10, s: 0.95, p: 'argue', e: 'angry', talk: [['s18@số', 's18@cạnh']], shake: 1},
+      {id: 'a2', look: 'chong', x: 830, y: CORR_Y + 10, s: 0.95, flip: true, p: 'argue', e: 'angry', shake: 1},
+      {id: 'b1', look: 'chu902', x: 1170, y: CORR_Y + 4, s: 0.95, p: 'pointR', e: 'angry', talk: [['s18@cãi', 's18@cạnh']]},
+      {id: 'b2', look: 'anhToan', x: 1350, y: CORR_Y + 4, s: 0.95, flip: true, p: 'shrug', e: 'angry'},
+    ],
+    over: [{k: 'stamp', text: 'GẤP 3 TOÀ BÊN', x: 540, y: 460, at: 's18@gấp', s: 0.8}],
+  },
+  {
+    at: 's18b@Cán', name: 'cán bộ hỏi', set: 'hall', cam: [540, 1150, 1.7], cam2: [540, 1130, 1.85],
+    o: {hallView: 'stage'},
+    actors: [{id: 'cb', look: 'canBo', x: 540, y: 1620, s: 0.9, p: [['cross', 0], ['pointR', 's18b@thang']], e: [['stern', 0], ['eager', 's18b@nghe']], talk: [['s18b@thang', 's18b@à']]}],
+    over: [{k: 'bubble', text: 'Nghe được thật à?', x: 540, y: 560, at: 's18b@thang', s: 0.8, tail: [0, 170]}],
+  },
+  {
+    at: 's18b@Cả', name: 'cả hội trường im phăng phắc', set: 'hall', cam: [540, 1300, 1.0], cam2: [540, 1350, 1.12], ease: 'lin',
+    o: {hallView: 'audience'},
+    actors: [0, 1, 2].flatMap((r) => [0, 1, 2, 3, 4].map((i): Actor => ({
+      id: `au${r}${i}`, look: [['baHanh', 'n1', 'r3', 'conBay', 'n2'], ['n6', 'chiLan', 'anhKhoa', 'r1', 'n3'], ['vo', 'tho15', 'r2', 'n4', 'chong']][r][i], x: 130 + i * 205 + (r % 2) * 40, y: [1380, 1580, 1800][r] + 2, s: 0.8 + r * 0.08, p: 'sit', e: (r + i) % 3 === 0 ? 'shock' : 'deadpan',
+    }))),
+  },
+  {
+    at: 's18b@Không', name: 'câu nào cũng là khai', set: 'hall', cam: [540, 1300, 1.6], cam2: [560, 1300, 1.7],
+    o: {hallView: 'audience', chairs: 2},
+    actors: [0, 1, 2, 3, 4].map((i): Actor => ({id: 'au' + i, look: ['n6', 'chiLan', 'anhKhoa', 'r1', 'n3'][i], x: 130 + i * 205 + 40, y: 1582, s: 0.88, p: [['sit', 0], [i % 2 ? 'sitHands' : 'sitShh', 's18b@ai+' + (i * 0.12).toFixed(2)]], e: 'shh'})),
+  },
+  // ============ s19: biên bản ============
+  {
+    at: 's19@Biên', name: 'biên bản: do thang máy', set: 'minutes', cam: [540, 980, 1.0], cam2: [560, 1120, 1.35], ease: 'io',
+    minutes: {write: ['s19@do', 's19@máy+0.35'], stamp: 's19@máy+0.5'},
+  },
+  // ============ s20: đề nghị thay thang — phản đối ============
+  {
+    at: 's20@Phường', name: 'đề nghị thay thang mới', set: 'hall', cam: [540, 1150, 1.4],
+    o: {hallView: 'stage'},
+    actors: [{id: 'cb', look: 'canBo', x: 540, y: 1620, s: 0.9, p: 'pointUp', e: 'eager', talk: [['s20@Phường', 's20@mới']]}],
+    over: [{k: 'label', text: 'THAY THANG MỚI?', x: 540, y: 500, at: 's20@thay', s: 0.8, c: 'yellow'}],
+  },
+  {
+    at: 's20@Cả', name: 'cả toà giơ tay phản đối', set: 'hall', cam: [540, 1350, 1.12], cam2: [540, 1380, 1.2], shake: 1.5,
+    o: {hallView: 'audience'},
+    actors: [0, 1, 2].flatMap((r) => [0, 1, 2, 3, 4].map((i): Actor => ({
+      id: `au${r}${i}`, look: [['baHanh', 'n1', 'r3', 'conBay', 'n2'], ['n6', 'chiLan', 'anhKhoa', 'r1', 'n3'], ['vo', 'tho15', 'r2', 'n4', 'chong']][r][i], x: 130 + i * 205 + (r % 2) * 40, y: [1380, 1580, 1800][r] + 2, s: 0.8 + r * 0.08,
+      p: [['sit', 0], ['sitRaise', `s20@giơ+${(((r * 5 + i) * 7) % 5) * 0.06}`]], e: [['deadpan', 0], ['angry', 's20@phản']],
+    }))),
+    over: [{k: 'stamp', text: 'PHẢN ĐỐI', x: 540, y: 520, at: 's20@đối', s: 0.9}],
+  },
+  {
+    at: 's20@Vì', name: 'bí mật hoá ra vô ích', set: 'car', cam: [640, 1300, 1.15],
+    o: {disp: '5'},
+    actors: [rider('h', 'baHanh', 640, {e: [['stern', 0], ['cry', 's20@vô']], p: [['cross', 0], ['cry', 's20@vô']]})],
+    over: [{k: 'label', text: 'BÍ MẬT VÔ ÍCH?', x: 540, y: 460, at: 's20@hoá', s: 0.75, c: 'white'}],
+  },
+  // ============ s21-22: người kể chuyện ============
+  {
+    at: 's21@Còn', name: 'còn tôi', set: 'lobby', cam: [540, 1200, 1.15], cam2: [540, 1150, 1.4], ease: 'out',
+    o: {door: 0},
+    actors: [{id: 'tho', look: 'tho', x: 540, y: 1720, s: 1.05, e: [['deadpan', 0], ['smug', 's21@hả']], p: [['idle', 0], ['thumb', 's21@tôi#2']], prop: 'wrench'}],
+  },
+  {
+    at: 's21@Ngày', name: 'ngày nào cũng đi thang', set: 'lobby', cam: [400, 1250, 1.1], cam2: [520, 1230, 1.25],
+    doorKeys: [[1, 0], [0, 's21@mình-0.2']],
+    actors: [
+      {id: 'tho', look: 'tho', x: 0, y: 0, s: 0.98, path: [[-120, 1700, 0], [460, 1676, 's21@từng+0.2'], [540, 1546, 's21@bí']], view: [['side', 0], ['front', 's21@bí+0.05']], arms: 'down', prop: 'toolbox', e: 'deadpan'},
+    ],
+  },
+  {
+    at: 's22@Tôi', name: 'thợ bảo trì', set: 'machine', cam: [540, 1150, 1.0], cam2: [520, 1200, 1.1],
+    actors: [{id: 'tho', look: 'tho', x: 600, y: 1640, s: 1.05, p: 'thumb', prop: 'wrench', e: 'smug'}],
+    over: [{k: 'card', text: 'THỢ BẢO TRÌ THANG MÁY', x: 540, y: 380, at: 's22@thợ', s: 0.85}],
+  },
+  // ============ s23: thang điện bình thường ============
+  {
+    at: 's23@Cái', name: 'động cơ điện 2019', set: 'machine', cam: [700, 1200, 1.15], cam2: [330, 1150, 1.6], ease: 'io',
+    over: [{k: 'year', text: '2019', x: 540, y: 380, at: 's23@năm', s: 0.8, c: 'red'}],
+  },
+  {
+    at: 's23@Nó', name: 'không có micro', set: 'machine', cam: [255, 1290, 2.7], cam2: [255, 1300, 2.9], punch: 0.05,
+  },
+  {
+    at: 's23@Ai', name: 'tự tay bấm nút', set: 'car', cam: [720, 1250, 1.3],
+    lights: [[9, 's23@bấm+0.05']],
+    actors: [
+      rider('x', 'n2', 790, {e: 'eager', p: 'idle', talk: [['s23@Ai', 's23@tầng']], reach: [{at: 's23@bấm+0.05', ...btn(9), hold: 0.45}], y: 1740}),
+      rider('y', 'n1', 470, {e: 'smug', p: 'hip', y: 1840}),
+    ],
+    over: [{k: 'bubble', text: 'Tôi… lén ăn kem', x: 520, y: 600, at: 's23@Ai', until: 's23@tầng+0.3', s: 0.75, tail: [40, 170]}],
+  },
+  {
+    at: 's23@chỉ', name: 'mải nói nên chẳng ai để ý', set: 'car', cam: [860, 1200, 2.0], cam2: [880, 1180, 2.2],
+    lights: [[9, 0], [12, 's23@nói+0.1']],
+    actors: [rider('z', 'chiLan', 790, {e: 'eager', p: 'idle', talk: [['s23@chỉ', 's23@ý']], reach: [{at: 's23@nói+0.1', ...btn(12), hold: 0.5}], y: 1790})],
+    over: [{k: 'arrow', x: btn(12).x, y: btn(12).y - 110, at: 's23@nói', world: true, s: 0.4}],
+  },
+  // ============ s24: những lần đứng im là lúc tôi đang sửa ============
+  {
+    at: 's24@Còn', name: 'đứng im, chớp đèn', set: 'car', cam: [640, 1300, 1.1], shake: 1.5,
+    of: (u, ts) => ({flicker: ts > 0.9 ? 1 : 0, dark: ts > 1.4 ? Math.min(1, (ts - 1.4) / 0.2) : 0, disp: ts > 1.4 ? 'B' : 'G'}),
+    actors: [rider('r', 'n3', 640, {e: [['neutral', 0], ['shock', 's24@chớp']], p: 'idle'})],
+  },
+  {
+    at: 's24@Hôm', name: 'hôm đấy tôi đang sửa', set: 'machine', cam: [380, 1200, 1.35], cam2: [380, 1150, 1.6], ease: 'out',
+    actors: [{id: 'tho', look: 'tho', x: 470, y: 1620, s: 1.05, p: [['write', 0], ['thumb', 's24@sửa']], prop: 'wrench', e: [['stern', 0], ['sly', 's24@sửa']]}],
+  },
+  // ============ s25: mỗi sáng bấm 17 ============
+  {
+    at: 's25@Mỗi', name: 'mỗi sáng bước vào', set: 'lobby', cam: [420, 1220, 1.15], cam2: [530, 1200, 1.3],
+    o: {door: 1},
+    actors: [{id: 'tho', look: 'tho', x: 0, y: 0, s: 0.98, path: [[60, 1700, 0], [460, 1676, 's25@vào+0.2'], [540, 1546, 's25@bấm']], arms: 'down', prop: 'toolbox', e: 'deadpan'}],
+  },
+  {
+    at: 's25@bấm', name: 'bấm số 17', set: 'car', cam: [760, 1220, 1.35], cam2: [700, 1250, 1.2],
+    lights: [[17, 's25@mười+0.05']],
+    floors: [0, 's25@nói', 's25@mật+1.0'], floorsTo: 17,
+    actors: [rider('tho', 'tho', 760, {y: 1800, e: [['deadpan', 0], ['smug', 's25@mật']], p: 'idle', talk: [['s25@thang', 's25@mật']], reach: [{at: 's25@mười+0.05', ...btn(17), hold: 0.5}]})],
+    over: [{k: 'bubble', text: 'Thang này không cần bí mật', x: 500, y: 600, at: 's25@thang', s: 0.62, tail: [60, 170]}],
+  },
+  // ============ s26: kết ============
+  {
+    at: 's26@Đấy', name: 'bí mật lớn nhất toà nhà', set: 'building', cam: [540, 600, 1.4], cam2: [540, 960, 1.0], ease: 'io',
+    o: {carFloor: 17, hl: [{f: 16, c: 'yellow'}]},
+    over: [{k: 'title', text: 'BÍ MẬT LỚN NHẤT', sub: 'thang máy ăn bí mật · hết', x: 540, y: 1300, at: 's26@lớn', s: 0.9}],
+  },
+];

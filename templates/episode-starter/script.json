@@ -1,0 +1,23 @@
+{
+ "title": "DEMO — thay bằng kịch bản thật",
+ "voice": "Hải Đăng",
+ "pause_after": 0.25,
+ "segments": [
+  {
+   "id": "s1",
+   "text": "Đây là cảnh mẫu của engine, không phải tập phim."
+  },
+  {
+   "id": "s2",
+   "text": "Ông khách đi vào sảnh, bấm nút gọi, cửa thang mở ra."
+  },
+  {
+   "id": "s3",
+   "text": "Ông cụ leo cầu thang, tới chiếu nghỉ thì ngồi xuống thở."
+  },
+  {
+   "id": "s4",
+   "text": "Bà Hạnh vào thang, thú nhận một bí mật, rồi bấm số năm."
+  }
+ ]
+}

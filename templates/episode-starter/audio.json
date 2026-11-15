@@ -1,0 +1,16 @@
+{
+ "_doc": "Episode audio plan (sv-40-audio). sections: mood per story part, anchored to the word where the mood turns. keys: sound for each animated set option (\"none\" = silent). accents: extra SFX anchored to words — only for things the picture shows.",
+ "music": {
+  "bpm": 76,
+  "under_voice_db": 22,
+  "sections": [
+   {"from": "s1", "mood": "light", "key": "G"},
+   {"from": "s3", "mood": "tender", "key": "E"}
+  ],
+  "end": {"at": "s4@năm"}
+ },
+ "keys": {"door": "slide", "call": "none", "lit": "ding"},
+ "accents": [
+  {"at": "s3@thở", "fx": "paper", "d": 0.3, "g": 0.5}
+ ]
+}

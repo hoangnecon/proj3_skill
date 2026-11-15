@@ -1,0 +1,339 @@
+// Rig nhìn nghiêng (profile) để ĐI, LEO CẦU THANG, NGỒI, VỚI TAY BẤM NÚT.
+// Gốc = điểm trên mặt đất dưới hông, mặt quay về +x. Cùng tỉ lệ với rig chính diện (chars.tsx).
+// Dáng đi: bàn chân trụ dán chặt mặt đất (không trượt) — pha bước = quãng đường / SIDE_CYCLE.
+import React from 'react';
+import {E, L, PAL, R, Rr, S, Sh, col, LINE} from './kit';
+import type {Look, Expr} from './chars';
+
+const rad = (d: number) => (d * Math.PI) / 180;
+export const SIDE_STRIDE = 118; // độ dài bàn chân lùi trong pha trụ (đơn vị rig)
+const STANCE = 0.6;
+/** quãng đường thân đi được sau 1 chu kỳ bước (2 bước) */
+export const SIDE_CYCLE = SIDE_STRIDE / STANCE;
+
+type P = [number, number];
+type Target = {x: number; y: number};
+export type SideArms = 'swing' | 'down' | 'hold' | 'phone' | 'cane' | 'carry' | {near?: Target; far?: Target};
+
+export type SideProps = {
+  look: Look;
+  t: number;
+  phase?: number; // số chu kỳ bước (liên tục)
+  speed?: number; // 0 đứng .. 1 đi
+  slope?: number; // độ dốc mặt đất dy/dx (âm = đi lên)
+  legs?: 'walk' | 'sit' | 'carried';
+  seatH?: number;
+  arms?: SideArms;
+  expr?: Expr;
+  talk?: number;
+  blinkPh?: number;
+  lean?: number;
+  look2?: number; // nghiêng đầu: + nhìn lên
+  prop?: (h: {near: P; far: P}) => React.ReactNode;
+};
+
+const limb = (pts: P[], w: number, c: string, k: string) => {
+  const d = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join('');
+  return (
+    <g key={k}>
+      <path d={d} fill="none" stroke={PAL.ink} strokeWidth={w + LINE * 2} strokeLinecap="round" strokeLinejoin="round" />
+      <path d={d} fill="none" stroke={col(c)} strokeWidth={w} strokeLinecap="round" strokeLinejoin="round" />
+    </g>
+  );
+};
+
+/** IK 2 khúc; bend=+1 khớp giữa lồi về +x (đầu gối), -1 lồi về -x (khuỷu tay) */
+const ik = (a: P, b: P, l1: number, l2: number, bend: number): P => {
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  let d = Math.hypot(dx, dy);
+  d = Math.min(d, l1 + l2 - 0.5);
+  d = Math.max(d, Math.abs(l1 - l2) + 1);
+  const base = Math.atan2(dy, dx);
+  const off = Math.acos(Math.max(-1, Math.min(1, (l1 * l1 + d * d - l2 * l2) / (2 * l1 * d))));
+  const c1 = base + off, c2 = base - off;
+  const p1: P = [a[0] + Math.cos(c1) * l1, a[1] + Math.sin(c1) * l1];
+  const p2: P = [a[0] + Math.cos(c2) * l1, a[1] + Math.sin(c2) * l1];
+  return bend > 0 ? (p1[0] > p2[0] ? p1 : p2) : p1[0] < p2[0] ? p1 : p2;
+};
+
+const smooth = (u: number) => u * u * (3 - 2 * u);
+
+export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, slope = 0, legs = 'walk', seatH = 120, arms = 'swing', expr = 'neutral', talk = 0, blinkPh = 0, lean = 0, look2 = 0, prop}) => {
+  const W = look.w ?? 1;
+  const H = look.h ?? 1;
+  const belly = look.belly ?? 0;
+  const skin = look.skin ?? 'skin';
+  const thigh = 97 * H, shin = 93 * H;
+  const legW = 38 * Math.min(1.2, W);
+  const armW = 28 * Math.min(1.25, W);
+  const ua = 112 * H, fa = 102 * H;
+  const HR = 86 * (look.head ?? 1);
+  const S0 = SIDE_STRIDE * Math.min(1.15, H) * speed;
+  const ground = (x: number) => x * slope;
+
+  // ---- chân ----
+  const feet: {p: P; lift: number}[] = [];
+  let hipY = -200 * H;
+  let hipX = 0;
+  if (legs === 'walk') {
+    for (const i of [0, 1]) {
+      const q = (((phase + i * 0.5) % 1) + 1) % 1;
+      let x: number, y: number, lift = 0;
+      if (q < STANCE) {
+        x = S0 * (0.5 - q / STANCE);
+        y = ground(x);
+      } else {
+        const r = (q - STANCE) / (1 - STANCE);
+        x = -S0 / 2 + S0 * smooth(r);
+        lift = Math.sin(Math.PI * r) * (26 + 30 * Math.abs(slope)) * Math.min(1, speed * 1.4);
+        y = ground(x) - lift;
+      }
+      x += (i ? -1 : 1) * 14 * (1 - Math.min(1, speed * 2));
+      y = ground(x) - lift;
+      feet.push({p: [x, y], lift});
+    }
+    // nhún: thấp nhất lúc hai chân chạm đất
+    hipY += 7 * speed * Math.cos(4 * Math.PI * phase) + ground(0) * 0.5;
+  } else if (legs === 'sit') {
+    hipY = -seatH;
+    hipX = -10;
+  } else {
+    hipY = 0;
+  }
+  const lowered = hipY - -200 * H; // thân tụt xuống bao nhiêu so với đứng
+  const shY = -200 * H - 225 * H + lowered;
+  const hip: P = [hipX, hipY];
+
+  const legEls: React.ReactNode[] = [];
+  const shoe = look.shoes ?? 'red';
+  const pants = look.pants;
+  const drawLeg = (i: number, shadeO: number) => {
+    let knee: P, ankle: P, toeRot = 0;
+    if (legs === 'walk') {
+      const f = feet[i];
+      ankle = [f.p[0], f.p[1] - 14];
+      knee = ik(hip, ankle, thigh, shin, +1);
+      toeRot = f.lift > 1 ? -10 : 0;
+    } else if (legs === 'sit') {
+      // bàn chân đặt trước; đầu gối tự gập theo độ cao hông (ngồi xuống mượt khi seatH giảm dần)
+      ankle = [hip[0] + thigh * 0.95 - i * 12, -14];
+      knee = ik(hip, ankle, thigh, shin, +1);
+    } else {
+      knee = [hip[0] + thigh * 0.85, hip[1] + 30];
+      ankle = [knee[0] - 10, knee[1] + shin * 0.9];
+    }
+    const k = 'lg' + i;
+    return (
+      <g key={k}>
+        {limb([hip, knee, ankle], legW, pants, k + 'l')}
+        <g transform={`translate(${ankle[0]} ${ankle[1]}) rotate(${toeRot})`}>
+          <S d={Rr(-18, -6, 62, 26, 12)} f={shoe} />
+        </g>
+        {shadeO > 0 && <path d={`M${hip[0]} ${hip[1]}L${knee[0]} ${knee[1]}L${ankle[0]} ${ankle[1]}`} stroke={PAL.ink} strokeWidth={legW} strokeLinecap="round" strokeLinejoin="round" fill="none" opacity={shadeO} />}
+      </g>
+    );
+  };
+
+  // ---- tay ----
+  const shoulder: P = [4 * W, shY + 26];
+  const armPts = (near: boolean): P[] => {
+    let tgt: Target | undefined;
+    if (typeof arms === 'object') tgt = near ? arms.near : arms.far;
+    if (tgt) {
+      const el = ik(shoulder, [tgt.x, tgt.y], ua, fa, -1);
+      return [shoulder, el, [tgt.x, tgt.y]];
+    }
+    let a = 6, e = 10; // độ: + = về phía trước
+    if (arms === 'swing') {
+      const sw = 26 * speed * Math.cos(2 * Math.PI * phase) * (near ? -1 : 1);
+      a = 4 + sw;
+      e = 14 + Math.max(0, sw) * 0.9;
+    } else if (arms === 'hold') {
+      a = 20; e = 80;
+    } else if (arms === 'phone') {
+      if (near) { a = 30; e = 150; } else { a = 4; e = 8; }
+    } else if (arms === 'cane') {
+      if (near) { a = 28; e = 20; } else { a = 4; e = 8; }
+    } else if (arms === 'carry') {
+      a = -30; e = 70; // vòng ra sau đỡ người cõng
+    }
+    const t1 = rad(a), t2 = rad(a + e);
+    const el: P = [shoulder[0] + Math.sin(t1) * ua, shoulder[1] + Math.cos(t1) * ua];
+    const hd: P = [el[0] + Math.sin(t2) * fa, el[1] + Math.cos(t2) * fa];
+    return [shoulder, el, hd];
+  };
+  const nearA = armPts(true);
+  const farA = armPts(false);
+  const sleeveC = look.top === 'tank' ? skin : look.topC;
+  const fullSleeve = ['suit', 'uniform', 'robe', 'chef', 'aothe', 'blouse'].includes(look.top);
+  const drawArm = (p: P[], k: string, dim: boolean) => (
+    <g key={k}>
+      {limb(p, armW, fullSleeve ? sleeveC : skin, k + 'a')}
+      {!fullSleeve && limb([p[0], [p[0][0] + (p[1][0] - p[0][0]) * 0.5, p[0][1] + (p[1][1] - p[0][1]) * 0.5]], armW + 6, sleeveC, k + 's')}
+      <S d={E(p[2][0], p[2][1], 16, 16)} f={skin} />
+      {dim && <path d={`M${p[0][0]} ${p[0][1]}L${p[1][0]} ${p[1][1]}L${p[2][0]} ${p[2][1]}`} stroke={PAL.ink} strokeWidth={armW} strokeLinecap="round" strokeLinejoin="round" fill="none" opacity={0.22} />}
+    </g>
+  );
+
+  // ---- thân ----
+  const sY = shY;
+  const bY = hipY;
+  const fr = 54 * W + belly * 34; // bụng phía trước
+  const bk = -52 * W;
+  const long = look.top === 'robe' || look.top === 'aothe';
+  const hem = long ? -60 : bY + 26;
+  const torso = `M${bk + 4} ${sY - 10}C${bk - 6} ${sY + 40} ${bk - 4} ${(sY + bY) / 2} ${bk + 2} ${hem}L${fr - 8} ${hem}C${fr + belly * 16} ${hem - 40} ${fr + belly * 20} ${(sY + bY) / 2} ${fr - 6} ${sY + 60}C${fr - 4} ${sY + 10} ${30 * W} ${sY - 16} ${8} ${sY - 18}C${-10} ${sY - 18} ${bk + 10} ${sY - 18} ${bk + 4} ${sY - 10}Z`;
+  const pat: React.ReactNode[] = [];
+  if (look.pattern === 'dots' || look.pattern === 'flowers') {
+    for (let r = 0; r < 9; r++) for (let c = 0; c < 4; c++) pat.push(<circle key={r + '-' + c} cx={bk + 12 + c * 26 + (r % 2) * 12} cy={sY + 4 + r * 26} r={5} fill={col(look.patC ?? 'yellow')} />);
+  } else if (look.pattern === 'stripes') {
+    for (let i = 0; i < 12; i++) pat.push(<rect key={i} x={bk - 20} y={sY + 12 + i * 22} width={200} height={8} fill={col(look.patC ?? 'trim')} />);
+  }
+  const det: React.ReactNode[] = [];
+  if (look.top === 'shirt' || look.top === 'polo' || look.top === 'uniform') {
+    det.push(<S key="col" d={`M8 ${sY - 18}L${30 * W} ${sY + 4}L${18} ${sY + 14}Z`} f={look.top === 'polo' ? look.topC2 ?? 'trim' : look.topC} />);
+    for (let i = 0; i < (look.top === 'polo' ? 2 : 5); i++) det.push(<circle key={'b' + i} cx={fr - 14 + (i > 2 ? belly * 10 : 0)} cy={sY + 40 + i * 34} r={4} fill={PAL.ink} />);
+    if (look.top === 'uniform') det.push(<S key="pk" d={Rr(4, sY + 50, 34, 34, 6)} f={look.topC} />);
+  } else if (look.top === 'suit') {
+    det.push(<S key="tie" d={`M${fr - 22} ${sY - 6}l12 0l6 110l-14 18Z`} f={look.topC2 ?? 'red'} />);
+    det.push(<S key="lap" d={`M8 ${sY - 18}L${fr - 8} ${sY + 120}L${fr - 30} ${sY + 20}Z`} f={look.topC} />);
+  }
+  if (look.vest) det.push(<S key="vs" d={`M${bk + 2} ${sY + 4}L${fr - 8} ${sY + 4}L${fr - 4} ${bY + 20}L${bk} ${bY + 20}Z`} f="orange" />, <rect key="vs2" x={bk} y={bY - 60} width={fr - bk} height={14} fill={PAL.trim} stroke={PAL.ink} strokeWidth={3} />);
+  if (look.chain) det.push(<path key="ch" d={`M6 ${sY - 14}Q${fr} ${sY + 40} ${fr - 6} ${sY - 2}`} fill="none" stroke={PAL.gold} strokeWidth={7} strokeDasharray="2 9" strokeLinecap="round" />);
+
+  // ---- đầu ----
+  const hy = sY - 16 - HR * 0.9;
+  const hx = 12;
+  const head = <HeadSide look={look} x={hx} y={hy} r={HR} expr={expr} talk={talk} t={t} blinkPh={blinkPh} tilt={look2} />;
+
+  const legBack = drawLeg(1, 0.18);
+  const legFront = drawLeg(0, 0);
+  const hands = {near: nearA[2], far: farA[2]};
+  return (
+    <g transform={`rotate(${lean + (legs === 'walk' ? 3 * speed : 0)} 0 ${hipY})`}>
+      {drawArm(farA, 'fa', true)}
+      {legs !== 'sit' && legBack}
+      {legs === 'sit' && legBack}
+      <S d={torso} f={look.topC} />
+      <clipPath id={`ts-${look.name}`}><path d={torso} /></clipPath>
+      <g clipPath={`url(#ts-${look.name})`}>
+        {pat}
+        <Sh d={`M${bk - 10} ${sY - 30}L${bk + 26} ${sY - 30}L${bk + 26} ${hem + 10}L${bk - 10} ${hem + 10}Z`} o={0.55} />
+      </g>
+      {det}
+      <S d={R(-4, sY - 40, 34, 30)} f="skinShade" />
+      {legFront}
+      {head}
+      {prop?.(hands)}
+      {drawArm(nearA, 'na', false)}
+    </g>
+  );
+};
+
+const HeadSide: React.FC<{look: Look; x: number; y: number; r: number; expr: Expr; talk: number; t: number; blinkPh: number; tilt: number}> = ({look, x, y, r, expr, talk, t, blinkPh, tilt}) => {
+  const skin = look.skin ?? 'skin';
+  const hairC = look.hairC ?? 'hair';
+  const els: React.ReactNode[] = [];
+  // tóc phía sau
+  if (look.hair === 'bun') els.push(<S key="bun" d={E(-r * 0.85, -r * 0.55, r * 0.36, r * 0.32)} f={hairC} />);
+  if (look.hair === 'long') els.push(<S key="lg" d={`M${-r * 0.2} ${-r * 0.9}C${-r * 1.2} ${-r * 0.8} ${-r * 1.15} ${r * 0.9} ${-r * 0.7} ${r * 1.45}L${-r * 0.1} ${r * 1.2}C${-r * 0.4} ${r * 0.6} ${-r * 0.2} ${0} ${0} ${-r * 0.2}Z`} f={hairC} />);
+  if (look.hair === 'curly') for (let i = 0; i < 7; i++) {
+    const a = Math.PI * (0.75 + (i / 6) * 1.0);
+    els.push(<S key={'cu' + i} d={E(Math.cos(a) * r * 0.95 - r * 0.05, Math.sin(a) * r * 0.95, r * 0.34, r * 0.34)} f={hairC} />);
+  }
+  // mặt nghiêng: hộp sọ + mũi + cằm
+  els.push(<S key="face" d={`M${-r * 0.88} ${-r * 0.1}C${-r * 0.95} ${-r * 1.0} ${r * 0.7} ${-r * 1.08} ${r * 0.86} ${-r * 0.3}L${r * 0.9} ${-r * 0.04}L${r * 1.12} ${r * 0.2}L${r * 0.9} ${r * 0.3}C${r * 0.92} ${r * 0.62} ${r * 0.7} ${r * 0.95} ${r * 0.2} ${r * 0.98}C${-r * 0.4} ${r * 1.0} ${-r * 0.85} ${r * 0.6} ${-r * 0.88} ${-r * 0.1}Z`} f={skin} />);
+  els.push(<Sh key="fsh" d={`M${-r * 0.88} ${-r * 0.1}C${-r * 0.9} ${-r * 0.6} ${-r * 0.6} ${-r * 0.9} ${-r * 0.3} ${-r * 0.95}L${-r * 0.3} ${r * 0.98}C${-r * 0.6} ${r * 0.9} ${-r * 0.86} ${r * 0.5} ${-r * 0.88} ${-r * 0.1}Z`} o={0.45} />);
+  // tai
+  els.push(<S key="ear" d={E(-r * 0.18, r * 0.06, r * 0.16, r * 0.23)} f={skin} />);
+  if (look.earrings) els.push(<S key="er" d={E(-r * 0.18, r * 0.38, 7, 7)} f="gold" />);
+  // tóc trước/đỉnh
+  const hp = (d: string, k: string) => els.push(<S key={k} d={d} f={hairC} />);
+  switch (look.hair) {
+    case 'bald':
+      hp(`M${-r * 0.88} ${r * 0.0}C${-r * 0.92} ${-r * 0.36} ${-r * 0.7} ${-r * 0.5} ${-r * 0.4} ${-r * 0.42}L${-r * 0.36} ${-r * 0.1}C${-r * 0.5} ${-r * 0.1} ${-r * 0.7} ${r * 0.1} ${-r * 0.88} ${r * 0.0}Z`, 'h');
+      els.push(<path key="sh" d={`M${r * 0.0} ${-r * 0.82}q${r * 0.24} ${-r * 0.06} ${r * 0.4} ${r * 0.06}`} stroke={PAL.white} strokeWidth={8} strokeLinecap="round" fill="none" />);
+      break;
+    case 'thin':
+      hp(`M${-r * 0.88} ${r * 0.0}C${-r * 0.92} ${-r * 0.5} ${-r * 0.5} ${-r * 0.72} ${-r * 0.1} ${-r * 0.7}L${-r * 0.36} ${-r * 0.12}C${-r * 0.5} ${-r * 0.06} ${-r * 0.7} ${r * 0.1} ${-r * 0.88} ${r * 0.0}Z`, 'h');
+      break;
+    case 'curly':
+      for (let i = 0; i < 5; i++) {
+        const a = Math.PI * (1.15 + (i / 4) * 0.55);
+        els.push(<S key={'cf' + i} d={E(Math.cos(a) * r * 0.78, Math.sin(a) * r * 0.82, r * 0.3, r * 0.27)} f={hairC} />);
+      }
+      break;
+    default:
+      // side/neat/short/kid/bun/long: mũ tóc phủ đỉnh và gáy, mái chấm trán
+      hp(`M${-r * 0.92} ${r * 0.25}C${-r * 1.05} ${-r * 0.9} ${r * 0.3} ${-r * 1.25} ${r * 0.86} ${-r * 0.42}C${r * 0.6} ${-r * 0.5} ${r * 0.35} ${-r * 0.45} ${r * 0.16} ${-r * 0.36}C${0} ${-r * 0.3} ${-r * 0.2} ${-r * 0.1} ${-r * 0.32} ${r * 0.0}C${-r * 0.5} ${-r * 0.06} ${-r * 0.7} ${r * 0.1} ${-r * 0.92} ${r * 0.25}Z`, 'h');
+      if (look.hair === 'kid' || look.hair === 'short') els.push(<path key="spk" d={`M${r * 0.6} ${-r * 0.52}l${r * 0.14} ${-r * 0.1}l${-r * 0.02} ${r * 0.14}`} fill={col(hairC)} stroke={PAL.ink} strokeWidth={4} />);
+  }
+  // mũ
+  const hat = look.hat ?? 'none';
+  const hatC = look.hatC ?? 'navy';
+  if (hat === 'cap') {
+    els.push(<S key="cap" d={`M${-r * 0.9} ${-r * 0.36}C${-r * 0.9} ${-r * 1.15} ${r * 0.8} ${-r * 1.15} ${r * 0.86} ${-r * 0.42}Z`} f={hatC} />);
+    els.push(<S key="capb" d={`M${r * 0.5} ${-r * 0.46}h${r * 0.75}l${-r * 0.06} ${r * 0.14}h${-r * 0.7}Z`} f="ink" />);
+  } else if (hat === 'helmet') {
+    els.push(<S key="hm" d={`M${-r * 1.0} ${-r * 0.2}C${-r * 1.05} ${-r * 1.25} ${r * 0.95} ${-r * 1.25} ${r * 1.0} ${-r * 0.3}h${r * 0.18}v${r * 0.1}h${-r * 2.2}Z`} f={hatC} />);
+  } else if (hat === 'band') {
+    els.push(<S key="bd" d={R(-r * 0.9, -r * 0.62, r * 1.75, r * 0.22)} f={hatC} />);
+  }
+  // mắt, mày, miệng theo biểu cảm
+  const ex = r * 0.5, ey = r * 0.0;
+  const blink = ((t * 1000 + blinkPh * 700) % 3700) < 120;
+  const browC = look.brows ?? 'hair';
+  const brow = (ang: number, lift = 0) => els.push(<L key="bw" d={`M${ex - r * 0.18} ${ey - r * 0.3 - lift + ang}L${ex + r * 0.18} ${ey - r * 0.3 - lift - ang}`} w={7} c={browC} />);
+  const eye = (kind: 'dot' | 'arcU' | 'arcD' | 'wide' | 'narrow' | 'shut') => {
+    if (blink && kind !== 'shut') kind = 'shut';
+    if (kind === 'dot') els.push(<ellipse key="e" cx={ex} cy={ey} rx={8} ry={9.5} fill={PAL.ink} />, <circle key="eh" cx={ex + 2.5} cy={ey - 3} r={2.4} fill={PAL.white} />);
+    if (kind === 'wide') els.push(<S key="ew" d={E(ex, ey, 14, 16)} f="white" sw={4} />, <circle key="e" cx={ex + 4} cy={ey + 1} r={5.5} fill={PAL.ink} />);
+    if (kind === 'narrow') els.push(<L key="e" d={`M${ex - 12} ${ey}h24`} w={6} />, <circle key="ep" cx={ex + 5} cy={ey + 3} r={4} fill={PAL.ink} />);
+    if (kind === 'arcU') els.push(<L key="e" d={`M${ex - 12} ${ey + 3}q12 -12 24 0`} w={5.5} />);
+    if (kind === 'arcD') els.push(<L key="e" d={`M${ex - 12} ${ey}q12 12 24 0`} w={5.5} />);
+    if (kind === 'shut') els.push(<L key="e" d={`M${ex - 10} ${ey}h20`} w={5} />);
+  };
+  const my = r * 0.56, mx = r * 0.66;
+  const mouth = (kind: string) => {
+    if (talk > 0.05 && kind !== 'O') {
+      const o = 6 + talk * 18;
+      els.push(<S key="m" d={`M${mx - r * 0.18} ${my - 2}L${mx + r * 0.12} ${my - 4}Q${mx + r * 0.1} ${my + o} ${mx - r * 0.12} ${my + o * 0.7}Z`} f="redDark" sw={4} />);
+      return;
+    }
+    if (kind === 'flat') els.push(<L key="m" d={`M${mx - r * 0.16} ${my}h${r * 0.24}`} w={5} />);
+    if (kind === 'smile') els.push(<L key="m" d={`M${mx - r * 0.18} ${my - 4}q${r * 0.14} ${r * 0.16} ${r * 0.26} ${-r * 0.04}`} w={5} />);
+    if (kind === 'frown') els.push(<L key="m" d={`M${mx - r * 0.18} ${my + 6}q${r * 0.12} ${-r * 0.14} ${r * 0.24} ${-r * 0.02}`} w={5} />);
+    if (kind === 'O') els.push(<S key="m" d={E(mx - r * 0.02, my + 4, r * 0.09, r * 0.14)} f="redDark" sw={4} />);
+    if (kind === 'grin') els.push(<S key="m" d={`M${mx - r * 0.22} ${my - 6}L${mx + r * 0.16} ${my - 8}Q${mx + r * 0.1} ${my + r * 0.3} ${mx - r * 0.2} ${my + r * 0.14}Z`} f="redDark" sw={4} />);
+  };
+  switch (expr) {
+    case 'neutral': brow(0); eye('dot'); mouth('flat'); break;
+    case 'deadpan': brow(0, -6); eye('dot'); els.push(<L key="lid" d={`M${ex - 12} ${ey - 6}h24`} w={5} />); mouth('flat'); break;
+    case 'stern': brow(7, -2); eye('dot'); mouth('frown'); break;
+    case 'angry': brow(12, -2); eye('narrow'); mouth('frown'); break;
+    case 'smug': brow(-4); eye('arcD'); mouth('smile'); break;
+    case 'sly': brow(6); eye('narrow'); mouth('smile'); break;
+    case 'shock': brow(-6, 12); eye('wide'); mouth('O'); break;
+    case 'sad': brow(-9, 4); eye('dot'); mouth('frown'); break;
+    case 'cry': brow(-10, 6); eye('arcU'); mouth('O');
+      els.push(<path key="tr" d={`M${ex} ${ey + 10}q8 ${30 + Math.sin(t * 12) * 6} 0 60`} stroke={PAL.blue} strokeWidth={9} fill="none" strokeLinecap="round" />); break;
+    case 'joy': brow(-4, 8); eye('arcU'); mouth('grin'); break;
+    case 'eager': brow(-5, 10); eye('wide'); mouth('grin'); break;
+    case 'shh': brow(4); eye('wide'); mouth('flat'); break;
+  }
+  els.push(<ellipse key="bl" cx={r * 0.42} cy={r * 0.36} rx={r * 0.15} ry={r * 0.09} fill={PAL.blush} opacity={0.5} />);
+  if (look.mustache) els.push(<S key="mu" d={`M${mx - r * 0.24} ${my - 10}q${r * 0.24} ${-r * 0.16} ${r * 0.4} ${-r * 0.02}q${-r * 0.16} ${r * 0.12} ${-r * 0.4} ${r * 0.08}Z`} f={look.beardC ?? hairC} />);
+  if (look.beard) {
+    const bl = look.beard === 'long' ? r * 0.9 : r * 0.4;
+    els.push(<S key="bd" d={`M${mx - r * 0.3} ${my + r * 0.18}Q${mx - r * 0.1} ${my + r * 0.2 + bl} ${mx + r * 0.05} ${my + r * 0.18}Z`} f={look.beardC ?? hairC} />);
+  }
+  if (look.glasses === 'round' || look.glasses === 'square') {
+    els.push(look.glasses === 'round' ? <circle key="gl" cx={ex + 4} cy={ey} r={r * 0.24} fill={PAL.white} fillOpacity={0.25} stroke={PAL.ink} strokeWidth={5} /> : <rect key="gl" x={ex - r * 0.2} y={ey - r * 0.17} width={r * 0.48} height={r * 0.34} rx={6} fill={PAL.white} fillOpacity={0.25} stroke={PAL.ink} strokeWidth={5} />);
+    els.push(<L key="ga" d={`M${ex - r * 0.2} ${ey - 2}L${-r * 0.16} ${-r * 0.04}`} w={4} />);
+  }
+  if (look.glasses === 'sun') {
+    els.push(<S key="sg" d={`M${ex - r * 0.22} ${ey - r * 0.14}h${r * 0.5}l${-r * 0.04} ${r * 0.26}q${-r * 0.2} ${r * 0.08} ${-r * 0.42} 0Z`} f="ink" sw={3} />);
+    els.push(<L key="sga" d={`M${ex - r * 0.22} ${ey - r * 0.08}L${-r * 0.16} ${-r * 0.04}`} w={5} />);
+  }
+  return <g transform={`translate(${x} ${y}) rotate(${-tilt} 0 ${r * 0.8})`}>{els}</g>;
+};

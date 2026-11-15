@@ -1,0 +1,6 @@
+node_modules
+audio/
+public/
+out/
+qa/
+gates/log.jsonl

@@ -1,0 +1,32 @@
+# Changelog
+
+## `v2.0.0` — 2026-11-15
+- **Replaced the v1 suite.** The v1 suite was generic, English-only, and full of counters. v2 is nine skills built from the proven process of the reference episode *Thang máy ăn bí mật*.
+- **New template `templates/episode-starter/`:**
+  - the generalized engine;
+  - the exemplar cast, sets and shotlist;
+  - a demo shotlist;
+  - one-command evidence renderers: design sheets, contact sheets, motion strips, single frames;
+  - delivery with a phone copy of 30 MB or less.
+- **Design system (sv-20):**
+  - Fixed tokens: palette roles, line weights, halftone and glow, typography, world coordinates.
+  - Characters: a procedure with trait and silhouette rules, plus cast and expression sheets.
+  - Sets: six-pass building with detail budgets calibrated on the exemplar, a human-scale fixture table, and a collision checklist.
+- **Lint (`lint.mjs`):**
+  - 60+ rules across characters, tokens, sets, shots, anchors, overlays, camera, size, motion and coverage.
+  - SE-13 measures emptiness on the rendered plate.
+  - MO-09 checks that the actor stands at the right distance and depth for a reach.
+  - SZ-02 catches actors cut by the frame edge.
+  - KY-01 requires a strip for every animated set key.
+- **Script lint** calibrated on the reference script: rhythm SD, short punch lines, northern wording, beats map.
+- **Voice report:** per-segment similarity and pace, with the voice locked to Hải Đăng.
+- **Generic mix (`audio.json`):**
+  - ambience beds and automatic foley;
+  - music at 80 BPM or less, placed 20–24 dB under the voice;
+  - a mix report with hashes.
+- **Gates G1–G7 (`sv_gate.py`):**
+  - input hashes, with stale detection;
+  - evidence and remark checks;
+  - user approval quotes;
+  - order enforcement.
+- Removed `templates/stage-starter`, the 40-genre and 50-camera catalogs, and SHA lockfiles per checklist.

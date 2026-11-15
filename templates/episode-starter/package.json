@@ -1,0 +1,29 @@
+{
+  "name": "sv-episode",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "studio": "remotion studio",
+    "times": "node scripts/times.mjs",
+    "lint": "node scripts/lint.mjs",
+    "design": "node scripts/design.mjs",
+    "contact": "node scripts/qa.mjs contact",
+    "strips": "node scripts/qa.mjs strips",
+    "deliver": "node scripts/deliver.mjs",
+    "gate": "python3 scripts/sv_gate.py"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.250",
+    "@remotion/google-fonts": "4.0.250",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "remotion": "4.0.250",
+    "@remotion/bundler": "4.0.250",
+    "@remotion/renderer": "4.0.250"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.3",
+    "typescript": "5.5.4",
+    "esbuild": "0.24.0"
+  }
+}
