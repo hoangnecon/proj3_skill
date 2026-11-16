@@ -2,11 +2,12 @@
 
 Run:  /Users/Shared/Tools/VieNeu-TTS/.venv/bin/python scripts/mix.py
 Reads  audio.json (episode audio plan), qa/shots.json (node scripts/times.mjs), src/words.json, src/cues.json, audio/voice.wav
-Writes public/mix.wav (48 kHz stereo, -14 LUFS, TP -1.5) and qa/mix_report.json (evidence for gate G6).
+Writes public/mix.wav (48 kHz stereo, -14 LUFS, TP <= -1.3), audio/stems/*.wav, qa/mix_report.json, then runs audio_qa.py (gate G6).
 
 House rules (sv-40-audio) are enforced here, not left to taste:
-  * music tempo <= 80 BPM (default 76), at most ONE melodic note per beat, no drums/hi-hats
-  * music sits 20-24 dB under the voice while speaking: the gain is solved to hit 22 dB exactly
+  * music: "theme": "series" uses scripts/theme.py (the one series theme, 118 BPM, melody from 0 s);
+    otherwise the mood engine: tempo <= 80 BPM, at most ONE melodic note per beat, no drums/hi-hats
+  * levels, processing and mastering follow sv-42-mix-master (mix_targets.json); audio_qa.py measures the result
   * every SFX comes from something visible: an overlay, a reach (press), a set key event, a cut to a card,
     or an explicit accent in audio.json anchored to a word
 """
@@ -14,6 +15,7 @@ import hashlib
 import json
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -272,9 +274,14 @@ for a in PLAN.get("accents", []):
 
 # ============================ MUSIC ============================
 M = PLAN.get("music", {})
-BPM = float(M.get("bpm", 76))
-if BPM > 80:
-    raise SystemExit(f"music bpm {BPM} > 80 — house rule: soft and slow")
+THEME = M.get("theme") == "series"
+if THEME:
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import theme as series_theme
+BPM = float(series_theme.BPM if THEME else M.get("bpm", 76))
+if BPM > 80 and not THEME:
+    raise SystemExit(f"music bpm {BPM} > 80 — mood engine is soft and slow; use \"theme\": \"series\" for the series theme")
 BEAT = 60 / BPM
 
 
@@ -312,7 +319,15 @@ music = np.zeros(N)
 notes_per_beat_max = 0
 sections = M.get("sections", [{"from": "s1", "mood": "light", "key": "G"}])
 bounds = [tAt(sc["from"]) - 0.2 if i else 0.4 for i, sc in enumerate(sections)] + [tAt(M["end"]["at"]) - 0.2 if "end" in M else CU["total"]]
-for i, sc in enumerate(sections):
+if THEME:  # series theme: melody from 0 s, resolves at end.at; sections only mark "silence" gaps (other moods = theme plays)
+    music = series_theme.render(DUR, bounds[-1] if "end" in M else None)
+    for i, sc in enumerate(sections):
+        if sc["mood"] == "silence":
+            a, b = int(bounds[i] * SR), int(bounds[i + 1] * SR)
+            g = np.ones(N)
+            g[a:b] = 0
+            music *= lp(g, 4)[:, None]
+for i, sc in enumerate([] if THEME else sections):
     a, b = bounds[i], bounds[i + 1]
     root = ROOTS[sc.get("key", "G")]
     mood = sc["mood"]
@@ -352,14 +367,24 @@ for i, sc in enumerate(sections):
         pass
     else:
         raise SystemExit(f"unknown mood {mood} (light|tender|dark|tense|silence)")
-if "end" in M:
+if "end" in M and not THEME:
     te = bounds[-1]
     root = ROOTS[sections[-1].get("key", "G")]
     place(music, pad(hz(root - 12), CU["total"] - te + 3.0), te)
     for j, m in enumerate([0, 4, 9]):
         place(music, kal(hz(root + m), 2.5), te + 0.7 + j * 0.22, 1.1)
 
-# ============================ mix + ducking ============================
+if music.ndim == 1:
+    music = np.stack([music, music], axis=1)
+
+# ============================ mix + master (sv-42-mix-master; standard in scripts/mix_targets.json) ============================
+import audiolib as A  # noqa: E402
+
+TG = json.loads((Path(__file__).resolve().parent / "mix_targets.json").read_text())
+PR = TG["processing"]
+st = lambda x: np.stack([x, x], axis=1)  # noqa: E731  mono -> centred stereo
+
+# ---- voice bus: HPF, mud cut, presence, air, de-ess, compressor, per-segment levelling
 v, vsr = sf.read(ROOT / "audio/voice.wav", always_2d=False)
 if v.ndim > 1:
     v = v.mean(axis=1)
@@ -367,49 +392,128 @@ if vsr != SR:
     v = resample_poly(v, SR, vsr)
 voice = np.zeros(N)
 place(voice, v, 0.0)
-ve = lp(np.abs(voice), 6)
-ve = ve / (ve.max() + 1e-9)
-duck = lp(1 - 0.7 * np.clip(ve * 4, 0, 1), 3)
-on = ve > 0.15
+pv = PR["voice"]
+# voice chain v2 (mix_targets 1.1): clean FIRST so no later gain lifts noise or the codec's reverb tail
+voice = A.hpf(voice, pv["hpf_hz"], 4)
+dn = pv["denoise"]
+voice = A.spectral_denoise(voice, dn["max_reduction_db"], dn["over_subtract"])
+voice = A.biquad(voice, *A.peq(*pv["mud_cut"]))
+voice = A.biquad(voice, *A.peq(*pv["presence"]))
+voice = A.biquad(voice, *A.shelf(*pv["air_shelf"], high=True))
+voice = A.lpf(voice, pv["lpf_hz"], 4)
+voice = A.deess(voice, *pv["deess"]["band"], pv["deess"]["thresh_db"], pv["deess"]["max_cut_db"])
+c = pv["comp"]
+voice, voice_gr = A.compress(voice, c["thresh_db"], c["ratio"], c["attack_ms"], c["release_ms"], knee_db=c.get("knee_db", 6.0))
+segs = sorted(CU["seg_starts"].items(), key=lambda kv: kv[1])
+seg_bounds = [(k, a, segs[i + 1][1] if i + 1 < len(segs) else CU["total"]) for i, (k, a) in enumerate(segs)]
+seg_lufs = {}
+for k, a, b in seg_bounds:
+    chunk = voice[int(a * SR):int(b * SR)]
+    if len(chunk) > SR * 0.5:
+        seg_lufs[k] = A.integrated(chunk)
+med = float(np.median(list(seg_lufs.values()))) if seg_lufs else 0.0
+lv = np.ones(N)
+for k, a, b in seg_bounds:
+    if k in seg_lufs:
+        lv[int(a * SR):int(b * SR)] = 10 ** (np.clip(med - seg_lufs[k], -pv["segment_level_clamp_db"], pv["segment_level_clamp_db"]) / 20)
+voice = voice * lp(lv, 2)
+ex = pv["expander"]   # after compression + levelling: nothing later can lift the tails back up
+voice = A.expander(voice, ex["thresh_below_peak_db"], ex["ratio"], ex["floor_db"], ex["release"])
 
+# speech mask from word timings (more exact than an energy gate)
+speak = np.zeros(N, bool)
+for w in WORDS:
+    speak[int(w["s"] * SR):int(w["e"] * SR)] = True
+vs = lp(speak.astype(float), 3)
+on = vs > 0.5
+pauses = ~speak & (T > 0.3) & (T < CU["total"])
 
-def db(x):
-    return 20 * np.log10(np.sqrt(np.mean(x ** 2)) + 1e-12)
+# voice peak limit, last stage of the voice chain: plosive/onset spikes ("Ai", "tạch") sit 20+ dB over the speech
+# level after the expander; left in, they make the master limiter clamp 7-8 dB on every one of them
+pk = pv["peak_limit"]
+v_rms = float(np.sqrt(np.mean(voice[speak] ** 2))) if speak.any() else 0.1
+voice, voice_pk_gr = A.true_peak_limit(voice[:, None], 20 * np.log10(v_rms + 1e-12) + pk["crest_db"], pk["lookahead_ms"], pk["release_ms"])
+voice = voice[:, 0]   # mono voice bus; the limiter works on (n, ch)
 
+# ---- music bus: HPF, carve the voice presence band, side-chain duck from the voice
+pm = PR["music"]
+music = A.hpf(music, pm["hpf_hz"], 2)
+music = A.biquad(music, *A.peq(*pm["carve"]))
+denv = A.follower(voice, pm["duck"]["attack_ms"], pm["duck"]["release_ms"])
+denv = np.clip(denv / (np.percentile(denv[speak], 50) + 1e-9), 0, 1) if speak.any() else denv * 0
+duck = 10 ** (-pm["duck"]["depth_db"] * denv / 20)
+music = music * duck[:, None]
+TARGET = float(M.get("under_voice_db", pm["target_under_voice_db"]))
+lo_, hi_ = TG["music"]["under_voice_speaking_db"]
+if not lo_ <= TARGET <= hi_:
+    raise SystemExit(f"music.under_voice_db {TARGET} outside the house range {lo_}..{hi_} (mix_targets.json)")
+FLOOR = TG["music"]["max_under_voice_window_db"][0] + 1.0   # auto-ride: no 0.5 s window may come closer than this
+for _ in range(3):
+    mgain = 10 ** ((A.rms_db(voice[on]) - TARGET - A.rms_db(music[on].mean(1))) / 20) if np.any(music[on]) else 0.0
+    music *= mgain
+    W_ = int(0.5 * SR)
+    ride = np.ones(N)
+    for i in range(0, N - W_, W_):
+        m_ = speak[i:i + W_]
+        if m_.mean() > 0.3:
+            d_ = A.rms_db(voice[i:i + W_][m_]) - A.rms_db(music[i:i + W_][m_].mean(1))
+            if d_ < FLOOR:
+                ride[max(0, i - W_ // 2):i + W_ + W_ // 2] = np.minimum(ride[max(0, i - W_ // 2):i + W_ + W_ // 2], 10 ** ((d_ - FLOOR) / 20))
+    music *= lp(ride, 3)[:, None]
 
-TARGET = float(M.get("under_voice_db", 22.0))
-if not 20 <= TARGET <= 24:
-    raise SystemExit("music.under_voice_db must be within 20..24")
-mus_raw = music * duck
-gain = 10 ** ((db(voice[on]) - TARGET - db(mus_raw[on])) / 20) if np.any(mus_raw[on]) else 0.0
-mus = mus_raw * gain
-under_speaking = db(voice[on]) - db(mus[on]) if gain else 99.0
-pauses = ~on & (T < CU["total"])
-under_pauses = db(voice[on]) - db(mus[pauses]) if gain else 99.0
-mix = voice + mus + amb * (0.55 + 0.45 * duck) + fx * 0.85
-fo = int(0.8 * SR)
-mix[-fo:] *= np.linspace(1, 0, fo)
-mix = mix / (np.abs(mix).max() + 1e-9) * 0.9
-tmp = ROOT / "audio/mix_raw.wav"
-sf.write(tmp, np.stack([mix, mix], axis=1), SR, subtype="PCM_24")
+# ---- ambience + sfx
+amb = A.hpf(amb, PR["ambience"]["hpf_hz"], 2)
+if np.any(amb[on]):
+    amb *= 10 ** ((A.rms_db(voice[on]) - PR["ambience"]["under_voice_db"] - A.rms_db(amb[on])) / 20)
+amb = amb * (0.6 + 0.4 * duck)
+# sfx bus: each hit is levelled against the voice so a sound effect never jumps out of the story
+ps = PR["sfx"]
+fx = A.hpf(fx, ps["hpf_hz"], 2)
+vref = np.sqrt(np.mean(voice[speak] ** 2)) if speak.any() else 0.1
+senv = A.follower(fx, 2, ps["release_ms"])
+allow = vref * 10 ** (ps["peak_vs_voice_rms_db"] / 20)
+sg = np.minimum(1.0, allow / (senv + 1e-9))
+fx = fx * sg
+STEMS = {"voice": st(voice), "music": music, "sfx": st(fx), "ambience": st(amb)}
+
+# ---- master: sum, glue, loudness, true-peak limit, tail fade (two passes so the limiter cost is compensated)
+pmst = PR["master"]
+bus = sum(STEMS.values())
+g = pmst["glue"]
+bus, glue_gr = A.compress(bus, g["thresh_db"], g["ratio"], g["attack_ms"], g["release_ms"])
+last_s = max(w["e"] for w in WORDS) if WORDS else CU["total"]
+end_len = min(N, int((CU["total"] + 2.5) * SR))
+bus = bus[:end_len]
+fo = int(pmst["tail_fade_s"] * SR)
+bus[-fo:] *= np.linspace(1, 0, fo)[:, None] ** 2
+gain_db = 0.0
+for _ in range(3):
+    lim, lim_gr = A.true_peak_limit(bus * 10 ** (gain_db / 20), pmst["ceiling_dbtp"])
+    gain_db += pmst["target_lufs"] - A.integrated(lim)
+master, lim_gr = A.true_peak_limit(bus * 10 ** (gain_db / 20), pmst["ceiling_dbtp"])
+k = 10 ** (gain_db / 20)
+(ROOT / "audio/stems").mkdir(parents=True, exist_ok=True)
+for name, x in STEMS.items():   # stems at master gain (pre-limiter) so audio_qa can measure each layer
+    sf.write(ROOT / f"audio/stems/{name}.wav", (x[:end_len] * k).astype(np.float32), SR, subtype="FLOAT")
 (ROOT / "public").mkdir(exist_ok=True)
 out = ROOT / "public/mix.wav"
-subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(tmp), "-af", "loudnorm=I=-14:TP=-1.5:LRA=9", "-ar", str(SR), str(out)], check=True)
-r = subprocess.run(["ffmpeg", "-i", str(out), "-af", "ebur128=peak=true", "-f", "null", "-"], capture_output=True, text=True)
-summ = r.stderr[r.stderr.rfind("Summary"):]
-lufs = float(re.search(r"I:\s+(-?[\d.]+) LUFS", summ).group(1))
-tp = float(re.search(r"Peak:\s+(-?[\d.]+) dBFS", summ).group(1))
-sha = lambda p: hashlib.sha256((ROOT / p).read_bytes()).hexdigest()[:16]
+sf.write(out, master, SR, subtype="PCM_24")
+
+sha = lambda p: hashlib.sha256((ROOT / p).read_bytes()).hexdigest()[:16]  # noqa: E731
 report = {
-    "bpm": BPM, "under_voice_db_speaking": round(under_speaking, 1), "under_voice_db_pauses": round(under_pauses, 1),
-    "lufs": lufs, "true_peak": tp, "duration": round(DUR, 2), "sections": sections,
+    "music": "series-theme" if THEME else "mood-engine", "bpm": BPM, "targets_version": TG["version"],
+    "processing": {"voice_comp_max_gr_db": round(float(voice_gr.max()), 1), "voice_peak_limit_max_gr_db": round(-voice_pk_gr, 1), "segment_gain_db": {k_: round(float(np.clip(med - v_, -4, 4)), 1) for k_, v_ in seg_lufs.items()},
+                   "glue_max_gr_db": round(float(glue_gr.max()), 1), "limiter_max_gr_db": round(-lim_gr, 1), "master_gain_db": round(gain_db, 1),
+                   "music_target_under_voice_db": TARGET},
+    "duration": round(end_len / SR, 2), "last_word_end": round(last_s, 2), "sections": sections,
     "sfx": [{"fx": f, "t": round(t, 2), "why": w} for f, t, w in sorted(placed, key=lambda x: x[1])],
-    "warnings": warnings, "inputs": {"voice": sha("audio/voice.wav"), "shots": sha("qa/shots.json"), "plan": sha("audio.json")},
+    "warnings": warnings, "inputs": {"voice": sha("audio/voice.wav"), "shots": sha("qa/shots.json"), "plan": sha("audio.json"),
+                                     "targets": sha("scripts/mix_targets.json")},
 }
 (ROOT / "qa").mkdir(exist_ok=True)
 (ROOT / "qa/mix_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=1))
-print(f"music {BPM:.0f} BPM, {under_speaking:.1f} dB under voice while speaking ({under_pauses:.1f} dB in pauses)")
-print(f"loudness {lufs} LUFS, true peak {tp} dBFS, {len(placed)} sfx, {len(warnings)} warnings")
+print(f"mix -> {out}  (master gain {gain_db:+.1f} dB, limiter {-lim_gr:.1f} dB max GR)")
 for w in warnings:
     print("WARN", w)
-print("mix ->", out)
+r = subprocess.run([sys.executable, str(Path(__file__).resolve().parent / "audio_qa.py")], cwd=ROOT)
+raise SystemExit(r.returncode)

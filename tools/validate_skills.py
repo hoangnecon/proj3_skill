@@ -94,7 +94,8 @@ REQUIRED = ["package.json", "remotion.config.ts", "tsconfig.json", "script.json"
             "src/engine.ts", "src/kit.tsx", "src/chars.tsx", "src/side.tsx", "src/overlays.tsx", "src/props.tsx",
             "src/Film.tsx", "src/cast.ts", "src/geo.ts", "src/shotlist.ts", "src/sets/episode.tsx", "src/sets/types.ts",
             "src/exemplar/looks.ts", "src/exemplar/sets.tsx", "src/exemplar/geo.ts", "src/exemplar/shotlist.thang-may.ts.txt",
-            "src/design/Sheets.tsx", ".gitignore"] + [f"gates/G{i}.review.md" for i in range(1, 8)]
+            "src/design/Sheets.tsx", ".gitignore", "scripts/theme.py", "scripts/audiolib.py",
+            "scripts/audio_qa.py", "scripts/mix_targets.json", "scripts/mix.py", "scripts/voice_standard.json", "scripts/pacing.json"] + [f"gates/G{i}.review.md" for i in range(1, 8)]
 for r in REQUIRED:
     if not (TPL / r).exists():
         err(f"E13 template file missing: {r}")

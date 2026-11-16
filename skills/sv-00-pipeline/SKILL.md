@@ -9,16 +9,22 @@ This suite reproduces a proven process. Each phase has a skill, a machine check,
 at, and a gate that records it. Do the phases in order; never skip ahead because "it is faster". The
 reference episode "Thang máy ăn bí mật" (153 s, 67 shots, 26 segments) is the quality bar.
 
+## House standards (same output from any agent, any machine)
+Four shared files in `scripts/`, versioned, never edited per episode (a change is a series decision with a
+CHANGELOG line; the gates go stale where they changed): `pacing.json` (length 140–165 s, 600–720 words,
+voice 1.0×, 2.0–3.0 s per shot), `voice_standard.json` (Hải Đăng preset, t0.8/k25, one take, per-line
+checks), `mix_targets.json` (voice chain, music 15–18 dB under, −14 LUFS), `theme.py` (the series theme).
+
 ## Phase map
 | Gate | Phase | Skill | Machine check | Evidence you must open | Approval |
 |---|---|---|---|---|---|
 | G1 | Brief | sv-10 (+ sv-01) | brief sections filled | brief.md | **user** |
 | G2 | Script + beats | sv-10 | `script_lint.py` | qa/script_lint.json | **user** |
-| G3 | Voice | sv-12 | voice report thresholds | qa/voice_report.json + listening | — |
+| G3 | Voice | sv-12 | one take/line vs voice_standard.json + pacing.json | qa/voice_report.json + listening | — |
 | G4 | Cast + sets | sv-20 | `lint.mjs design` (CH/TK/SE) | qa/design/*.png | **user** |
-| G5 | Shots + motion | sv-22, sv-21 | `lint.mjs shots` (SH/AN/OV/CA/SZ/MO/KY/CO) | qa/contact_p*.png, qa/strips/*.png | — |
-| G6 | Audio | sv-40 | mix report thresholds | qa/mix_report.json + listening | — |
-| G7 | Delivery | sv-41 | deliver report | qa/deliver_report.json, qa/final_check.png, full watch | — |
+| G5 | Shots + motion | sv-22, sv-21 | `lint.mjs shots` (SH/AN/OV/CA/SZ/MO/KY/CO/PC) | qa/contact_p*.png, qa/strips/*.png | — |
+| G6 | Audio | sv-40 (sounds) + sv-42 (mix & master) | 21 measured checks vs mix_targets.json | qa/mix_report.json, qa/mix/overview.png, qa/mix/segments.png + listening | — |
+| G7 | Delivery | sv-41 (+ sv-42 audio-in-video) | deliver report + video audio checks | qa/deliver_report.json, qa/final_check.png, qa/video_audio.json, full watch | — |
 
 `approval: user` means: show the user the evidence (send the brief / script text / PNGs), wait for their
 answer, and quote it in the review (`user_quote`). If the user told you to continue without checking with
@@ -60,7 +66,8 @@ qa/ audio/ public/ out/                       ← generated
 
 ## House rules (from the user, non-negotiable)
 - Voice Hải Đăng, northern wording. Never switch voices without the user asking.
-- Music soft and slow: ≤ 80 BPM (76 typical), sparse, 20–24 dB under the voice.
+- Music: the one series theme (scripts/theme.py, 118 BPM, kỳ bí nhẹ, tò mò), 15–18 dB under the voice.
+- Mix and master by the house standard (sv-42, scripts/mix_targets.json), never by ear alone.
 - Every character designed on a sheet before use; every set built in six passes to exemplar density.
 - Walks in profile with planted feet; actions with anticipation and a reacting world; verify with strips.
 - Camera moves are motivated; cuts land on words.

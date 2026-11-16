@@ -13,10 +13,12 @@ description: Final QA and delivery of a story-video episode — render the maste
    go back to that skill; never deliver around a stale gate.
 2. Render: `node scripts/deliver.mjs` (≈ 4–8 min for 150 s; run it in the background). It refuses a stale mix.
    Outputs: `out/final.mp4` (master), `out/<slug>_phone.mp4` (CRF 25 → +2 until ≤ 30 MB),
-   `qa/deliver_report.json` (duration, size, fps, audio, hashes), `qa/final_check.png` (12 frames).
+   `qa/deliver_report.json` (duration, size, fps, audio, hashes), `qa/final_check.png` (12 frames),
+   `qa/video_audio.json` (sv-42 delivery checks on the audio inside both mp4s: AAC loudness drift, true
+   peak, audio/video length, sync by cross-correlation with the mix). Any failed check blocks G7.
 3. Open `qa/final_check.png` and compare with the contact sheets.
 4. Watch `out/final.mp4` full length with sound (`open out/final.mp4`) against the final-watch rubric.
-   Note timestamps of anything wrong. Fix at the source skill (shots → sv-22, sound → sv-40), re-render.
+   Note timestamps of anything wrong. Fix at the source skill (shots → sv-22, sounds → sv-40, levels → sv-42), re-render.
 5. `gates/G7.review.md`: deliver report line, final_check line, the rubric table with your notes.
    `python3 scripts/sv_gate.py pass G7`.
 6. Send the phone copy to the user (SendUserFile) with a one-line caption: title, length, size. Mention

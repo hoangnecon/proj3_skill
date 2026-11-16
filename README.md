@@ -25,11 +25,12 @@ bash skills/sv-00-pipeline/scripts/new_episode.sh ~/Work/PROJ3/<slug> ~/Work/PRO
 | `sv-00-pipeline` | entry point: phase map, commands, gate mechanics, house rules | all |
 | `sv-01-series-bible` | series identity, narrator, comedic engine, premise test, no-copying rule | G1 |
 | `sv-10-script` | brief → beats → script.json; rhythm benchmarks, northern wording, rubric | G1, G2 |
-| `sv-12-voice` | Hải Đăng TTS, best-of-N takes, word alignment, voice report | G3 |
+| `sv-12-voice` | Hải Đăng TTS to the voice standard: one take per line, measured per line, word alignment, voice report | G3 |
 | `sv-20-design-system` | tokens, characters (sheet procedure), sets (six passes, human scale), props, overlays | G4 |
 | `sv-21-motion` | actor API, walks/reaches/sits/rides, acting recipes, strip checklist | G5 |
 | `sv-22-shots-camera` | anchors, shot sizes, motivated camera, overlays, contact-sheet review | G5 |
-| `sv-40-audio` | audio.json: beds, foley, sparse music ≤ 80 BPM, 20–24 dB under the voice | G6 |
+| `sv-40-audio` | audio.json: beds, foley, accents, silences, series theme music (theme.py) | G6 |
+| `sv-42-mix-master` | house mix/master chain + 21 measured checks (mix_targets.json), plots, audio checks inside the video | G6, G7 |
 | `sv-41-qa-delivery` | master render, phone copy ≤ 30 MB, final-watch rubric | G7 |
 
 ## Template (`templates/episode-starter/`)

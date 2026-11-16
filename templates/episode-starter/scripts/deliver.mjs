@@ -49,6 +49,13 @@ const report = {
   phone_size_mb: +(fs.statSync(phone).size / 1e6).toFixed(1), phone_crf: crf, final_sha: sha(final), shots_sha: sha('qa/shots.json'),
 };
 fs.writeFileSync('qa/deliver_report.json', JSON.stringify(report, null, 1));
+// audio inside the delivered files: loudness drift after AAC, true peak, A/V length, sync (sv-42-mix-master)
+const PY = process.env.SV_PY || '/Users/Shared/Tools/VieNeu-TTS/.venv/bin/python';
+if (fs.existsSync('qa/video_audio.json')) fs.unlinkSync('qa/video_audio.json');
+for (const f of [final, phone]) {
+  try { execFileSync(PY, ['scripts/audio_qa.py', '--video', f], {stdio: 'inherit'}); }
+  catch { console.error(`WARN audio check failed for ${f} — see qa/video_audio.json (gate G7 will refuse)`); }
+}
 // spot-check frames straight from the encoded file (catches encode/audio-sync issues the stills cannot)
 const cells = [];
 for (let i = 0; i < 12; i++) {

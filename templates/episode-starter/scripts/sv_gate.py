@@ -54,11 +54,11 @@ def run(cmd):
 # inputs whose change invalidates the gate
 INPUTS = {
     "G1": ["brief.md"],
-    "G2": ["script.json", "beats.md"],
-    "G3": ["script.json", "audio/voice.wav", "src/words.json"],
+    "G2": ["script.json", "beats.md", "scripts/pacing.json", "scripts/voice_standard.json"],
+    "G3": ["script.json", "audio/voice.wav", "src/words.json", "scripts/voice_standard.json", "scripts/pacing.json"],
     "G4": ["src/cast.ts", "src/sets", "src/geo.ts", "src/props.tsx"],
-    "G5": ["src/shotlist.ts", "src/cast.ts", "src/sets", "src/words.json"],
-    "G6": ["audio.json", "audio/voice.wav", "src/shotlist.ts"],
+    "G5": ["src/shotlist.ts", "src/cast.ts", "src/sets", "src/words.json", "scripts/pacing.json"],
+    "G6": ["audio.json", "audio/voice.wav", "src/shotlist.ts", "scripts/mix_targets.json", "scripts/theme.py"],
     "G7": ["out/final.mp4"],
 }
 
@@ -79,9 +79,9 @@ def evidence(g):
         need = jload("qa/strips_needed.json") or []
         return ev + [f"qa/strips/{s['name']}.png" for s in need]
     if g == "G6":
-        return ["qa/mix_report.json"]
+        return ["qa/mix_report.json", "qa/mix/overview.png", "qa/mix/segments.png"]
     if g == "G7":
-        return ["qa/deliver_report.json", "qa/final_check.png"]
+        return ["qa/deliver_report.json", "qa/final_check.png", "qa/video_audio.json"]
     return []
 
 
@@ -109,14 +109,22 @@ def checks(g):
                 bad.append(f"voice {r['voice']} is not Hải Đăng")
             if r["script_sha"] != sha("script.json"):
                 bad.append("script.json changed after the voice was made — re-run voice.py")
-            if r["low_similarity"]:
-                bad.append(f"segments read wrong (similarity < 0.85): {r['low_similarity']} — voice.py --only {','.join(r['low_similarity'])}")
-            if r["too_fast"]:
-                bad.append(f"segments too fast (> 5.2 words/s): {r['too_fast']}")
-            if not 3.6 <= r["wps"] <= 5.0:
-                bad.append(f"overall pace {r['wps']} words/s outside 3.6-5.0")
-            if not 100 <= r["total"] <= 200:
-                bad.append(f"voice length {r['total']} s outside 100-200 s")
+            if "failed_lines" not in r:
+                bad.append("voice report is from the old best-of-N voice.py — re-run scripts/voice.py (voice standard 1.0)")
+                return bad
+            for k, f in [("standard_sha", "scripts/voice_standard.json"), ("pacing_sha", "scripts/pacing.json")]:
+                if r[k] != sha(f):
+                    bad.append(f"{f} changed after the voice was made — re-run voice.py")
+            e = r["engine"]
+            if e.get("clone") or e.get("speed") != 1.0 or e.get("takes") != 1:
+                bad.append(f"engine settings off-standard: {e}")
+            for sid, fails in r["failed_lines"].items():
+                bad.append(f"{sid} fails {fails} after all attempts — fix its tts_text (numbers in words, plain punctuation, split a long line), then voice.py --only {sid}")
+            if r["stale_lines"]:
+                bad.append(f"text changed after these lines were made: {r['stale_lines']} — voice.py --only {','.join(r['stale_lines'])}")
+            for c in r["episode_checks"]:
+                if not c["ok"]:
+                    bad.append(f"{c['group']}.{c['check']} = {c['value']} outside {c['range']}")
     elif g == "G4":
         code, out = run(["node", "scripts/lint.mjs", "design"])
         if code:
@@ -153,21 +161,25 @@ def checks(g):
         r = jload("qa/mix_report.json")
         if not r:
             bad.append("qa/mix_report.json missing — run scripts/mix.py")
+        elif "qa" not in r:
+            bad.append("mix report has no measurements — scripts/mix.py runs scripts/audio_qa.py; run it")
         else:
-            if r["bpm"] > 80:
-                bad.append(f"music {r['bpm']} BPM > 80")
-            if not 20 <= r["under_voice_db_speaking"] <= 24:
-                bad.append(f"music {r['under_voice_db_speaking']} dB under voice (need 20-24)")
-            if not -15 <= r["lufs"] <= -13:
-                bad.append(f"loudness {r['lufs']} LUFS (need -14 ± 1)")
-            if r["true_peak"] > -1.0:
-                bad.append(f"true peak {r['true_peak']} dBFS > -1")
+            for c in r["qa"]["checks"]:
+                if not c["ok"]:
+                    bad.append(f"mix standard: {c['group']}.{c['check']} = {c['value']} outside {c['range']}")
+            if r.get("music") != "series-theme":
+                bad.append("music is not the series theme (audio.json music.theme = \"series\")")
+            if r["processing"].get("voice_peak_limit_max_gr_db") is None:
+                bad.append("mix_report.json has no voice peak limit — made by an older mix.py: re-run scripts/mix.py")
+            elif r["processing"]["voice_peak_limit_max_gr_db"] > 10:
+                bad.append(f"voice peak limiter works {r['processing']['voice_peak_limit_max_gr_db']} dB: a click or pop in a take — find it, re-take the line (sv-12)")
+            if r["processing"]["limiter_max_gr_db"] > 6:
+                bad.append(f"limiter works too hard ({r['processing']['limiter_max_gr_db']} dB): something in the mix spikes — check sfx/voice peaks")
             if r["warnings"]:
                 bad.append(f"mix warnings: {r['warnings'][:3]}")
-            if r["inputs"]["voice"] != sha("audio/voice.wav")[:16]:
-                bad.append("voice changed after the mix")
-            if r["inputs"]["plan"] != sha("audio.json")[:16]:
-                bad.append("audio.json changed after the mix")
+            for k, f in [("voice", "audio/voice.wav"), ("plan", "audio.json"), ("targets", "scripts/mix_targets.json")]:
+                if r["inputs"].get(k) != sha(f)[:16]:
+                    bad.append(f"{f} changed after the mix — re-run scripts/mix.py")
     elif g == "G7":
         r = jload("qa/deliver_report.json")
         if not r:
@@ -183,6 +195,16 @@ def checks(g):
                 bad.append(f"phone copy {r['phone_size_mb']} MB > 30")
             if r["final_sha"] != sha("out/final.mp4"):
                 bad.append("out/final.mp4 changed after the report")
+        va = jload("qa/video_audio.json") or {}
+        for name in ["final.mp4", (r or {}).get("phone", "").split("/")[-1]]:
+            if not name:
+                continue
+            if name not in va:
+                bad.append(f"no audio measurement for {name} — deliver.mjs runs audio_qa.py --video")
+                continue
+            for c in va[name]["checks"]:
+                if not c["ok"]:
+                    bad.append(f"{name} audio: {c['check']} = {c['value']} outside {c['range']}")
     return bad
 
 

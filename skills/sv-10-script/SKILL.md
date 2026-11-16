@@ -38,8 +38,8 @@ A weak script cannot be saved by pictures. This skill turns an idea into `brief.
 |---|---|
 | SC-01/02 | title not DEMO; voice is Hải Đăng |
 | SC-03 | ids s1, s2, … unique and in order (s3b allowed) |
-| SC-04 | 18–40 segments |
-| SC-05 | estimated 100–200 s (error), 120–180 s (target) |
+| SC-04 | 22–34 segments (`scripts/pacing.json`) |
+| SC-05 | 600–720 spoken words and an estimated 140–165 s at Hải Đăng's native speed (target 150 s = "tầm 2,5 phút") |
 | SC-06 | ≤ 45 words per segment |
 | SC-07 | sentence length SD ≥ 3 |
 | SC-08 | no sentence > 24 words |
@@ -48,11 +48,17 @@ A weak script cannot be saved by pictures. This skill turns an idea into `brief.
 | SC-11 | repeated phrases |
 | SC-12/13 | beats.md sections present, segment map covers every id |
 | SC-14 | s1 ≤ 20 words |
+| SC-15 | no digits in the spoken text (numbers in words) |
+| SC-16 | no "…" in the spoken text (it becomes a hole in the voice) |
+| SC-17 | no emotion tags (`voice_standard.json` allows none) |
+| SC-18 | pause_after 0.1–0.6 s |
 
 ## Rules
 - Narrator: first person, northern, calm deadpan. No southern words, no English, no slang from the internet.
 - One absurd rule, played completely straight, escalating to a system. No magic explained, no moral stated.
 - Every named person has a place ("tầng năm"), every number is spoken in words.
+- Pacing is a house standard (`scripts/pacing.json`): the same words budget and length for every episode, so
+  any agent produces the same speed. Emotion lives in the writing; the voice adds none (sv-12).
 - Never reuse a premise, line, character or ending from the reference channels or from earlier episodes.
 - After G2 passes, any text change re-opens G2 AND G3 (the voice) — the gate log shows them stale.
 
@@ -60,7 +66,7 @@ A weak script cannot be saved by pictures. This skill turns an idea into `brief.
 | Problem | Fix |
 |---|---|
 | SC-07 monotone | split a long sentence into build + 3-word punch; merge two medium ones |
-| Too long (> 180 s) | cut a whole consequence segment, not words from every line |
+| Too long (SC-05) | cut a whole consequence segment, not words from every line; never plan to speed the voice up |
 | Twist feels cheap | plant it: a detail in s1–s3 that the turn recasts |
 | Segment you cannot picture | rewrite around an object or a place, or merge it with its neighbour |
 | User says "chưa hài" | sharpen specifics (numbers, names, objects) and cut explanations; do not add jokes words |

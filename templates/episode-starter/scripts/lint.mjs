@@ -263,6 +263,23 @@ if (phase !== 'design') {
     const n = rows.filter((r) => r.t0 < t1 - 0.2 && r.t1 > t0 + 0.2).length;
     if (t1 - t0 > 5 && n < 2) warn('CO-03', `${id}: ${(t1 - t0).toFixed(1)} s of narration on a single shot`);
   });
+  // pacing (scripts/pacing.json): every episode cuts at the same speed
+  {
+    const PA = JSON.parse(fs.readFileSync(new URL('./pacing.json', import.meta.url), 'utf8')).shots;
+    const durs = rows.map((r) => r.t1 - r.t0).sort((a, b) => a - b);
+    const total = rows.length ? rows[rows.length - 1].t1 - rows[0].t0 : 0;
+    if (durs.length && total > 30) {
+      const mean = durs.reduce((a, b) => a + b, 0) / durs.length;
+      const perMin = (durs.length / total) * 60;
+      const p10 = durs[Math.floor(durs.length / 10)];
+      if (mean < PA.mean_s[0] || mean > PA.mean_s[1]) err('PC-01', `mean shot ${mean.toFixed(2)} s outside ${PA.mean_s[0]}-${PA.mean_s[1]} s (house pacing)`);
+      if (perMin < PA.shots_per_min[0] || perMin > PA.shots_per_min[1]) err('PC-02', `${perMin.toFixed(1)} shots/min outside ${PA.shots_per_min[0]}-${PA.shots_per_min[1]}`);
+      if (p10 < PA.p10_s_min) err('PC-03', `10 % of shots are shorter than ${p10.toFixed(2)} s (min ${PA.p10_s_min} s): too choppy`);
+      const long = rows.filter((r) => r.t1 - r.t0 > PA.max_s && !waived('PC-03', r.name));
+      for (const r of long) err('PC-03', `'${r.name}' holds ${(r.t1 - r.t0).toFixed(1)} s (> ${PA.max_s} s)`);
+      console.log(`pacing: ${durs.length} shots, mean ${mean.toFixed(2)} s, ${perMin.toFixed(1)}/min, p10 ${p10.toFixed(2)} s`);
+    }
+  }
   fs.mkdirSync('qa', {recursive: true});
   fs.writeFileSync('qa/strips_needed.json', JSON.stringify(strips, null, 1));
 }

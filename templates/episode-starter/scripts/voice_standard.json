@@ -1,0 +1,74 @@
+{
+ "_doc": "House voice standard (sv-12-voice). Shared by every episode; do not edit per episode. Changing it is a series decision (user request), made in the suite template with a CHANGELOG line; G3 goes stale where it changed. Calibrated 2026-11-16 by a temperature x top_k sweep (6 lines x 2 seeds per setting) on the preset voice; the user approved the one-take result (research/tts-expressive, bản E).",
+ "version": "1.0",
+ "engine": {
+  "voice": "Hải Đăng",
+  "clone": false,
+  "precision": "fp32",
+  "temperature": 0.8,
+  "top_k": 25,
+  "top_p": 0.95,
+  "repetition_penalty": 1.2,
+  "speed": 1.0,
+  "takes": 1,
+  "max_attempts": 3,
+  "_why": "t0.8/k25 had the best word accuracy (0.87) and no holes; t0.95 drifted in timbre (CV 0.12), lower temperatures misread more. Cloning (even from Hải Đăng's own takes) lost bandwidth (~12.5 kHz) and added artefacts; the user rejected it. One take with a fixed seed: the same text always gives the same audio. A retry (next seed) happens only when a line fails a check below."
+ },
+ "text": {
+  "_doc": "rules for the text sent to the engine (tts_text if present, else text). script_lint SC-15..SC-17 and voice.py both enforce them.",
+  "no_digits": true,
+  "no_ellipsis": true,
+  "max_words_per_call": 45,
+  "allowed_tags": [],
+  "_why": "digits are read unpredictably -> write numbers in words; every '...' or decorative comma became a 0.3-0.5 s hole and slowed the read ~20 %; emotion tags [cười]/[thở dài]/[hắng giọng] are experimental and lowered word accuracy, so they are off for the series"
+ },
+ "line_checks": {
+  "_doc": "every generated line is measured against profile (below). [min, max]. A line that fails any check is regenerated with the next seed, up to engine.max_attempts.",
+  "asr_similarity": [
+   0.85,
+   1.0
+  ],
+  "rate_vs_profile": [
+   -0.12,
+   0.12
+  ],
+  "f0_vs_profile_st": [
+   -2.0,
+   2.0
+  ],
+  "timbre_vs_profile": [
+   -0.2,
+   0.2
+  ],
+  "max_hole_s": [
+   0,
+   0.55
+  ],
+  "_why": "asr = voice.py similarity (accent-free, character level, whisper-small): calibration takes are >= 0.90 at p10, 0.85 is the floor the old best-of-N used. Rate +-12 % = calibration spread 4.22-4.95. Pitch +-2 st and timbre +-20 % are 1.3x the spread seen between good lines (content changes both); beyond that the line sounds like another read. A hole > 0.55 s inside a line is a broken read (natural sentence breaks measured 0.26-0.43 s)."
+ },
+ "episode_checks": {
+  "f0_spread_st": [
+   0,
+   1.0
+  ],
+  "rate_cv": [
+   0,
+   0.08
+  ],
+  "timbre_cv": [
+   0,
+   0.12
+  ],
+  "retry_share": [
+   0,
+   0.25
+  ]
+ },
+ "profile": {
+  "_doc": "Hải Đăng at the engine settings above, measured by voice.py measure() on 12 calibration takes. Rate = words / trimmed line length (Vietnamese words = syllables).",
+  "rate_wps": 4.5,
+  "f0_hz": 154.6,
+  "centroid_hz": 1306.2,
+  "calibrated": "2026-11-16, 39 lines: the 12 sweep takes (con-so-dam-ma s1-s5, 2 seeds) + all 27 lines of a full one-take run of con-so-dam-ma; asr_similarity p10 0.937 (numbers spelled out before comparing). First calibration on 12 takes gave f0 150.7 Hz, too low for a whole episode (episode median 156 Hz)."
+ }
+}

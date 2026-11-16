@@ -1,0 +1,34 @@
+{
+ "_doc": "House pacing standard: every episode, made by any agent on any machine, runs at the same speed. Shared; do not edit per episode (series decision + CHANGELOG line). Enforced by script_lint.py (G2: word budget), voice.py/sv_gate G3 (measured voice), lint.mjs shots PC-01..03 (G5: cutting), deliver report (G7: length).",
+ "version": "1.0",
+ "calibration": {
+  "_doc": "measured 2026-11-16 on the three approved episodes",
+  "thang-may": {"video_s": 149.0, "voice_wps": 4.34, "shots": 67, "shot_mean_s": 2.22, "shots_per_min": 27.0},
+  "con-so-dam-ma": {"video_s": 147.9, "voice_s": 144.9, "words": 624, "voice_wps": 4.32, "segment_wps_median": 4.56, "pause_total_s": 6.1, "shots": 52, "shot_mean_s": 2.84, "shots_per_min": 21.1},
+  "tiem-cam-tuoi": {"video_s": 164.6, "voice_s": 161.6, "words": 705, "voice_wps": 4.37, "segment_wps_median": 4.56, "pause_total_s": 6.3, "shots": 67, "shot_mean_s": 2.46, "shots_per_min": 24.4}
+ },
+ "voice": {
+  "speed": 1.0,
+  "_speed_why": "Hải Đăng is used at the engine's native speed (1.0x, about 4.5 words/s inside a line). Never time-stretch, speed up (atempo) or pitch-shift: pictures follow the voice.",
+  "overall_wps": [4.1, 4.6],
+  "default_pause_after_s": 0.18,
+  "pause_after_s": [0.1, 0.6],
+  "pause_share": [0.02, 0.08]
+ },
+ "episode": {
+  "voice_s_target": 150,
+  "voice_s": [140, 165],
+  "voice_s_hard": [130, 175],
+  "words": [600, 720],
+  "segments": [22, 34],
+  "_why": "user: 'tầm 2,5 phút'. Words budget = 140-165 s x 4.33 words/s (voice incl. pauses)."
+ },
+ "shots": {
+  "mean_s": [2.0, 3.0],
+  "shots_per_min": [20, 28],
+  "p10_s_min": 1.2,
+  "max_s": 6.5,
+  "_why": "approved episodes cut every 2.2-2.8 s on average (21-27 shots/min); faster reads frantic for this deadpan narrator, slower lets a 2.5 min episode sag"
+ },
+ "music": {"bpm": 118, "theme": "series"}
+}

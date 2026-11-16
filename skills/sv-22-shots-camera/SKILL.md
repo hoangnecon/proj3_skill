@@ -53,6 +53,7 @@ is why it holds attention. An agent that puts one wide frame per sentence has fa
 |---|---|
 | Lint AN-01 word not found | the aligner split or spelled it differently; check words.json for that segment |
 | Shot too short (SH-14) | merge into the neighbour or move the anchor one word later |
+| Pacing off (PC-01 mean shot 2.0–3.0 s, PC-02 20–28 shots/min, PC-03 p10 ≥ 1.2 s and no hold > 6.5 s; `scripts/pacing.json`) | too slow: split long holds on a word that changes the picture; too fast: merge flash cuts. The approved episodes cut every 2.2–2.8 s |
 | Same frame twice in a row | change size ≥ 1.3× or change subject; or drop one shot |
 | Empty-looking frame | wrong cam centre (check the grid plate) or the set lacks detail there (back to sv-20) |
 | Actor cut by the frame edge during an action (SZ-02) | move cam/cam2 toward the actor or block the action nearer the centre |

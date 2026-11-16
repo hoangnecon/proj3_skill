@@ -1,15 +1,33 @@
 ---
 name: sv-40-audio
-description: Mix the sound of a story-video episode — ambience bed per set, foley derived automatically from the shot table (reaches, set keys, overlays, transitions), word-anchored accents, and sparse generated music (≤ 80 BPM, moods light/tender/dark/tense/silence) placed 20–24 dB under the voice, loudness −14 LUFS — configured in audio.json, verified by qa/mix_report.json and gate G6. Use whenever you set up or change music, ambience or sound effects, when the user says the music is too loud/busy/fast, or after shots or voice change.
+description: Mix the sound of a story-video episode — ambience bed per set, foley derived automatically from the shot table (reaches, set keys, overlays, transitions), word-anchored accents, and music — the one series theme (scripts/theme.py, 118 BPM, generated to length, melody from 0 s) or the legacy sparse mood engine (≤ 80 BPM) — configured in audio.json; levels, processing and mastering follow sv-42-mix-master. Use whenever you set up or change music, ambience or sound effects, when the user says the music is too loud/busy/fast, or after shots or voice change.
 ---
 
-# sv-40 · Audio (gate G6)
+# sv-40 · Audio design (feeds gate G6; levels in sv-42)
 
 The user's verdict on an earlier mix: "nhạc to và dở quá… nhạc nhẹ và chậm lại tí, đừng dồn dập".
 House sound = voice first; music is a soft bed you barely notice; small sounds make the pictures feel
 physical.
 
-## audio.json
+## Series theme (default for every episode)
+The user chose one theme for the whole series on 2026-11-15: "Pizzicato tò mò" v2 — kỳ bí nhẹ, tò mò, nhịp
+vừa, a soft "tưng tưng" bass on every beat. It is code, not audio: `scripts/theme.py` (D minor, 118 BPM,
+kalimba + music box + soft bass + quiet shaker + pad, fixed seed). mix.py renders it to the exact episode
+length, so nothing large goes into git and every episode sounds the same.
+- The melody starts at 0 s (no intro: the user wants it in from the first frame).
+- It loops A A B A and resolves on the tonic at the bar after `end.at`.
+- `sections` only mark `"mood": "silence"` gaps (1–3 s before the turn); any other mood means "theme plays".
+- Preview alone: `python3 scripts/theme.py --sec 75 --end 71 --out audio/theme.wav`.
+- Changing the theme (notes, instruments, tempo) is a series decision: only on the user's request, and the
+  change lands in the template's theme.py so every new episode gets it.
+
+```json
+"music": {"theme": "series", "under_voice_db": 16,
+          "sections": [{"from": "s1", "mood": "light"}, {"from": "s20", "mood": "silence"}, {"from": "s21", "mood": "light"}],
+          "end": {"at": "s26@không"}}
+```
+
+## audio.json (legacy mood engine shown; use the series theme block above for music)
 ```json
 {
   "music": {"bpm": 76, "under_voice_db": 22,
@@ -25,8 +43,9 @@ physical.
 ```
 | Key | Meaning |
 |---|---|
-| `music.bpm` | ≤ 80 (hard stop). 72–78 normal |
-| `music.under_voice_db` | 20–24 (hard stop). Music gain is solved so it sits exactly this far under the voice while speaking |
+| `music.theme` | `"series"` → scripts/theme.py (118 BPM, bpm key ignored). Omit only for the legacy mood engine |
+| `music.bpm` | mood engine only: ≤ 80 (hard stop) |
+| `music.under_voice_db` | 15–18 (house standard, mix_targets.json; aim 16). Music gain is solved so it sits exactly this far under the voice while speaking |
 | `sections[].from` | anchor where the section starts; `mood` light (major, sparse kalimba + bass) · tender (minor, slower notes + pad) · dark (low pads) · tense (pulsing low pad) · silence; `key` C D E F G A Bb |
 | `end.at` | music resolves to a final chord here; put it on the button line |
 | `beds` | override a set's ambience (`SetDef.bed`): room hum quiet echo outdoor fan motor basement paper street market kitchen rain night |
@@ -49,15 +68,15 @@ arrow → whoosh; flash/wipe/solid cuts → whoosh.
 ## Workflow
 1. G5 passed (`qa/shots.json` fresh: `node scripts/times.mjs`).
 2. Write `audio.json` from beats.md (sections) and the shotlist (keys used).
-3. `python3 scripts/mix.py` → `public/mix.wav` (48 kHz, −14 LUFS) and `qa/mix_report.json`.
-4. Read the report: `warnings` empty, `bpm` ≤ 80, `under_voice_db_speaking` 20–24, `lufs` −15…−13,
-   `true_peak` ≤ −1, the sfx list matches what you expect (count reaches/keys).
+3. Mix and measure with **sv-42-mix-master** (`scripts/mix.py` runs the house chain and `audio_qa.py`).
+4. From the report check only the sound-design part here: the sfx list matches what you expect (count
+   reaches/keys), sections and silences sit where beats.md says. Levels, spectrum and loudness are sv-42's.
 5. Listen through on headphones at least: the hook, every key/reach shot, the silence before the turn, the
    ending. Music must never compete with a word. Fix in audio.json, re-mix.
-6. `gates/G6.review.md`: report line + listening notes. Show the user a preview (render via sv-41 phone
-   copy or the 30 s around the turn) if the mood plan is new. `python3 scripts/sv_gate.py pass G6`.
+6. G6 is passed through sv-42 (its review lists the plots and listening notes).
 
 ## Rules
 - Never raise the music to "fill" a quiet part; use a bed or silence.
-- No beat-driven, plucky, busy patterns; at most one note per beat (the generator enforces).
+- Do not write new music per episode. The theme is the series identity; the mood engine is legacy.
+- No hi-hats, drums or dense runs on top of the theme.
 - After any shot or voice change the mix is stale (hashes in the report) — re-run mix.py; deliver.mjs refuses a stale mix.

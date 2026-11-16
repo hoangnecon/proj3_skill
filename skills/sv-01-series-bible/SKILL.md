@@ -9,7 +9,7 @@ description: The identity of the story-video series — format, narrator persona
 - Vertical 1080×1920, 2–3 minutes (target 120–180 s), one narrator, captions burned in.
 - Flat "riso ink" 2D illustration (sv-20 tokens): ink-navy outlines, halftone dots, paper grain,
   Be Vietnam Pro type. Animated in Remotion, every shot anchored to a word.
-- Sound: voice Hải Đăng (northern male), sparse soft music ~76 BPM 20–24 dB under the voice, room
+- Sound: voice Hải Đăng (northern male), the series theme music (scripts/theme.py) 15–18 dB under the voice, mixed by the sv-42 standard, room
   ambience per location, small foley.
 
 ## Narrator

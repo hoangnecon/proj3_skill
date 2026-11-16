@@ -17,7 +17,6 @@ warn = lambda r, m: warns.append(f"[{r}] {m}")
 
 script = json.loads((ROOT / "script.json").read_text())
 segs = script.get("segments", [])
-WPS = 4.3
 
 # ---- identity ----
 if re.search(r"demo", script.get("title", ""), re.I):
@@ -29,16 +28,37 @@ nums = [int(m.group(1)) if (m := re.fullmatch(r"s(\d+)[a-z]?", i)) else -1 for i
 if -1 in nums or len(set(ids)) != len(ids) or nums != sorted(nums) or (nums and nums[0] != 1):
     err("SC-03", f"segment ids must be s1, s2, ... (an inserted segment may be s3b), unique and in order (got {ids[:8]}...)")
 
-# ---- length ----
-words = [w for s in segs for w in s["text"].split()]
-pause = sum(s.get("pause_after", script.get("pause_after", 0.32)) for s in segs)
-est = len(words) / WPS + pause
-if not 18 <= len(segs) <= 40:
-    err("SC-04", f"{len(segs)} segments; a 2-3 min episode has 18-40 (reference 30)")
-if est < 100 or est > 200:
-    err("SC-05", f"estimated {est:.0f} s ({len(words)} words) is outside 100-200 s")
-elif not 120 <= est <= 180:
-    warn("SC-05", f"estimated {est:.0f} s — target 120-180 s")
+# ---- length + pacing (scripts/pacing.json: the same speed for every episode, any agent, any machine) ----
+PA = json.loads((Path(__file__).resolve().parent / "pacing.json").read_text())
+words = [w for s in segs for w in s.get("tts_text", s["text"]).split()]
+dflt = script.get("pause_after", PA["voice"]["default_pause_after_s"])
+pause = sum(s.get("pause_after", dflt) for s in segs[:-1])
+est = len(words) / 4.49 + pause   # 4.49 = Hải Đăng in-line rate (voice_standard.json profile)
+lo, hi = PA["episode"]["segments"]
+if not lo <= len(segs) <= hi:
+    err("SC-04", f"{len(segs)} segments; house pacing is {lo}-{hi} (pacing.json)")
+wlo, whi = PA["episode"]["words"]
+if not wlo <= len(words) <= whi:
+    err("SC-05", f"{len(words)} spoken words; house budget {wlo}-{whi} (= 140-165 s at 1.0x Hải Đăng) — cut or add a beat, never speed the voice up")
+slo, shi = PA["episode"]["voice_s"]
+if not slo <= est <= shi:
+    err("SC-05", f"estimated {est:.0f} s outside {slo}-{shi} s (target {PA['episode']['voice_s_target']} s)")
+plo, phi = PA["voice"]["pause_after_s"]
+for s in segs:
+    pa = s.get("pause_after", dflt)
+    if not plo <= pa <= phi:
+        err("SC-18", f"{s['id']}: pause_after {pa} outside {plo}-{phi} s")
+# ---- text sent to the voice (scripts/voice_standard.json -> text) ----
+VS = json.loads((Path(__file__).resolve().parent / "voice_standard.json").read_text())["text"]
+for s in segs:
+    t = s.get("tts_text", s["text"])
+    if VS["no_digits"] and re.search(r"\d", t):
+        err("SC-15", f"{s['id']}: digits in the spoken text — write numbers in words (in text, or in tts_text)")
+    if VS["no_ellipsis"] and ("..." in t or "…" in t):
+        err("SC-16", f"{s['id']}: '…' in the spoken text — the engine turns it into a 0.3-0.5 s hole; use a full stop or a comma")
+    tags = re.findall(r"\[([^\]]+)\]", t)
+    if any(x not in VS["allowed_tags"] for x in tags):
+        err("SC-17", f"{s['id']}: emotion tags {tags} are not in the voice standard")
 for s in segs:
     n = len(s["text"].split())
     if n > 45:
@@ -107,7 +127,10 @@ report = {"segments": len(segs), "words": len(words), "est_seconds": round(est, 
           "sent_mean": round(mean, 2), "sent_sd": round(sd, 2), "sent_min": min(lens or [0]), "sent_max": max(lens or [0]),
           "errors": errors, "warns": warns}
 (ROOT / "qa").mkdir(exist_ok=True)
-(ROOT / "qa/script_lint.json").write_text(json.dumps(report, ensure_ascii=False, indent=1))
+out = ROOT / "qa/script_lint.json"
+txt = json.dumps(report, ensure_ascii=False, indent=1)
+if not out.exists() or out.read_text() != txt:   # unchanged result keeps its mtime, so a G2 review stays valid
+    out.write_text(txt)
 print(f"script: {len(segs)} segments, {len(words)} words, ~{est:.0f} s, sentences {len(lens)} (mean {mean:.1f}, SD {sd:.1f}, {report['sent_min']}-{report['sent_max']})")
 for w in warns:
     print("WARN ", w)
