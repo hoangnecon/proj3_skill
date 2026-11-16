@@ -1,11 +1,11 @@
-"""Giọng VieNeu theo chuẩn nhà (scripts/voice_standard.json, skill sv-12-voice): MỘT take mỗi đoạn, seed cố định,
+"""Giọng VieNeu theo chuẩn nhà (standards/voice_standard.json, skill sv-12-voice): MỘT take mỗi đoạn, seed cố định,
 đo từng đoạn so với hồ sơ giọng Hải Đăng -> đoạn trượt mới sinh lại bằng seed kế tiếp -> ghép -> mốc từng từ ->
 cues -> qa/voice_report.json (bằng chứng gate G3).
 
 Chạy: /Users/Shared/Tools/VieNeu-TTS/.venv/bin/python scripts/voice.py [--only s3,s7] [--missing] [--reuse]
   --reuse : không sinh lại giọng, dùng audio/<id>.wav đã có (chỉ đo lại + tính lại timeline/words/cues)
   --calibrate a.wav:text ... : in hồ sơ giọng (chỉ dùng khi đổi chuẩn — việc của series, không phải của tập)
-Đầu ra: audio/<id>.wav, audio/voice.wav, public/voice.wav, qa/timeline.json, qa/voice_report.json, src/words.json, src/cues.json
+Đầu ra: audio/<id>.wav, audio/voice.wav, public/voice.wav, qa/timeline.json, qa/voice_report.json, src/data/words.json, src/data/cues.json
 Luật nhà: giọng Hải Đăng gốc (preset, không clone), tốc độ gốc 1.0×, không kéo/nén thời gian, không đổi cao độ.
 """
 import argparse
@@ -94,7 +94,7 @@ def similarity(words, text):
 
 
 # ---------------------------------------------------------------- house voice standard
-STD = json.loads((Path(__file__).resolve().parent / "voice_standard.json").read_text())
+STD = json.loads((ROOT / "standards/voice_standard.json").read_text())
 
 
 def text_problems(t):
@@ -216,8 +216,8 @@ def main():
     voice = args.voice or script["voice"]
     if voice != "Hải Đăng" and not args.allow_voice:
         raise SystemExit(f"giọng '{voice}' không phải Hải Đăng — luật nhà. Dùng --allow-voice chỉ khi người dùng yêu cầu.")
-    default_pause = script.get("pause_after", json.loads((Path(__file__).resolve().parent / "pacing.json").read_text())["voice"]["default_pause_after_s"])
-    for d in ("audio", "public", "qa", "src"):
+    default_pause = script.get("pause_after", json.loads((ROOT / "standards/pacing.json").read_text())["voice"]["default_pause_after_s"])
+    for d in ("audio", "public", "qa", "src/data"):
         (ROOT / d).mkdir(exist_ok=True)
     only = set(args.only.split(",")) if args.only else None
 
@@ -334,7 +334,7 @@ def main():
             t0 = sw[0]["s"]
         events.append({**{k: v for k, v in ev.items() if k != "at"}, "t": t0})
     events.sort(key=lambda e: e["t"])
-    (ROOT / "src" / "events.json").write_text(json.dumps(events, ensure_ascii=False, indent=1))
+    (ROOT / "src/data/events.json").write_text(json.dumps(events, ensure_ascii=False, indent=1))
     cues["seg_starts"] = {x["id"]: x["start"] for x in timeline}
     cues["voice_end"] = round(timeline[-1]["end"], 3)
     cues["total"] = round(t, 3)
@@ -350,7 +350,7 @@ def main():
     ep_vals = {"f0_spread_st": float(np.std(12 * np.log2(f0s / np.median(f0s)))) if len(f0s) else 99.0,
                "rate_cv": float(rates.std() / rates.mean()), "timbre_cv": float(cents.std() / cents.mean()),
                "retry_share": float(np.mean([a > 1 for a in tried])) if tried else 0.0}
-    PA = json.loads((Path(__file__).resolve().parent / "pacing.json").read_text())
+    PA = json.loads((ROOT / "standards/pacing.json").read_text())
     voice_end = timeline[-1]["end"]
     pauses_s = sum(s.get("pause_after", default_pause) for s in script["segments"][:-1])
     pace_vals = {"voice_s": voice_end, "overall_wps": len(words) / max(voice_end, 0.1), "pause_share": pauses_s / max(voice_end, 0.1),
@@ -365,8 +365,8 @@ def main():
         "total": round(t, 3), "words": len(words), "wps": round(len(words) / max(voice_end, 0.1), 2),
         "script_sha": hashlib.sha256((ROOT / "script.json").read_bytes()).hexdigest()[:16],
         "voice_sha": hashlib.sha256((ROOT / "audio" / "voice.wav").read_bytes()).hexdigest()[:16],
-        "standard_sha": hashlib.sha256((Path(__file__).resolve().parent / "voice_standard.json").read_bytes()).hexdigest()[:16],
-        "pacing_sha": hashlib.sha256((Path(__file__).resolve().parent / "pacing.json").read_bytes()).hexdigest()[:16],
+        "standard_sha": hashlib.sha256((ROOT / "standards/voice_standard.json").read_bytes()).hexdigest()[:16],
+        "pacing_sha": hashlib.sha256((ROOT / "standards/pacing.json").read_bytes()).hexdigest()[:16],
         "failed_lines": failed, "stale_lines": stale, "episode_checks": episode_checks,
         "segments": [{k: x[k] for k in ("id", "start", "end", "similarity", "wps", "asr", "measure", "checks", "fails", "attempts")} for x in timeline],
     }
@@ -377,9 +377,9 @@ def main():
         print("=> sửa chữ (tts_text) của các đoạn trượt rồi:  --only " + ",".join(failed))
     if stale:
         print("=> chữ đã đổi sau khi sinh giọng:  --only " + ",".join(stale))
-    (ROOT / "src").mkdir(exist_ok=True)
-    (ROOT / "src" / "words.json").write_text(json.dumps(words, ensure_ascii=False))
-    (ROOT / "src" / "cues.json").write_text(json.dumps(cues, ensure_ascii=False, indent=2))
+    (ROOT / "src/data").mkdir(parents=True, exist_ok=True)
+    (ROOT / "src/data/words.json").write_text(json.dumps(words, ensure_ascii=False))
+    (ROOT / "src/data/cues.json").write_text(json.dumps(cues, ensure_ascii=False, indent=2))
     print("CUES", json.dumps({k: v for k, v in cues.items() if k != "seg_starts"}, ensure_ascii=False))
 
 

@@ -63,7 +63,7 @@ Principals use `s` 0.9–1.15 in shots; background people 0.7–0.9 placed furth
    ones (`white`, `concrete`, `wallB`, `wood`). Two principals never share `topC`.
 5. **Add the story trait** — the prop or accessory that IS the character: the gossip's glasses + earrings,
    the official's square glasses + tie (`topC2`), the guard's cap, the maintenance man's uniform + cap.
-6. **Register**: `CAST` + `CAST_ROLES` in `src/cast.ts`.
+6. **Register**: `CAST` + `CAST_ROLES` in `src/episode/cast.ts`.
 7. **Render evidence**: `node scripts/design.mjs` → `qa/design/cast_episode_p*.png` and
    `expr_<key>.png` for every principal and support. LOOK at them next to `cast_exemplar_p*.png`.
 8. **Iterate** until the review checklist (§8) passes, then show the user the cast sheet (G4).

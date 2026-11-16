@@ -1,7 +1,7 @@
 # Design tokens — "riso ink" style
 
-Every value here exists in `src/kit.tsx`. Episode code (`src/cast.ts`, `src/sets/episode.tsx`, `src/geo.ts`,
-`src/shotlist.ts`) may only use these tokens. `scripts/lint.mjs` fails on a raw `#hex` (rule TK-02) or a
+Every value here exists in `src/kit.tsx`. Episode code (`src/episode/cast.ts`, `src/episode/sets.tsx`, `src/episode/geo.ts`,
+`src/episode/shotlist.ts`) may only use these tokens. `scripts/lint.mjs` fails on a raw `#hex` (rule TK-02) or a
 literal `fontFamily` (TK-03) in those files. If a colour is truly missing, add a named token to `PAL` in
 `kit.tsx` with a comment saying what it is for, then use the name.
 
@@ -110,7 +110,7 @@ and is framed at zoom ≥ 1.2 when the narration points at it.
 
 - Video 1080 × 1920, 30 fps. Camera `[cx, cy, k]` shows the world rect `cx ± 540/k`, `cy ± 960/k`.
 - World units = screen px at `k = 1`. Interior convention: ceiling above y≈640, wall 640–1560,
-  floor from 1560 down; actors stand around y 1560–1800 (`GROUND = 1700` in `src/geo.ts`).
+  floor from 1560 down; actors stand around y 1560–1800 (`GROUND = 1700` in `src/episode/geo.ts`).
 - A set paints its back layer edge-to-edge over `bounds` (declared in `SetDef`); every camera of every shot
   must stay inside it (lint CA-05). Paint generously: typical interior bounds `[-400, -400, 1480, 2300]`;
   a set that pans or zooms out to `k = 0.6` needs ~`[-400, -200, 2900, 2300]`.

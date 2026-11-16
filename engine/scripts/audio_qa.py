@@ -1,4 +1,4 @@
-"""Measure a mix (or a delivered video) against the house standard scripts/mix_targets.json (sv-42-mix-master).
+"""Measure a mix (or a delivered video) against the house standard standards/mix_targets.json (sv-42-mix-master).
 
   python scripts/audio_qa.py                  measure public/mix.wav + audio/stems/*  -> qa/audio_qa.json, qa/mix/overview.png,
                                               qa/mix/segments.png (merged into qa/mix_report.json as "qa")
@@ -20,9 +20,9 @@ from PIL import Image, ImageDraw, ImageFont
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import audiolib as A  # noqa: E402
 
-ROOT = Path.cwd()
+ROOT = Path(__file__).resolve().parent.parent   # the episode folder (scripts/ sits in it)
 SR = A.SR
-TG = json.loads((Path(__file__).resolve().parent / "mix_targets.json").read_text())
+TG = json.loads((ROOT / "standards/mix_targets.json").read_text())
 
 
 def check(results, group, name, value):
@@ -68,8 +68,8 @@ def measure_mix():
     n = len(master)
     for k in stems:
         stems[k] = np.pad(stems[k], ((0, max(0, n - len(stems[k]))), (0, 0)))[:n]
-    words = json.loads((ROOT / "src/words.json").read_text())
-    cues = json.loads((ROOT / "src/cues.json").read_text())
+    words = json.loads((ROOT / "src/data/words.json").read_text())
+    cues = json.loads((ROOT / "src/data/cues.json").read_text())
     mono = {k: v.mean(1) for k, v in stems.items()}
     T = np.arange(n) / SR
     speak = np.zeros(n, bool)

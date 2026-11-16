@@ -1,12 +1,12 @@
 ---
 name: sv-20-design-system
-description: Design the cast and the sets of a story-video episode in the house "riso ink" style before any shot is written — exact colour tokens, line weights, halftone and glow rules, typography, character sheet procedure with trait rules, six-pass set building at exemplar detail density, props and overlays. Use whenever you create or change a character look, a location/set, a prop, an overlay, or anything visual in an episode project (src/cast.ts, src/sets/episode.tsx, src/geo.ts, src/props.tsx), and for gate G4.
+description: Design the cast and the sets of a story-video episode in the house "riso ink" style before any shot is written — exact colour tokens, line weights, halftone and glow rules, typography, character sheet procedure with trait rules, six-pass set building at exemplar detail density, props and overlays. Use whenever you create or change a character look, a location/set, a prop, an overlay, or anything visual in an episode project (src/episode/cast.ts, src/episode/sets.tsx, src/episode/geo.ts, src/props.tsx), and for gate G4.
 ---
 
 # sv-20 · Design system — cast + sets (gate G4)
 
 You are designing the world the story happens in. The bar is set by the exemplar cast and sets that ship
-with the template (`src/exemplar/`), rendered into `qa/design/*ex*`. Your episode must look like it
+with every episode (`src/exemplar/`, from the suite's `examples/thang-may/`), rendered into `qa/design/*ex*`. Your episode must look like it
 belongs in the same series and carry the same density of detail. Agents that skip this phase produce
 "a few boxes and stick figures"; the lint and the gate exist to stop that.
 
@@ -18,7 +18,7 @@ belongs in the same series and carry the same density of detail. Agents that ski
 
 ## Inputs → outputs
 - In: `brief.md` (Characters, Locations), `beats.md` (segment map: who is where), G3 passed.
-- Out: `src/cast.ts` (CAST + CAST_ROLES), `src/sets/episode.tsx` (EPISODE_SETS), `src/geo.ts` (touch
+- Out: `src/episode/cast.ts` (CAST + CAST_ROLES), `src/episode/sets.tsx` (EPISODE_SETS), `src/episode/geo.ts` (touch
   points), new props in `src/props.tsx` if needed, evidence in `qa/design/`, `gates/G4.review.md`.
 
 ## Workflow

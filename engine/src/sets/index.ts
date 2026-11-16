@@ -2,7 +2,7 @@
 import React from 'react';
 import {col} from '../kit';
 import type {SetDef} from './types';
-import {EPISODE_SETS} from './episode';
+import {EPISODE_SETS} from '../episode/sets';
 import {EXEMPLAR_SETS} from '../exemplar/sets';
 
 export type {SetDef, SetLayers, SetOpts, Item} from './types';

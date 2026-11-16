@@ -8,7 +8,7 @@ import {Defs, FONT, PAL, Txt, S, Rr, L} from '../kit';
 import {Person, POSES, Expr, Look} from '../chars';
 import {PersonSide} from '../side';
 import {SETS} from '../sets';
-import {CAST, CAST_ROLES} from '../cast';
+import {CAST, CAST_ROLES} from '../episode/cast';
 import {EX_LOOKS} from '../exemplar/looks';
 import {LayerG} from '../Film';
 
@@ -36,7 +36,7 @@ export const CastSheet: React.FC<{which: 'episode' | 'exemplar'; page: number}> 
   return (
     <Paper w={W} h={H}>
       <Txt x={40} y={110} s={72} c="ink" w={900} a="start">BẢNG NHÂN VẬT · {which === 'episode' ? 'TẬP NÀY' : 'MẪU (EXEMPLAR)'} · trang {page + 1}</Txt>
-      {keys.length === 0 && <Txt x={W / 2} y={H / 2} s={60} c="red" w={900}>CHƯA CÓ NHÂN VẬT — thêm vào src/cast.ts</Txt>}
+      {keys.length === 0 && <Txt x={W / 2} y={H / 2} s={60} c="red" w={900}>CHƯA CÓ NHÂN VẬT — thêm vào src/episode/cast.ts</Txt>}
       {keys.map((k, i) => {
         const look = ALL[k];
         const cx = (i % 5) * cw + cw / 2;

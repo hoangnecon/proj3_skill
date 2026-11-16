@@ -1,7 +1,7 @@
 // Shot data model + word-anchored timing. Pure TS (no React) so node scripts can import it.
 // DO NOT add episode-specific fields here: episode state goes through ShotDef.o / keys / of.
-import words from './words.json';
-import cues from './cues.json';
+import words from './data/words.json';
+import cues from './data/cues.json';
 import type {Expr} from './chars';
 
 export const FPS = 30;
@@ -39,7 +39,7 @@ export type Keys<T> = T | [T, TT][];
 
 export type Actor = {
   id: string; // stable within a shot; the same character keeps the same id across shots
-  look: string; // key in CAST (src/cast.ts)
+  look: string; // key in CAST (src/episode/cast.ts)
   x: number; // standing position (ignored when path is set)
   y: number; // ground contact line in world px — also the depth sort key
   s?: number; // scale; principals 0.9–1.15

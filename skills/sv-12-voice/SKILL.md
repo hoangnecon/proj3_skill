@@ -17,8 +17,8 @@ take per line, measured. Any agent on any machine gets the same voice at the sam
 ## The standard lives in two files (shared, versioned; never edit per episode)
 | File | Holds |
 |---|---|
-| `scripts/voice_standard.json` | engine settings, text rules, per-line checks, episode checks, the Hải Đăng profile |
-| `scripts/pacing.json` | episode length, words budget, overall pace, pauses, shot pacing (shared with sv-10, sv-22) |
+| `standards/voice_standard.json` | engine settings, text rules, per-line checks, episode checks, the Hải Đăng profile |
+| `standards/pacing.json` | episode length, words budget, overall pace, pauses, shot pacing (shared with sv-10, sv-22) |
 
 | Engine setting | Value |
 |---|---|
@@ -62,7 +62,7 @@ violations before any audio is made.
      speed up the voice. Consistency out of range → find the outlier lines in `segments[].measure`.
 4. Listen to the whole `audio/voice.wav` once. Note wrong stress, clipped endings, odd pauses → fix the text
    and `--only`.
-5. `node scripts/times.mjs` must succeed; spot-check key words in `src/words.json`.
+5. `node scripts/times.mjs` must succeed; spot-check key words in `src/data/words.json`.
 6. `gates/G3.review.md`: name `qa/voice_report.json`, the lines retried and why, listening notes.
    `python3 scripts/sv_gate.py pass G3`.
 

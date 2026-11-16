@@ -19,7 +19,7 @@ length, so nothing large goes into git and every episode sounds the same.
 - `sections` only mark `"mood": "silence"` gaps (1–3 s before the turn); any other mood means "theme plays".
 - Preview alone: `python3 scripts/theme.py --sec 75 --end 71 --out audio/theme.wav`.
 - Changing the theme (notes, instruments, tempo) is a series decision: only on the user's request, and the
-  change lands in the template's theme.py so every new episode gets it.
+  change lands in the suite's `engine/scripts/theme.py` so every new episode gets it.
 
 ```json
 "music": {"theme": "series", "under_voice_db": 16,

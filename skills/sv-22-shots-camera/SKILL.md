@@ -1,6 +1,6 @@
 ---
 name: sv-22-shots-camera
-description: Break a narrated story-video episode into word-anchored shots — shot sizes, motivated camera moves, set keys, overlays, cut rhythm of about one shot per 2.2 s — write src/shotlist.ts, lint it, render contact sheets and motion strips, review every shot and pass gate G5. Use whenever you write, edit, re-time or review the shotlist of an episode, when a shot "looks wrong", when the voice was re-recorded (anchors move), or when the user asks for a cut, a camera move or an overlay change.
+description: Break a narrated story-video episode into word-anchored shots — shot sizes, motivated camera moves, set keys, overlays, cut rhythm of about one shot per 2.2 s — write src/episode/shotlist.ts, lint it, render contact sheets and motion strips, review every shot and pass gate G5. Use whenever you write, edit, re-time or review the shotlist of an episode, when a shot "looks wrong", when the voice was re-recorded (anchors move), or when the user asks for a cut, a camera move or an overlay change.
 ---
 
 # sv-22 · Shots and camera (gate G5)
@@ -16,8 +16,8 @@ is why it holds attention. An agent that puts one wide frame per sentence has fa
 4. `src/exemplar/shotlist.thang-may.ts.txt` — the reference shotlist (v1 field names, see the migration table).
 
 ## Inputs → outputs
-- In: G4 passed (cast, sets, geo), `beats.md` segment map, `src/words.json` (from G3).
-- Out: `src/shotlist.ts`, `qa/contact_p*.png`, `qa/strips/*.png`, `qa/shots.json`, `gates/G5.review.md`.
+- In: G4 passed (cast, sets, geo), `beats.md` segment map, `src/data/words.json` (from G3).
+- Out: `src/episode/shotlist.ts`, `qa/contact_p*.png`, `qa/strips/*.png`, `qa/shots.json`, `gates/G5.review.md`.
 
 ## Workflow
 1. **Shot plan on paper first.** For each segment, list the words that need a picture (new person, place,
@@ -53,7 +53,7 @@ is why it holds attention. An agent that puts one wide frame per sentence has fa
 |---|---|
 | Lint AN-01 word not found | the aligner split or spelled it differently; check words.json for that segment |
 | Shot too short (SH-14) | merge into the neighbour or move the anchor one word later |
-| Pacing off (PC-01 mean shot 2.0–3.0 s, PC-02 20–28 shots/min, PC-03 p10 ≥ 1.2 s and no hold > 6.5 s; `scripts/pacing.json`) | too slow: split long holds on a word that changes the picture; too fast: merge flash cuts. The approved episodes cut every 2.2–2.8 s |
+| Pacing off (PC-01 mean shot 2.0–3.0 s, PC-02 20–28 shots/min, PC-03 p10 ≥ 1.2 s and no hold > 6.5 s; `standards/pacing.json`) | too slow: split long holds on a word that changes the picture; too fast: merge flash cuts. The approved episodes cut every 2.2–2.8 s |
 | Same frame twice in a row | change size ≥ 1.3× or change subject; or drop one shot |
 | Empty-looking frame | wrong cam centre (check the grid plate) or the set lacks detail there (back to sv-20) |
 | Actor cut by the frame edge during an action (SZ-02) | move cam/cam2 toward the actor or block the action nearer the centre |

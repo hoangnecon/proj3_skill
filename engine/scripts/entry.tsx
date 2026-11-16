@@ -1,12 +1,12 @@
 // Node-side view of the project for lint/gates. Never imported by the Remotion bundle.
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
-import {CAST, CAST_ROLES} from '../src/cast';
+import {CAST, CAST_ROLES} from '../src/episode/cast';
 import {EX_LOOKS} from '../src/exemplar/looks';
 import {SETS} from '../src/sets';
-import {EPISODE_SETS} from '../src/sets/episode';
+import {EPISODE_SETS} from '../src/episode/sets';
 import {EXEMPLAR_SETS} from '../src/exemplar/sets';
-import {SHOTS} from '../src/shotlist';
+import {SHOTS} from '../src/episode/shotlist';
 import {resolveShots, abs, tAt, WORDS, C, DURATION, normWord} from '../src/engine';
 import {POSES} from '../src/chars';
 import {HAND_PROPS, SIDE_PROPS, WORLD_PROPS} from '../src/props';

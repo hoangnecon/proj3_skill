@@ -14,9 +14,9 @@ there are (beds, foley, accents, silences); this skill decides *how they sit tog
 `references/standard.md` — every target with its reason, the chain step by step, and how to read the plots.
 
 ## The standard lives in one file
-`scripts/mix_targets.json` (shared by all episodes, versioned). `processing` = chain settings, the other
+`standards/mix_targets.json` (shared by all episodes, versioned). `processing` = chain settings, the other
 groups = pass ranges. Never edit it for one episode; a change is a series decision (user request), made in
-the suite template with a CHANGELOG line, and it makes G6 stale everywhere it is copied.
+the suite's `standards/mix_targets.json` with a CHANGELOG line, and it makes G6 stale everywhere it is copied.
 
 | Layer | Target (summary) |
 |---|---|

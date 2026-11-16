@@ -5,7 +5,7 @@ Run from the episode directory. Remotion renders use `--gl=angle` (set in the sc
 | Command | Writes | Time | Phase |
 |---|---|---|---|
 | `python3 scripts/script_lint.py` | qa/script_lint.json | 1 s | G2 |
-| `/Users/Shared/Tools/VieNeu-TTS/.venv/bin/python scripts/voice.py` | audio/*.wav, public/voice.wav, src/words.json, src/cues.json, qa/timeline.json, qa/voice_report.json | 15–25 s/segment (one take; retries only for failed lines) | G3 |
+| `/Users/Shared/Tools/VieNeu-TTS/.venv/bin/python scripts/voice.py` | audio/*.wav, public/voice.wav, src/data/words.json, src/data/cues.json, qa/timeline.json, qa/voice_report.json | 15–25 s/segment (one take; retries only for failed lines) | G3 |
 | `… voice.py --only s3,s7` / `--reuse` / `--missing` | same, partial | | G3 |
 | `node scripts/times.mjs` | qa/shots.json (shot table with absolute times) | 3 s | any |
 | `node scripts/lint.mjs design` | qa/lint.json | 3 s | G4 |

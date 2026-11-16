@@ -6,10 +6,10 @@ import {PersonSide, SIDE_CYCLE} from './side';
 import {SETS, SetLayers, Item, SetOpts} from './sets';
 import {OverView} from './overlays';
 import {Actor, DURATION, FPS, Keys, Shot, TT, WORDS, abs, resolveShots, tAt} from './engine';
-import {SHOTS} from './shotlist';
+import {SHOTS} from './episode/shotlist';
 import {clamp, easeIO, easeOut, lerp, smooth} from './math';
 import {HAND_PROPS, SIDE_PROPS, WORLD_PROPS} from './props';
-import {CAST} from './cast';
+import {CAST} from './episode/cast';
 import {EX_LOOKS} from './exemplar/looks';
 
 export const LOOKS: Record<string, Look> = {...EX_LOOKS, ...CAST};
@@ -125,7 +125,7 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx}> = ({a, ctx}) => {
   const {shot, t} = ctx;
   const ph = useMemo(() => (a.id.split('').reduce((n, c) => n + c.charCodeAt(0), 0) % 17) * 0.7, [a.id]);
   const look: Look = LOOKS[a.look];
-  if (!look) throw new Error('unknown look ' + a.look + ' (add it to src/cast.ts)');
+  if (!look) throw new Error('unknown look ' + a.look + ' (add it to src/episode/cast.ts)');
   const ek = keyAt<Expr>(a.e, 'neutral', shot, t);
   let talk = 0;
   for (const [s, e] of a.talk ?? []) if (t >= tAt(s) && t <= tAt(e, true)) talk = 0.35 + 0.65 * Math.abs(Math.sin(t * 15 + ph));
@@ -324,7 +324,7 @@ export const Film: React.FC = () => {
   ];
 
   const def = SETS[shot.set];
-  if (!def) throw new Error('unknown set ' + shot.set + ' (register it in src/sets/episode.tsx)');
+  if (!def) throw new Error('unknown set ' + shot.set + ' (register it in src/episode/sets.tsx)');
   const opts: SetOpts = {t, bg: shot.bg, ...(shot.o ?? {}), ...keyedOpts(shot, t), ...(shot.of ? shot.of(u, ts, t) : {})};
   const layers: SetLayers = def.render(opts);
 

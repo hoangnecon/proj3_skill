@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""Validate the story-video-skills v2 repository (see CONVENTIONS.md).
+"""Validate the story-video-skills repository (see CONVENTIONS.md).
 
 Checks
+  0. layout: only the known top-level folders, and each holds only its own kind of file
+     (skills: .md; standards: .json; engine: code + project config; ...)
   1. every skills/sv-*/SKILL.md: frontmatter name == directory, description 150-1024 chars without < >,
-     <= 500 lines, every references/ and scripts/ file mentioned in its SKILL.md
-  2. every lint ID written in the docs (XX-NN) exists in templates/episode-starter/scripts/lint.mjs or
-     script_lint.py — docs never promise a check that does not exist
-  3. every `scripts/<file>` named in the docs exists in the template (or in sv-00-pipeline/scripts)
-  4. the template has its required files and no generated output tracked by git
+     <= 500 lines, every references/ file mentioned in its SKILL.md
+  2. every lint ID written in the docs (XX-NN) exists in engine/scripts/lint.mjs or script_lint.py —
+     docs never promise a check that does not exist
+  3. every `scripts/<file>` named in the docs exists in engine/scripts/, every `tools/<file>` in tools/
+  4. engine/standards/starter/examples have their required files; no generated output tracked by git
   5. plugin.json version matches the newest CHANGELOG entry
 
 Usage: python3 tools/validate_skills.py [repo_root]     exit 1 on any error
@@ -22,11 +24,47 @@ import sys
 
 ROOT = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else pathlib.Path(__file__).resolve().parents[1])
 SK = ROOT / "skills"
-TPL = ROOT / "templates" / "episode-starter"
+ENG = ROOT / "engine"
 errors: list[str] = []
 warns: list[str] = []
 err = errors.append
 warn = warns.append
+
+# ---------------------------------------------------------------- 0. layout
+TOP = {"skills", "standards", "engine", "starter", "examples", "tools", "docs", ".claude-plugin"}
+TOP_FILES = {"README.md", "CHANGELOG.md", "CONVENTIONS.md", ".gitignore"}
+KINDS = {  # folder -> allowed file suffixes (relative path regex for exceptions)
+    "skills": {".md"},
+    "standards": {".json"},
+    "engine": {".py", ".mjs", ".ts", ".tsx", ".json"},
+    "starter": {".md", ".json", ".ts", ".tsx", ".gitignore"},
+    "examples": {".json", ".ts", ".tsx", ".txt"},
+    "tools": {".py", ".sh"},
+    "docs": {".md", ".png", ".jpg"},
+    ".claude-plugin": {".json"},
+}
+try:
+    tracked = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True).stdout.split("\n")
+    tracked = [t for t in tracked if t]
+except FileNotFoundError:
+    tracked = []
+    warn("W01 git not available — layout and tracked-file checks skipped")
+for t in tracked:
+    parts = t.split("/")
+    if len(parts) == 1:
+        if t not in TOP_FILES:
+            err(f"E16 stray file at the top level: {t} (see CONVENTIONS.md, Repository layout)")
+        continue
+    if parts[0] not in TOP:
+        err(f"E16 unknown top-level folder: {parts[0]}/ ({t})")
+        continue
+    suf = pathlib.PurePath(t).suffix or pathlib.PurePath(t).name
+    if suf not in KINDS[parts[0]]:
+        err(f"E17 {t}: a {suf} file does not belong in {parts[0]}/")
+    if parts[0] == "skills" and len(parts) > 2 and parts[2] not in ("SKILL.md", "references"):
+        err(f"E17 {t}: a skill folder holds only SKILL.md and references/ (code goes to engine/ or tools/)")
+    if parts[0] == "engine" and t.endswith(".json") and parts[1] in ("scripts", "src"):
+        err(f"E17 {t}: data in engine/ — standards go to standards/, episode data to starter/")
 
 # ---------------------------------------------------------------- 1. skills
 NAME_RE = re.compile(r"^sv-\d\d-[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -56,7 +94,7 @@ for d in skill_dirs:
         err(f"E07 {d.name}: description contains < or >")
     if txt.count("\n") > 500:
         err(f"E08 {d.name}: SKILL.md has {txt.count(chr(10))} lines (max 500)")
-    for sub in ("references", "scripts"):
+    for sub in ("references",):
         for rf in sorted((d / sub).glob("*")) if (d / sub).exists() else []:
             if rf.is_file() and rf.name not in txt:
                 err(f"E09 {d.name}: {sub}/{rf.name} is not mentioned in SKILL.md")
@@ -70,11 +108,11 @@ for extra in ("README.md", "CONVENTIONS.md"):
 # ---------------------------------------------------------------- 2. lint IDs
 impl = ""
 for s in ("scripts/lint.mjs", "scripts/script_lint.py"):
-    p = TPL / s
+    p = ENG / s
     if p.exists():
         impl += p.read_text()
     else:
-        err(f"E10 template {s} missing")
+        err(f"E10 engine/{s} missing")
 have = set(re.findall(r"['\"]([A-Z]{2}-\d\d)['\"]", impl))
 for f, txt in docs.items():
     for a, lo, hi in re.findall(r"\b([A-Z]{2})-(\d\d)(?:\.\.(\d\d))?\b", txt):
@@ -85,27 +123,36 @@ for f, txt in docs.items():
 
 # ---------------------------------------------------------------- 3. scripts named in docs
 for f, txt in docs.items():
-    for s in set(re.findall(r"scripts/([a-z_]+\.(?:py|mjs|sh))", txt)):
-        if not (TPL / "scripts" / s).exists() and not (SK / "sv-00-pipeline" / "scripts" / s).exists():
-            err(f"E12 {f.relative_to(ROOT)}: names scripts/{s} which does not exist")
+    for s in set(re.findall(r"(?<![\w/])scripts/([a-z_]+\.(?:py|mjs|sh))", txt)):
+        if not (ENG / "scripts" / s).exists():
+            err(f"E12 {f.relative_to(ROOT)}: names scripts/{s} which does not exist in engine/scripts/")
+    for s in set(re.findall(r"tools/([a-z_]+\.(?:py|sh))", txt)):
+        if not (ROOT / "tools" / s).exists():
+            err(f"E12 {f.relative_to(ROOT)}: names tools/{s} which does not exist")
 
-# ---------------------------------------------------------------- 4. template
-REQUIRED = ["package.json", "remotion.config.ts", "tsconfig.json", "script.json", "brief.md", "beats.md", "audio.json",
-            "src/engine.ts", "src/kit.tsx", "src/chars.tsx", "src/side.tsx", "src/overlays.tsx", "src/props.tsx",
-            "src/Film.tsx", "src/cast.ts", "src/geo.ts", "src/shotlist.ts", "src/sets/episode.tsx", "src/sets/types.ts",
-            "src/exemplar/looks.ts", "src/exemplar/sets.tsx", "src/exemplar/geo.ts", "src/exemplar/shotlist.thang-may.ts.txt",
-            "src/design/Sheets.tsx", ".gitignore", "scripts/theme.py", "scripts/audiolib.py",
-            "scripts/audio_qa.py", "scripts/mix_targets.json", "scripts/mix.py", "scripts/voice_standard.json", "scripts/pacing.json"] + [f"gates/G{i}.review.md" for i in range(1, 8)]
-for r in REQUIRED:
-    if not (TPL / r).exists():
-        err(f"E13 template file missing: {r}")
-try:
-    tracked = subprocess.run(["git", "ls-files", "templates/episode-starter"], cwd=ROOT, capture_output=True, text=True).stdout.split()
-    for t in tracked:
-        if re.match(r"templates/episode-starter/(audio|public|qa|out|node_modules)/", t) or t.endswith("gates/log.jsonl"):
-            err(f"E14 generated file tracked by git: {t}")
-except FileNotFoundError:
-    warn("W01 git not available — tracked-file check skipped")
+# ---------------------------------------------------------------- 4. parts of an episode
+REQUIRED = {
+    "engine": ["package.json", "remotion.config.ts", "tsconfig.json", "src/index.ts", "src/Root.tsx", "src/engine.ts",
+               "src/kit.tsx", "src/chars.tsx", "src/side.tsx", "src/overlays.tsx", "src/props.tsx", "src/Film.tsx",
+               "src/math.ts", "src/design/Sheets.tsx", "src/sets/index.ts", "src/sets/types.ts"]
+              + [f"scripts/{x}" for x in ("audio_qa.py", "audiolib.py", "deliver.mjs", "design.mjs", "entry.tsx", "lint.mjs",
+                                          "load.mjs", "mix.py", "plate_check.py", "qa.mjs", "script_lint.py", "sv_gate.py",
+                                          "theme.py", "tile.py", "times.mjs", "voice.py")],
+    "standards": ["voice_standard.json", "pacing.json", "mix_targets.json"],
+    "starter": ["README.md", ".gitignore", "brief.md", "beats.md", "script.json", "audio.json", "src/episode/cast.ts",
+                "src/episode/geo.ts", "src/episode/sets.tsx", "src/episode/shotlist.ts", "src/data/words.json",
+                "src/data/cues.json", "src/data/events.json"] + [f"gates/G{i}.review.md" for i in range(1, 8)],
+    "examples/thang-may": ["geo.ts", "looks.ts", "sets.tsx", "shotlist.ts.txt"],
+    "examples/demo": ["script.json", "audio.json", "src/episode/shotlist.ts", "src/data/words.json", "src/data/cues.json"],
+    "tools": ["new_episode.sh", "validate_skills.py"],
+}
+for part, files in REQUIRED.items():
+    for r in files:
+        if not (ROOT / part / r).exists():
+            err(f"E13 {part}/{r} missing")
+for t in tracked:
+    if re.search(r"(^|/)(audio|public|qa|out|node_modules)/", t) or t.endswith("gates/log.jsonl"):
+        err(f"E14 generated file tracked by git: {t}")
 
 # ---------------------------------------------------------------- 5. version
 pj = ROOT / ".claude-plugin" / "plugin.json"

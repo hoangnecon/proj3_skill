@@ -1,7 +1,7 @@
 """Generic episode mix: ambience bed per set, SFX derived from the shot table, sparse generated music, ducking.
 
 Run:  /Users/Shared/Tools/VieNeu-TTS/.venv/bin/python scripts/mix.py
-Reads  audio.json (episode audio plan), qa/shots.json (node scripts/times.mjs), src/words.json, src/cues.json, audio/voice.wav
+Reads  audio.json (episode audio plan), qa/shots.json (node scripts/times.mjs), src/data/words.json, src/data/cues.json, audio/voice.wav
 Writes public/mix.wav (48 kHz stereo, -14 LUFS, TP <= -1.3), audio/stems/*.wav, qa/mix_report.json, then runs audio_qa.py (gate G6).
 
 House rules (sv-40-audio) are enforced here, not left to taste:
@@ -24,8 +24,8 @@ from scipy.signal import butter, lfilter, resample_poly
 
 ROOT = Path(__file__).resolve().parent.parent
 SR = 48000
-CU = json.loads((ROOT / "src/cues.json").read_text())
-WORDS = json.loads((ROOT / "src/words.json").read_text())
+CU = json.loads((ROOT / "src/data/cues.json").read_text())
+WORDS = json.loads((ROOT / "src/data/words.json").read_text())
 SHOTS = json.loads((ROOT / "qa/shots.json").read_text())
 PLAN = json.loads((ROOT / "audio.json").read_text())
 DUR = CU["total"] + 3.0
@@ -377,10 +377,10 @@ if "end" in M and not THEME:
 if music.ndim == 1:
     music = np.stack([music, music], axis=1)
 
-# ============================ mix + master (sv-42-mix-master; standard in scripts/mix_targets.json) ============================
+# ============================ mix + master (sv-42-mix-master; standard in standards/mix_targets.json) ============================
 import audiolib as A  # noqa: E402
 
-TG = json.loads((Path(__file__).resolve().parent / "mix_targets.json").read_text())
+TG = json.loads((ROOT / "standards/mix_targets.json").read_text())
 PR = TG["processing"]
 st = lambda x: np.stack([x, x], axis=1)  # noqa: E731  mono -> centred stereo
 
@@ -508,7 +508,7 @@ report = {
     "duration": round(end_len / SR, 2), "last_word_end": round(last_s, 2), "sections": sections,
     "sfx": [{"fx": f, "t": round(t, 2), "why": w} for f, t, w in sorted(placed, key=lambda x: x[1])],
     "warnings": warnings, "inputs": {"voice": sha("audio/voice.wav"), "shots": sha("qa/shots.json"), "plan": sha("audio.json"),
-                                     "targets": sha("scripts/mix_targets.json")},
+                                     "targets": sha("standards/mix_targets.json")},
 }
 (ROOT / "qa").mkdir(exist_ok=True)
 (ROOT / "qa/mix_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=1))

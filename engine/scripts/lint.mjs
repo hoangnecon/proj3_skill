@@ -12,7 +12,7 @@ const errors = [], warns = [];
 const err = (rule, msg) => errors.push(`[${rule}] ${msg}`);
 const warn = (rule, msg) => warns.push(`[${rule}] ${msg}`);
 const src = (f) => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '');
-const shotSrc = src('src/shotlist.ts');
+const shotSrc = src('src/episode/shotlist.ts');
 const waived = (rule, name) => new RegExp(`lint-ok:\\s*${rule}\\b`).test(shotSrc.split('\n').find((l) => l.includes(`'${name}'`)) ?? '');
 
 const PALKEYS = new Set(Object.keys(P.PAL));
@@ -31,7 +31,7 @@ const traitsOf = (l) => [l.glasses, l.hat && l.hat !== 'none', l.mustache, l.bea
 const setReport = [];
 if (phase !== 'shots') {
   const keys = Object.keys(P.CAST);
-  if (!keys.length) err('CH-01', 'src/cast.ts is empty — design the cast before shots');
+  if (!keys.length) err('CH-01', 'src/episode/cast.ts is empty — design the cast before shots');
   const sil = new Map();
   for (const k of keys) {
     const l = P.CAST[k];
@@ -61,7 +61,7 @@ if (phase !== 'shots') {
 
   const sets = Object.keys(P.EPISODE_SETS);
   const plateStats = fs.existsSync('qa/design/plate_stats.json') ? JSON.parse(fs.readFileSync('qa/design/plate_stats.json', 'utf8')) : {};
-  if (!sets.length) err('SE-01', 'src/sets/episode.tsx registers no sets');
+  if (!sets.length) err('SE-01', 'src/episode/sets.tsx registers no sets');
   for (const id of sets) {
     const d = P.EPISODE_SETS[id];
     if (id.startsWith('ex-')) err('SE-02', `${id}: ex- prefix is reserved for exemplars`);
@@ -81,7 +81,7 @@ if (phase !== 'shots') {
       if (st.halftone < TH.halftone) err('SE-09', `${id}: halftone texture used ${st.halftone}× < ${TH.halftone} (walls/floor/shade side)`);
       const pl = plateStats[id];
       if (!pl) err('SE-13', `${id}: plate not measured yet — run node scripts/design.mjs`);
-      else if (pl.mtime * 1000 < fs.statSync('src/sets/episode.tsx').mtimeMs) err('SE-13', `${id}: plate is older than src/sets/episode.tsx — re-render with node scripts/design.mjs --only set:${id}`);
+      else if (pl.mtime * 1000 < fs.statSync('src/episode/sets.tsx').mtimeMs) err('SE-13', `${id}: plate is older than src/episode/sets.tsx — re-render with node scripts/design.mjs --only set:${id}`);
       else if (pl.empty_mid > 8) err('SE-13', `${id}: ${pl.empty_mid} empty 180-px cells in the visible middle of the plate (max 8; rows ${pl.rows}) — detail must be IN FRAME, not off-screen. Fill the wall band: notices, fixtures, clutter (sets.md §3)`);
       else if (pl.empty_mid > 5) warn('SE-13', `${id}: ${pl.empty_mid} empty cells in the middle of the plate (rows ${pl.rows}) — look for bare wall`);
       if (!st.moves) warn('SE-12', `${id}: nothing in the set changes over time — add life driven by o.t (LED pulse, fan, smoke, leaves, clock; sets.md §7)`);
@@ -89,7 +89,7 @@ if (phase !== 'shots') {
     }
   }
   // token discipline in episode code
-  for (const f of ['src/sets/episode.tsx', 'src/cast.ts', 'src/geo.ts', 'src/shotlist.ts']) {
+  for (const f of ['src/episode/sets.tsx', 'src/episode/cast.ts', 'src/episode/geo.ts', 'src/episode/shotlist.ts']) {
     const lines = src(f).split('\n');
     lines.forEach((ln, i) => {
       if (/^\s*\/\//.test(ln)) return;
@@ -263,9 +263,9 @@ if (phase !== 'design') {
     const n = rows.filter((r) => r.t0 < t1 - 0.2 && r.t1 > t0 + 0.2).length;
     if (t1 - t0 > 5 && n < 2) warn('CO-03', `${id}: ${(t1 - t0).toFixed(1)} s of narration on a single shot`);
   });
-  // pacing (scripts/pacing.json): every episode cuts at the same speed
+  // pacing (standards/pacing.json): every episode cuts at the same speed
   {
-    const PA = JSON.parse(fs.readFileSync(new URL('./pacing.json', import.meta.url), 'utf8')).shots;
+    const PA = JSON.parse(fs.readFileSync(new URL('../standards/pacing.json', import.meta.url), 'utf8')).shots;
     const durs = rows.map((r) => r.t1 - r.t0).sort((a, b) => a - b);
     const total = rows.length ? rows[rows.length - 1].t1 - rows[0].t0 : 0;
     if (durs.length && total > 30) {

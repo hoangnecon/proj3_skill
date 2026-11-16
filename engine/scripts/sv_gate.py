@@ -54,11 +54,11 @@ def run(cmd):
 # inputs whose change invalidates the gate
 INPUTS = {
     "G1": ["brief.md"],
-    "G2": ["script.json", "beats.md", "scripts/pacing.json", "scripts/voice_standard.json"],
-    "G3": ["script.json", "audio/voice.wav", "src/words.json", "scripts/voice_standard.json", "scripts/pacing.json"],
-    "G4": ["src/cast.ts", "src/sets", "src/geo.ts", "src/props.tsx"],
-    "G5": ["src/shotlist.ts", "src/cast.ts", "src/sets", "src/words.json", "scripts/pacing.json"],
-    "G6": ["audio.json", "audio/voice.wav", "src/shotlist.ts", "scripts/mix_targets.json", "scripts/theme.py"],
+    "G2": ["script.json", "beats.md", "standards/pacing.json", "standards/voice_standard.json"],
+    "G3": ["script.json", "audio/voice.wav", "src/data/words.json", "standards/voice_standard.json", "standards/pacing.json"],
+    "G4": ["src/episode/cast.ts", "src/episode/sets.tsx", "src/episode/geo.ts", "src/props.tsx", "src/sets"],
+    "G5": ["src/episode/shotlist.ts", "src/episode/cast.ts", "src/episode/sets.tsx", "src/data/words.json", "standards/pacing.json"],
+    "G6": ["audio.json", "audio/voice.wav", "src/episode/shotlist.ts", "standards/mix_targets.json", "scripts/theme.py"],
     "G7": ["out/final.mp4"],
 }
 
@@ -112,7 +112,7 @@ def checks(g):
             if "failed_lines" not in r:
                 bad.append("voice report is from the old best-of-N voice.py — re-run scripts/voice.py (voice standard 1.0)")
                 return bad
-            for k, f in [("standard_sha", "scripts/voice_standard.json"), ("pacing_sha", "scripts/pacing.json")]:
+            for k, f in [("standard_sha", "standards/voice_standard.json"), ("pacing_sha", "standards/pacing.json")]:
                 if r[k] != sha(f):
                     bad.append(f"{f} changed after the voice was made — re-run voice.py")
             e = r["engine"]
@@ -131,7 +131,7 @@ def checks(g):
             bad.append("design lint failed:\n" + "\n".join(l for l in out.splitlines() if l.startswith("ERROR")))
         if not any((ROOT / "qa/design").glob("cast_episode_p*.png")):
             bad.append("qa/design/cast_episode_p1.png missing — node scripts/design.mjs")
-        newest_src = max((ROOT / p).stat().st_mtime for p in ["src/cast.ts", "src/sets/episode.tsx", "src/geo.ts"])
+        newest_src = max((ROOT / p).stat().st_mtime for p in ["src/episode/cast.ts", "src/episode/sets.tsx", "src/episode/geo.ts"])
         for f in evidence("G4"):
             if (ROOT / f).stat().st_mtime < newest_src:
                 bad.append(f"{f} is older than the design source — re-render (node scripts/design.mjs)")
@@ -142,7 +142,7 @@ def checks(g):
         code, out = run(["node", "scripts/lint.mjs", "shots"])
         if code:
             bad.append("shot lint failed:\n" + "\n".join(l for l in out.splitlines() if l.startswith("ERROR")))
-        src_t = (ROOT / "src/shotlist.ts").stat().st_mtime
+        src_t = (ROOT / "src/episode/shotlist.ts").stat().st_mtime
         ev = evidence("G5")
         if not any("contact_p" in e for e in ev):
             bad.append("no contact sheet — node scripts/qa.mjs contact")
@@ -151,7 +151,7 @@ def checks(g):
             if not p.exists():
                 bad.append(f"{f} missing — node scripts/qa.mjs strips")
             elif p.stat().st_mtime < src_t:
-                bad.append(f"{f} is older than src/shotlist.ts — re-render it")
+                bad.append(f"{f} is older than src/episode/shotlist.ts — re-render it")
         shots = jload("qa/shots.json") or []
         rv = (G / "G5.review.md").read_text() if (G / "G5.review.md").exists() else ""
         miss = [s["i"] for s in shots if not re.search(rf"^\s*-?\s*#{s['i']}\b\s*[:·-]\s*\S+", rv, re.M)]
@@ -177,7 +177,7 @@ def checks(g):
                 bad.append(f"limiter works too hard ({r['processing']['limiter_max_gr_db']} dB): something in the mix spikes — check sfx/voice peaks")
             if r["warnings"]:
                 bad.append(f"mix warnings: {r['warnings'][:3]}")
-            for k, f in [("voice", "audio/voice.wav"), ("plan", "audio.json"), ("targets", "scripts/mix_targets.json")]:
+            for k, f in [("voice", "audio/voice.wav"), ("plan", "audio.json"), ("targets", "standards/mix_targets.json")]:
                 if r["inputs"].get(k) != sha(f)[:16]:
                     bad.append(f"{f} changed after the mix — re-run scripts/mix.py")
     elif g == "G7":

@@ -1,5 +1,5 @@
 // Render the design evidence for gate G4 into qa/design/:
-//   cast_episode_p<N>.png      every look in src/cast.ts (front + side, role, description)
+//   cast_episode_p<N>.png      every look in src/episode/cast.ts (front + side, role, description)
 //   expr_<look>.png            per principal/support: 12 expressions, 6 poses, walk cycle, sitting
 //   set_<id>.png / _grid.png   every episode set (clean plate + world-coordinate grid)
 //   --exemplar                 also render the exemplar cast + ex-* plates for side-by-side comparison

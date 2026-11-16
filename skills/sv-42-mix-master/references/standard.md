@@ -48,7 +48,7 @@
 ## 3. Measurement (audiolib.py)
 BS.1770-4 K-weighting; momentary 400 ms, short-term 3 s, integrated with −70 LUFS / −10 LU gates; LRA
 from gated short-term (10–95 %); true peak on 4× oversampled signal. Speech mask = word timings from
-`src/words.json` (not an energy gate), so "while speaking" means exactly that.
+`src/data/words.json` (not an energy gate), so "while speaking" means exactly that.
 
 ## 4. Reading qa/mix/overview.png
 - **Waveform:** even density is normal for narration; a flat solid block means over-limiting (the gate

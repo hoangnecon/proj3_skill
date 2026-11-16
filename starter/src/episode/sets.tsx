@@ -5,8 +5,8 @@
 // Skeleton (copy, rename, then build it out to exemplar density):
 //
 //   import {E, L, PAL, R, Rr, S, Sh, Txt} from '../kit';
-//   import type {Item, SetDef, SetLayers, SetOpts} from './types';
-//   import {GROUND} from '../geo';
+//   import type {Item, SetDef, SetLayers, SetOpts} from '../sets/types';
+//   import {GROUND} from './geo';
 //
 //   const kitchenSet = (o: SetOpts): SetLayers => {
 //     const t = o.t;
@@ -27,6 +27,6 @@
 //   export const EPISODE_SETS: Record<string, SetDef> = {
 //     kitchen: {title: 'Bếp nhà bà Tư', bed: 'kitchen', render: kitchenSet},
 //   };
-import type {SetDef} from './types';
+import type {SetDef} from '../sets/types';
 
 export const EPISODE_SETS: Record<string, SetDef> = {};

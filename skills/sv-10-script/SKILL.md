@@ -38,7 +38,7 @@ A weak script cannot be saved by pictures. This skill turns an idea into `brief.
 |---|---|
 | SC-01/02 | title not DEMO; voice is Hải Đăng |
 | SC-03 | ids s1, s2, … unique and in order (s3b allowed) |
-| SC-04 | 22–34 segments (`scripts/pacing.json`) |
+| SC-04 | 22–34 segments (`standards/pacing.json`) |
 | SC-05 | 600–720 spoken words and an estimated 140–165 s at Hải Đăng's native speed (target 150 s = "tầm 2,5 phút") |
 | SC-06 | ≤ 45 words per segment |
 | SC-07 | sentence length SD ≥ 3 |
@@ -57,7 +57,7 @@ A weak script cannot be saved by pictures. This skill turns an idea into `brief.
 - Narrator: first person, northern, calm deadpan. No southern words, no English, no slang from the internet.
 - One absurd rule, played completely straight, escalating to a system. No magic explained, no moral stated.
 - Every named person has a place ("tầng năm"), every number is spoken in words.
-- Pacing is a house standard (`scripts/pacing.json`): the same words budget and length for every episode, so
+- Pacing is a house standard (`standards/pacing.json`): the same words budget and length for every episode, so
   any agent produces the same speed. Emotion lives in the writing; the voice adds none (sv-12).
 - Never reuse a premise, line, character or ending from the reference channels or from earlier episodes.
 - After G2 passes, any text change re-opens G2 AND G3 (the voice) — the gate log shows them stale.

@@ -1,10 +1,10 @@
-# story-video-skills (`v2.0.0`)
+# story-video-skills (`v3.0.0`)
 
 A gated production suite for **Vietnamese 2D story videos**: vertical 1080×1920 at 30 fps, 2–3 minutes,
 narrated by the northern male voice Hải Đăng, drawn in a flat "riso ink" style, and animated in Remotion
 with every shot anchored to a narration word.
 
-v2 packages the process that produced the reference episode *Thang máy ăn bí mật* (153 s, 26 segments,
+The suite packages the process that produced the reference episode *Thang máy ăn bí mật* (153 s, 26 segments,
 67 shots). Each phase ships with:
 - exact specs: design tokens, rig numbers, detail budgets, shot grammar and rhythm benchmarks;
 - machine checks: 60+ lint rules, plus pixel checks on rendered plates;
@@ -16,7 +16,8 @@ The goal is that any agent reproduces the same level of detail, not "a few boxes
 ## Start
 Read `skills/sv-00-pipeline/SKILL.md`, then:
 ```bash
-bash skills/sv-00-pipeline/scripts/new_episode.sh ~/Work/PROJ3/<slug> ~/Work/PROJ3/mua-noi-doi/node_modules
+bash tools/new_episode.sh ~/Work/PROJ3/<slug> --node-modules ~/Work/PROJ3/mua-noi-doi/node_modules
+# --demo: a separate sandbox with the 4-shot engine demo
 ```
 
 ## Skills
@@ -33,20 +34,29 @@ bash skills/sv-00-pipeline/scripts/new_episode.sh ~/Work/PROJ3/<slug> ~/Work/PRO
 | `sv-42-mix-master` | house mix/master chain + 21 measured checks (mix_targets.json), plots, audio checks inside the video | G6, G7 |
 | `sv-41-qa-delivery` | master render, phone copy ≤ 30 MB, final-watch rubric | G7 |
 
-## Template (`templates/episode-starter/`)
-- **Engine:** `src/engine.ts`, `kit.tsx`, `chars.tsx`, `side.tsx`, `overlays.tsx`, `Film.tsx`.
-- **Exemplar:** the reference cast, sets and shotlist in `src/exemplar/`. They set the bar; lint rejects them in episode shots.
-- **Demo:** a 4-shot demo showing every motion feature. Lint fails until it is replaced.
-- **Tools** (all in `scripts/`):
-  - lint: `lint.mjs`, `script_lint.py`
-  - evidence renderers: `design.mjs`, `qa.mjs`, `plate_check.py`, `tile.py`
-  - voice and mix: `voice.py`, `mix.py`
-  - delivery and gates: `deliver.mjs`, `sv_gate.py`
-- **Gate reviews:** `gates/G1..G7.review.md`.
+## Repository layout
+```
+story-video-skills/
+├── skills/        instructions only — one folder per phase skill (SKILL.md + references/)
+├── standards/     house standards as data: voice_standard.json · pacing.json · mix_targets.json
+├── engine/        code every episode shares
+│   ├── scripts/   tools: lint, voice, mix, audio QA, design/qa renders, deliver, gates
+│   └── src/       Remotion engine: engine, kit, chars, side, overlays, props, Film, design sheets, set registry
+├── starter/       blank episode: brief, beats, script.json, audio.json, src/episode/*, gates/*.review.md
+├── examples/
+│   ├── thang-may/ reference episode (cast looks, sets, geometry, shotlist) — the quality bar
+│   └── demo/      4-shot engine demo, layered on a new episode with --demo
+├── tools/         new_episode.sh (assembles an episode) · validate_skills.py
+└── docs/          reviews of the suite
+```
+A new episode is assembled from these parts (see `CONVENTIONS.md`), and its `README.md` marks three zones:
+what the agent writes (`brief.md`, `beats.md`, `script.json`, `audio.json`, `src/episode/`, gate reviews),
+the read-only suite copy (`scripts/`, engine `src/`, `src/exemplar/`, `standards/`), and generated output
+(`src/data/`, `audio/`, `public/`, `qa/`, `out/`).
 
 ## Why the gates measure quality, not quantity
 v1 was rejected because agents could satisfy counters without good work (`docs/review-2026-11-15.md`).
-In v2 every count is backed by something that has to be looked at:
+Every count is backed by something that has to be looked at:
 - Set density is measured on the **rendered** plate (SE-13), so detail hidden off-frame does not count.
 - Reaches are checked for distance, depth and framing (MO-05/06/09, SZ-02), and every action gets a frame strip.
 - Each evidence image needs a written remark, and the review must be newer than the evidence.

@@ -4,3 +4,7 @@ __pycache__/
 node_modules
 .remotion/
 *-workspace/
+
+# demo audio: generated locally by the voice/mix tools, never tracked
+examples/demo/audio/
+examples/demo/public/

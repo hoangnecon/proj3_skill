@@ -1,6 +1,6 @@
 # Sets — building locations at exemplar density
 
-A set is one function per location in `src/sets/episode.tsx` that returns layers for a frame. The bar
+A set is one function per location in `src/episode/sets.tsx` that returns layers for a frame. The bar
 is the exemplar sets in `src/exemplar/sets.tsx` (rendered to `qa/design/set_ex-*.png`). A set that is
 "a wall, a door rectangle and a floor" is rejected by the lint and by the reviewer.
 
@@ -42,7 +42,7 @@ any set that holds more than 3 shots — the camera will push in and every crop 
 2. **Object list**: write 15+ concrete objects that belong there (use §9), split into: fixtures the story
    touches, furniture, signage/text, clutter & wear, light sources.
 3. **Blocking sketch in world coordinates**: where actors stand (`y`), where they walk (from/to x), where
-   hands touch (button, door handle, counter). Put every touch point in `src/geo.ts` as an exported
+   hands touch (button, door handle, counter). Put every touch point in `src/episode/geo.ts` as an exported
    constant/function (`export const STALL_COUNTER = {x: 620, y: 1430}`) — shots import it, never retype it.
 4. **Build in six passes** (§3), rendering after each pass:
    `node scripts/design.mjs --only set:<id>` → look at `qa/design/set_<id>.png` and `_grid.png`.

@@ -28,8 +28,8 @@ nums = [int(m.group(1)) if (m := re.fullmatch(r"s(\d+)[a-z]?", i)) else -1 for i
 if -1 in nums or len(set(ids)) != len(ids) or nums != sorted(nums) or (nums and nums[0] != 1):
     err("SC-03", f"segment ids must be s1, s2, ... (an inserted segment may be s3b), unique and in order (got {ids[:8]}...)")
 
-# ---- length + pacing (scripts/pacing.json: the same speed for every episode, any agent, any machine) ----
-PA = json.loads((Path(__file__).resolve().parent / "pacing.json").read_text())
+# ---- length + pacing (standards/pacing.json: the same speed for every episode, any agent, any machine) ----
+PA = json.loads((ROOT / "standards/pacing.json").read_text())
 words = [w for s in segs for w in s.get("tts_text", s["text"]).split()]
 dflt = script.get("pause_after", PA["voice"]["default_pause_after_s"])
 pause = sum(s.get("pause_after", dflt) for s in segs[:-1])
@@ -48,8 +48,8 @@ for s in segs:
     pa = s.get("pause_after", dflt)
     if not plo <= pa <= phi:
         err("SC-18", f"{s['id']}: pause_after {pa} outside {plo}-{phi} s")
-# ---- text sent to the voice (scripts/voice_standard.json -> text) ----
-VS = json.loads((Path(__file__).resolve().parent / "voice_standard.json").read_text())["text"]
+# ---- text sent to the voice (standards/voice_standard.json -> text) ----
+VS = json.loads((ROOT / "standards/voice_standard.json").read_text())["text"]
 for s in segs:
     t = s.get("tts_text", s["text"])
     if VS["no_digits"] and re.search(r"\d", t):

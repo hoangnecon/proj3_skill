@@ -1,4 +1,4 @@
-# Shotlist API (src/shotlist.ts → `SHOTS: ShotDef[]`)
+# Shotlist API (src/episode/shotlist.ts → `SHOTS: ShotDef[]`)
 
 A shot starts at a word and lasts until the next shot's word. You never write durations: the narration
 decides them. `resolveShots` cuts `LEAD = 0.06 s` before each anchor so the picture changes just before
@@ -8,7 +8,7 @@ the word is heard.
 | Form | Meaning |
 |---|---|
 | `'s5'` | start of segment s5 |
-| `'s5@mở'` | start of the first word "mở" in s5 (case/diacritics must match `src/words.json`, punctuation ignored) |
+| `'s5@mở'` | start of the first word "mở" in s5 (case/diacritics must match `src/data/words.json`, punctuation ignored) |
 | `'s5@mở#2'` | the second "mở" in s5. Lint AN-02 forces `#n` when the word occurs more than once |
 | `'s5@mở+0.3'` / `'s5@mở-0.2'` | offset in seconds |
 | `0.8` (number) | seconds from the shot start (only for keys inside a shot; never for `at`) |

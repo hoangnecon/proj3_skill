@@ -7,7 +7,7 @@
 //    (hair + top + topC combination not shared with any other look).
 //  • topC must not equal the dominant wall colour of the set where the character mostly appears.
 //  • extras may share a silhouette family but not an identical look.
-import type {Look} from './chars';
+import type {Look} from '../chars';
 
 export type Role = 'principal' | 'support' | 'extra';
 

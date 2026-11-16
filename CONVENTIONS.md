@@ -1,6 +1,22 @@
-# Conventions (`v2.0.0`)
+# Conventions (`v3.0.0`)
 
 Enforced by `tools/validate_skills.py`.
+
+## Repository layout — one kind of thing per top-level folder
+| Folder | Holds | Never holds |
+|---|---|---|
+| `skills/` | instructions only: `sv-*/SKILL.md` + `references/*.md` (the plugin's `skills` path) | code, data, templates |
+| `standards/` | the house standards as versioned data: `voice_standard.json`, `pacing.json`, `mix_targets.json` | anything one episode may change |
+| `engine/` | code every episode shares: `scripts/` (tools), `src/` (Remotion engine), `package.json`, `tsconfig.json`, `remotion.config.ts` | episode content, standards, examples |
+| `starter/` | the blank episode files an agent fills in: `brief.md`, `beats.md`, `script.json`, `audio.json`, `src/episode/*`, empty `src/data/*`, `gates/*.review.md`, `README.md` | demo or reference content |
+| `examples/` | `thang-may/` (reference episode: geo, looks, sets, shotlist), `demo/` (4-shot engine demo, an overlay on a new episode) | anything a real episode needs to run |
+| `tools/` | suite tooling: `new_episode.sh` (assembles an episode), `validate_skills.py` | episode tools (those live in `engine/scripts/`) |
+| `docs/` | reviews and research notes about the suite | instructions (those are skills) |
+
+An episode is assembled, never edited in place in the suite: `engine/` → episode root, `standards/` →
+`standards/`, `examples/thang-may/` → `src/exemplar/`, `starter/` on top, and `examples/demo/` on top only with
+`--demo`. The episode keeps its own copy, so a later suite change never alters a finished episode; the gates
+pin `standards/` by hash.
 
 ## Skills
 - Directory `skills/sv-<TT>-<slug>/` with `SKILL.md`; the tier digit groups phases: 0 pipeline/bible,
@@ -15,7 +31,7 @@ Enforced by `tools/validate_skills.py`.
 ## Rules and lint IDs
 | Prefix | Area | Where |
 |---|---|---|
-| SC-01..14 | script | `scripts/script_lint.py` |
+| SC-01..18 | script, words budget, voice text rules | `scripts/script_lint.py` |
 | CH-01..09 | characters | `scripts/lint.mjs design` |
 | TK-01..03 | tokens (no raw colours, one font) | `lint.mjs design` |
 | SE-01..13 | sets: density, text, halftone, glow, bounds, life, rendered-plate emptiness | `lint.mjs design` |
@@ -27,6 +43,7 @@ Enforced by `tools/validate_skills.py`.
 | MO-01..09 | motion | `lint.mjs shots` |
 | KY-01 | animated set keys | `lint.mjs shots` |
 | CO-01..03 | coverage | `lint.mjs shots` |
+| PC-01..03 | shot pacing (`standards/pacing.json`) | `lint.mjs shots` |
 
 A rule documented in a skill must name its lint ID when one exists. A waiver is
 `// lint-ok: <ID> <reason>` on the shot's line, and it must be justified in the G5 review.
@@ -37,6 +54,8 @@ A rule documented in a skill must name its lint ID when one exists. A waiver is
 - Review files must name every evidence file with a remark of at least 4 words, and must be newer than the evidence.
 - G1, G2 and G4 need `approval: user` (with `user_quote`) or `approval: delegated`.
 
-## Template
-- `templates/episode-starter/` must lint and type-check: `npx tsc --noEmit`.
-- Generated folders are git-ignored and never committed: `audio/`, `public/`, `qa/`, `out/`, `gates/log.jsonl`.
+## Episode assembly
+- An episode made by `tools/new_episode.sh` (blank and `--demo`) must type-check (`npx tsc --noEmit`) and run
+  `node scripts/times.mjs`.
+- Generated folders are git-ignored and never committed: `audio/`, `public/`, `qa/`, `out/`, `gates/log.jsonl`
+  in an episode, `examples/demo/audio/` and `examples/demo/public/` in the suite.

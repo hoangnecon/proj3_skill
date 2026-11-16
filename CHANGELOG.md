@@ -1,5 +1,30 @@
 # Changelog
 
+## `v3.0.0` — 2026-11-16
+**Repository restructured: one kind of thing per top-level folder** (the user: the template under the skills
+mixed engine code, standards, demo and reference content with no structure).
+- New layout:
+  - `skills/`: instructions only;
+  - `standards/`: `voice_standard.json`, `pacing.json`, `mix_targets.json`;
+  - `engine/`: `scripts/` tools + `src/` Remotion engine + project config;
+  - `starter/`: blank episode files;
+  - `examples/`: `thang-may/` reference episode and `demo/` engine demo;
+  - `tools/`: `new_episode.sh`, `validate_skills.py`.
+- `templates/episode-starter/` is gone. `new_episode.sh` moved from `skills/sv-00-pipeline/scripts/` to `tools/`.
+- **Episode layout** (breaking for tools, not for finished episodes — each keeps its own copy):
+  - episode code in `src/episode/` (`cast.ts`, `geo.ts`, `sets.tsx`, `shotlist.ts`);
+  - generated timing in `src/data/` (`words.json`, `cues.json`, `events.json`);
+  - house standards in `standards/`.
+  - A `README.md` in every episode marks the three zones: written by the agent, read-only suite copy, generated.
+- **New episodes start blank.** The 4-shot demo is opt-in: `new_episode.sh <dir> --demo`. `.suite.json`
+  records the suite version.
+- `validate_skills.py` checks the layout. It rejects unknown top-level folders, a file kind in the wrong
+  folder (code in `skills/`, data in `engine/`), and a skill folder holding more than `SKILL.md` + `references/`.
+- Verified:
+  - a `--demo` episode gives identical lint output and pixel-identical renders to the v2.2.0 layout;
+  - a blank episode type-checks and runs;
+  - con-so-dam-ma voice + mix in the new layout give identical words.json and audio QA (22/22).
+
 ## `v2.2.0` — 2026-11-16
 - **Voice standard (`scripts/voice_standard.json`, sv-12 rewritten):** Hải Đăng preset only (no cloning), native 1.0× speed, temperature 0.8 / top_k 25 / top_p 0.95, **one take per line** with a fixed seed. Every line is measured against the calibrated Hải Đăng profile (word accuracy, rate, pitch, timbre, holes) and regenerated with the next seed only if it fails (max 3). Episode checks cover pitch spread, rate and timbre consistency, and retry share. Text rules: numbers in words, no "…", no emotion tags. The settings come from a temperature × top_k sweep; the user approved the result ("bản E"). Expressive tricks were rejected: punctuation shaping, cloning, and pitch/gain edits.
 - **Pacing standard (`scripts/pacing.json`):** calibrated on the three approved episodes.

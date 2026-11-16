@@ -1,6 +1,6 @@
 ---
 name: sv-21-motion
-description: Animate characters in a story-video episode with readable, physically believable motion — profile walks with planted feet and speed by character, reach-and-press with anticipation, sitting down, piggyback, turning, talking, expression and pose keys anchored to narration words — and verify every action with frame strips. Use whenever you write or change actors in src/shotlist.ts (path, reach, legs, arms, ride, talk, e, p), when a walk or gesture looks wrong, and as the motion half of gate G5.
+description: Animate characters in a story-video episode with readable, physically believable motion — profile walks with planted feet and speed by character, reach-and-press with anticipation, sitting down, piggyback, turning, talking, expression and pose keys anchored to narration words — and verify every action with frame strips. Use whenever you write or change actors in src/episode/shotlist.ts (path, reach, legs, arms, ride, talk, e, p), when a walk or gesture looks wrong, and as the motion half of gate G5.
 ---
 
 # sv-21 · Motion and acting
@@ -16,7 +16,7 @@ mechanics (anticipation → contact → the world reacting). This skill is how t
 
 ## Workflow (inside the G5 loop of sv-22)
 1. Block each shot from `beats.md`: who is the subject, what physical action carries the line, which word
-   it lands on. Write the actor with anchors, coordinates from `src/geo.ts`.
+   it lands on. Write the actor with anchors, coordinates from `src/episode/geo.ts`.
 2. `node scripts/lint.mjs shots` — fix every MO-*, SZ-*, SH-* error. It also writes
    `qa/strips_needed.json`: one strip for every walk, reach, sit/stand, ride and animated set key.
 3. `node scripts/qa.mjs strips` → `qa/strips/<name>.png` (6–10 frames with timestamps).
