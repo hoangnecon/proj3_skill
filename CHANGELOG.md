@@ -1,5 +1,23 @@
 # Changelog
 
+## v3.3.0 — 2026-11-16 · scene design process + cute faces
+- New skill **sv-23-scene-design**. It adds:
+  - a location bible (≤ 6 places, each with a purpose, a hero prop, a wall hue and a three-plane layout);
+  - `scenes.json`, mapping every beat to a scene;
+  - declared transitions;
+  - a clutter budget.
+- `engine/scripts/scene_audit.py`:
+  - `plan` mode checks places, scenes and transitions, and reads wall hues from the rendered plates;
+  - `shots` mode checks scene membership, establishing wides, jump cuts and overlay count;
+  - it measures **edge density ≤ 0.075 and ≤ 15 colour masses** on every contact frame.
+  - It writes `qa/scene_board.png` and `qa/clutter_board.png`.
+- `sv_gate.py`: G4 and G5 now run the scene audit and require both boards as evidence. `scenes.json` is an input of both gates.
+- Faces (sv-20 characters §1b), front and side rigs:
+  - mochi face, big low eyes with highlights, short soft brows;
+  - small mouth, no teeth (open mouth = cavity + tongue);
+  - button nose in profile, bangs and face-framing locks.
+- Proportions: head radius 86 → 100, hip 200 → 178, torso 225 → 196; head ≈ 1/2.6 of height.
+
 ## `v3.2.0` — 2026-11-16
 User feedback on the "Nước mắt chia đất" draft:
 - **State board (sv-20 sets §8, sv-22 grammar).** Numbers that change across the film go on one diagram

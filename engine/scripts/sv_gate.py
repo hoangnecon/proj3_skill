@@ -56,8 +56,8 @@ INPUTS = {
     "G1": ["brief.md"],
     "G2": ["script.json", "beats.md", "standards/pacing.json", "standards/voice_standard.json"],
     "G3": ["script.json", "audio/voice.wav", "src/data/words.json", "standards/voice_standard.json", "standards/pacing.json"],
-    "G4": ["src/episode/cast.ts", "src/episode/sets.tsx", "src/episode/geo.ts", "src/props.tsx", "src/sets"],
-    "G5": ["src/episode/shotlist.ts", "src/episode/cast.ts", "src/episode/sets.tsx", "src/data/words.json", "standards/pacing.json"],
+    "G4": ["scenes.json", "src/episode/cast.ts", "src/episode/sets.tsx", "src/episode/geo.ts", "src/props.tsx", "src/sets"],
+    "G5": ["scenes.json", "src/episode/shotlist.ts", "src/episode/cast.ts", "src/episode/sets.tsx", "src/data/words.json", "standards/pacing.json"],
     "G6": ["audio.json", "audio/voice.wav", "src/episode/shotlist.ts", "standards/mix_targets.json", "scripts/theme.py"],
     "G7": ["out/final.mp4"],
 }
@@ -73,11 +73,12 @@ def evidence(g):
         return ["qa/voice_report.json"]
     if g == "G4":
         d = ROOT / "qa/design"
-        return sorted(str(p.relative_to(ROOT)) for p in d.glob("*.png") if "_ex" not in p.name and "ex-" not in p.name and "exemplar" not in p.name) if d.exists() else []
+        ev = sorted(str(p.relative_to(ROOT)) for p in d.glob("*.png") if "_ex" not in p.name and "ex-" not in p.name and "exemplar" not in p.name) if d.exists() else []
+        return ev + ["qa/scene_board.png"]
     if g == "G5":
         ev = sorted(str(p.relative_to(ROOT)) for p in (ROOT / "qa").glob("contact_p*.png"))
         need = jload("qa/strips_needed.json") or []
-        return ev + [f"qa/strips/{s['name']}.png" for s in need]
+        return ev + [f"qa/strips/{s['name']}.png" for s in need] + ["qa/clutter_board.png"]
     if g == "G6":
         return ["qa/mix_report.json", "qa/mix/overview.png", "qa/mix/segments.png"]
     if g == "G7":
@@ -138,10 +139,18 @@ def checks(g):
                 break
         if not any("set_" in f and "_grid" in f for f in evidence("G4")):
             bad.append("no episode set plates rendered")
+        # sv-23: places, scenes, transitions, wall hues — measured, not claimed
+        code, out = run(["python3", "scripts/scene_audit.py", "plan"])
+        if code:
+            bad.append("scene plan audit failed (sv-23):\n" + "\n".join(l for l in out.splitlines() if l.startswith("ERROR"))[:3000])
     elif g == "G5":
         code, out = run(["node", "scripts/lint.mjs", "shots"])
         if code:
             bad.append("shot lint failed:\n" + "\n".join(l for l in out.splitlines() if l.startswith("ERROR")))
+        # sv-23: every shot in a scene, transitions honoured, clutter budget from rendered pixels
+        code, out = run(["python3", "scripts/scene_audit.py", "shots"])
+        if code:
+            bad.append("scene/clutter audit failed (sv-23):\n" + "\n".join(l for l in out.splitlines() if l.startswith("ERROR"))[:3000])
         src_t = (ROOT / "src/episode/shotlist.ts").stat().st_mtime
         ev = evidence("G5")
         if not any("contact_p" in e for e in ev):

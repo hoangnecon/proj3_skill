@@ -21,8 +21,8 @@ checks), `mix_targets.json` (voice chain, music 15–18 dB under, −14 LUFS), `
 | G1 | Brief | sv-10 (+ sv-01) | brief sections filled | brief.md | **user** |
 | G2 | Script + beats | sv-10 | `script_lint.py` | qa/script_lint.json | **user** |
 | G3 | Voice | sv-12 | one take/line vs voice_standard.json + pacing.json | qa/voice_report.json + listening | — |
-| G4 | Cast + sets | sv-20 | `lint.mjs design` (CH/TK/SE) | qa/design/*.png | **user** |
-| G5 | Shots + motion | sv-22, sv-21 | `lint.mjs shots` (SH/AN/OV/CA/SZ/MO/KY/CO/PC) | qa/contact_p*.png, qa/strips/*.png | — |
+| G4 | Scene plan + cast + sets | sv-23, sv-20 | `scene_audit.py plan` (SC) + `lint.mjs design` (CH/TK/SE) | qa/scene_board.png, qa/design/*.png | **user** |
+| G5 | Shots + motion | sv-22, sv-21, sv-23 | `lint.mjs shots` + `scene_audit.py shots` (clutter) | qa/contact_p*.png, qa/strips/*.png, qa/clutter_board.png | — |
 | G6 | Audio | sv-40 (sounds) + sv-42 (mix & master) | 21 measured checks vs mix_targets.json | qa/mix_report.json, qa/mix/overview.png, qa/mix/segments.png + listening | — |
 | G7 | Delivery | sv-41 (+ sv-42 audio-in-video) | deliver report + video audio checks | qa/deliver_report.json, qa/final_check.png, qa/video_audio.json, full watch | — |
 

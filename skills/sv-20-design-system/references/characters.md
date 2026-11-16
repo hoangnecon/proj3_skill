@@ -17,13 +17,34 @@ looks "at random": every field is a decision that tells the viewer who this pers
 
 | Measure | Value |
 |---|---|
-| Standing height (feet to top of head) | ≈ 610 · h px |
-| Head radius | 86 · head |
-| Shoulder height above feet | ≈ 410 · h |
-| Hip height (standing) | 200 · h (side rig) |
-| Arm reach from shoulder | ≈ 225 · h |
+| Standing height (feet to top of head) | ≈ 575 · h px (v3.3: head ≈ 1/2.6 of height) |
+| Head radius | 100 · head |
+| Shoulder height above feet | ≈ 374 · h |
+| Hip height (standing) | 178 · h (both rigs) |
+| Arm reach from shoulder | ≈ 200 · h |
 | Origin | midpoint between the feet; y grows downward |
-| Readable face on screen | figure ≥ 480 px tall on screen = 610 · h · s · zoom (lint SZ-01 for talkers) |
+| Readable face on screen | figure ≥ 480 px tall on screen = 575 · h · s · zoom (lint SZ-01 for talkers) |
+
+### 1b. Face construction — "dễ thương kiểu hoạt hình", never "ghê" (v3.3)
+The user rejected the v3.2 faces as ugly. Cô Út's face was "gớm". The problems were:
+- small dot eyes high on a tall oval;
+- a long mouth with teeth;
+- a pointed nose in profile.
+
+The rig now draws faces by these rules. Do not override them per character.
+
+| Part | Rule (r = head radius) |
+|---|---|
+| Face shape | wide at the cheeks, round chin (`faceD`); widest at y + 0.08r |
+| Eyes | big ink ellipses r·0.12 × 0.14, set **low** (y + 0.2r), 0.68r apart, with two white highlights (big upper-right, small lower-left) |
+| Brows | short soft arcs (0.24r), never long straight bars |
+| Nose | a tiny curve, front view; a soft bump in profile, never a point |
+| Mouth | **small** (flat 0.18r, smile 0.28r), 0.32r below the eyes; an open mouth is a D-shape with a dark cavity and a pink tongue — **never draw teeth** |
+| Lipstick | colours the mouth stroke and the cavity outline red; no separate lip shape |
+| Blush | soft ellipses under the eyes (opacity 0.42) |
+| Hair | the cap's top sits above the face top; fringe or parted bangs; long hair has two locks framing the face to below the chin |
+
+The G4 check: open every `expr_<look>.png` at 100 % zoom and look at each of the 12 faces. If any reads as creepy, mean (when not meant), or adult-realistic, fix the rig, not the shot.
 
 Principals use `s` 0.9–1.15 in shots; background people 0.7–0.9 placed further up the floor (smaller y).
 

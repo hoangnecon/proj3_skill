@@ -72,7 +72,7 @@ export const ExprSheet: React.FC<{look: string}> = ({look: key}) => {
   const W = 2000, H = 2400;
   if (!look) return <Paper w={W} h={H}><Txt x={W / 2} y={H / 2} s={60} c="red" w={900}>không có look {key}</Txt></Paper>;
   const Hh = look.h ?? 1;
-  const headY = -(200 + 225 + 16 + 86 * (look.head ?? 1) * 0.92) * Hh; // head centre in rig units
+  const headY = -((178 + 196) * Hh + 8 + 100 * (look.head ?? 1) * 0.9) + 20; // head centre in rig units
   return (
     <Paper w={W} h={H}>
       <Txt x={40} y={100} s={64} c="ink" w={900} a="start">{key} · biểu cảm · dáng · bước đi · ngồi</Txt>

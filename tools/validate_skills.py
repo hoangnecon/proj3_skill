@@ -107,7 +107,7 @@ for extra in ("README.md", "CONVENTIONS.md"):
 
 # ---------------------------------------------------------------- 2. lint IDs
 impl = ""
-for s in ("scripts/lint.mjs", "scripts/script_lint.py"):
+for s in ("scripts/lint.mjs", "scripts/script_lint.py", "scripts/scene_audit.py"):
     p = ENG / s
     if p.exists():
         impl += p.read_text()

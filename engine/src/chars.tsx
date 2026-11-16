@@ -124,16 +124,16 @@ export const Person: React.FC<PersonProps> = ({look, pose, expr = 'neutral', tal
   const belly = look.belly ?? 0;
   const sw = 78 * W; // nửa vai
   const ww = (64 + belly * 34) * W; // nửa eo
-  const legY = -200 * H; // hông
-  const shY = legY - 225 * H; // vai
-  const HR = 86 * (look.head ?? 1); // bán kính đầu
-  const hy = shY - 16 - HR * 0.92;
+  const legY = -178 * H; // hông (thân ngắn, đầu to = dễ thương)
+  const shY = legY - 196 * H; // vai
+  const HR = 100 * (look.head ?? 1); // bán kính đầu — đầu ≈ 1/2.6 chiều cao
+  const hy = shY - 8 - HR * 0.9;
   const legs = g ? 'none' : pose.legs ?? 'stand';
   const sitDrop = legs === 'sit' ? 70 : 0;
 
   // --- tay ---
   const armW = 30 * Math.min(1.25, W);
-  const ua = 118 * H, fa = 108 * H;
+  const ua = 104 * H, fa = 96 * H;
   const shoulder = (sg: number): [number, number] => [sg * (sw - 14), shY + 18 + sitDrop];
   const shY0 = shY, legY0 = legY;
   const target = (sg: number, n: string): [number, number] => {
@@ -335,45 +335,64 @@ const Head: React.FC<{look: Look; hy: number; R: number; expr: Expr; talk: numbe
     const a = Math.PI * (0.95 + (i / 8) * 1.1);
     els.push(<S key={'cu' + i} d={E(Math.cos(a) * r * 1.02, hy + Math.sin(a) * r * 1.0 + r * 0.1, r * 0.36, r * 0.36)} f={hairC} />);
   }
-  if (look.hair === 'long') els.push(<S key="lg" d={`M${-r * 0.98} ${hy}C${-r * 1.1} ${hy + r * 1.4} ${-r * 0.6} ${hy + r * 1.7} ${-r * 0.2} ${hy + r * 1.5}L${r * 0.2} ${hy + r * 1.5}C${r * 0.6} ${hy + r * 1.7} ${r * 1.1} ${hy + r * 1.4} ${r * 0.98} ${hy}Z`} f={hairC} />);
+  if (look.hair === 'long') els.push(<S key="lg" d={`M${-r * 1.04} ${hy - r * 0.2}C${-r * 1.16} ${hy + r * 0.9} ${-r * 1.04} ${hy + r * 1.4} ${-r * 0.72} ${hy + r * 1.5}L${r * 0.72} ${hy + r * 1.5}C${r * 1.04} ${hy + r * 1.4} ${r * 1.16} ${hy + r * 0.9} ${r * 1.04} ${hy - r * 0.2}Z`} f={hairC} />);
 
-  // tai + mặt
-  els.push(<S key="ea1" d={E(-r * 0.9, hy + r * 0.08, r * 0.17, r * 0.24)} f={skin} />);
-  els.push(<S key="ea2" d={E(r * 0.9, hy + r * 0.08, r * 0.17, r * 0.24)} f={skin} />);
-  if (look.earrings) els.push(<S key="er1" d={E(-r * 0.92, hy + r * 0.4, 7, 7)} f="gold" />, <S key="er2" d={E(r * 0.92, hy + r * 0.4, 7, 7)} f="gold" />);
-  els.push(<S key="face" d={E(0, hy, r * 0.9, r)} f={skin} />);
-  els.push(<Sh key="fsh" d={`M${r * 0.35} ${hy - r * 0.95}A${r * 0.9} ${r} 0 0 1 ${r * 0.35} ${hy + r * 0.95}A${r * 0.66} ${r} 0 0 0 ${r * 0.35} ${hy - r * 0.95}Z`} o={0.5} />);
+  // tai + mặt: mặt bầu (rộng ở má, cằm tròn) — không phải hình elip đứng
+  els.push(<S key="ea1" d={E(-r * 0.92, hy + r * 0.2, r * 0.14, r * 0.19)} f={skin} />);
+  els.push(<S key="ea2" d={E(r * 0.92, hy + r * 0.2, r * 0.14, r * 0.19)} f={skin} />);
+  if (look.earrings) els.push(<S key="er1" d={E(-r * 0.93, hy + r * 0.44, 6, 6)} f="gold" />, <S key="er2" d={E(r * 0.93, hy + r * 0.44, 6, 6)} f="gold" />);
+  const faceD = `M0 ${hy - r}C${r * 0.62} ${hy - r} ${r * 0.96} ${hy - r * 0.62} ${r * 0.96} ${hy + r * 0.08}C${r * 0.96} ${hy + r * 0.66} ${r * 0.56} ${hy + r * 0.9} 0 ${hy + r * 0.9}C${-r * 0.56} ${hy + r * 0.9} ${-r * 0.96} ${hy + r * 0.66} ${-r * 0.96} ${hy + r * 0.08}C${-r * 0.96} ${hy - r * 0.62} ${-r * 0.62} ${hy - r} 0 ${hy - r}Z`;
+  els.push(<S key="face" d={faceD} f={skin} />);
+  els.push(<Sh key="fsh" d={`M${r * 0.5} ${hy - r * 0.86}C${r * 0.98} ${hy - r * 0.4} ${r * 1.0} ${hy + r * 0.6} ${r * 0.4} ${hy + r * 0.84}C${r * 0.74} ${hy + r * 0.4} ${r * 0.8} ${hy - r * 0.3} ${r * 0.5} ${hy - r * 0.86}Z`} o={0.35} />);
 
   // tóc trước
   const hp = (d: string, k: string) => els.push(<S key={k} d={d} f={hairC} />);
+  // tóc: mũ tóc phủ kín đỉnh đầu (cao hơn đỉnh mặt), mái tóc là các múi tròn — không đường cắt thẳng
+  const cap = (lo: number) => `M${-r * 1.0} ${hy + r * lo}C${-r * 1.1} ${hy - r * 1.46} ${r * 1.1} ${hy - r * 1.46} ${r * 1.0} ${hy + r * lo}`;
+  const fringe = (n: number, depth: number, lo: number) => {
+    // n múi mái từ thái dương trái sang phải
+    let d = cap(lo);
+    for (let i = n; i >= 0; i--) {
+      const x = -r * 0.98 + (i / n) * r * 1.96;
+      const yb = hy - r * 0.42 + depth * (i % 2 ? 1 : 0.55) * r;
+      d += i === n ? `L${x} ${hy - r * 0.3}` : `Q${x + r * 0.98 / n} ${yb + r * 0.12} ${x} ${hy - r * 0.42 + (i === 0 ? r * (lo + 0.3) : 0)}`;
+    }
+    return d + 'Z';
+  };
   switch (look.hair) {
     case 'bald':
-      hp(`M${-r * 0.92} ${hy + r * 0.05}C${-r * 0.96} ${hy - r * 0.4} ${-r * 0.8} ${hy - r * 0.55} ${-r * 0.62} ${hy - r * 0.5}L${-r * 0.7} ${hy + r * 0.1}Z`, 'h1');
-      hp(`M${r * 0.92} ${hy + r * 0.05}C${r * 0.96} ${hy - r * 0.4} ${r * 0.8} ${hy - r * 0.55} ${r * 0.62} ${hy - r * 0.5}L${r * 0.7} ${hy + r * 0.1}Z`, 'h2');
-      els.push(<path key="shine" d={`M${-r * 0.3} ${hy - r * 0.78}q${r * 0.2} ${-r * 0.1} ${r * 0.4} ${-r * 0.02}`} stroke={PAL.white} strokeWidth={8} strokeLinecap="round" fill="none" />);
+      hp(`M${-r * 0.95} ${hy + r * 0.12}C${-r * 1.0} ${hy - r * 0.35} ${-r * 0.82} ${hy - r * 0.55} ${-r * 0.62} ${hy - r * 0.52}C${-r * 0.7} ${hy - r * 0.2} ${-r * 0.72} ${hy} ${-r * 0.74} ${hy + r * 0.14}Z`, 'h1');
+      hp(`M${r * 0.95} ${hy + r * 0.12}C${r * 1.0} ${hy - r * 0.35} ${r * 0.82} ${hy - r * 0.55} ${r * 0.62} ${hy - r * 0.52}C${r * 0.7} ${hy - r * 0.2} ${r * 0.72} ${hy} ${r * 0.74} ${hy + r * 0.14}Z`, 'h2');
+      els.push(<path key="shine" d={`M${-r * 0.3} ${hy - r * 0.8}q${r * 0.2} ${-r * 0.1} ${r * 0.4} ${-r * 0.02}`} stroke={PAL.white} strokeWidth={8} strokeLinecap="round" fill="none" />);
       break;
     case 'side':
     case 'neat':
-      hp(`M${-r * 0.95} ${hy + r * 0.05}C${-r * 1.05} ${hy - r * 1.42} ${r * 1.05} ${hy - r * 1.42} ${r * 0.95} ${hy + r * 0.0}C${r * 0.8} ${hy - r * 0.5} ${r * 0.2} ${hy - r * 0.62} ${-r * 0.3} ${hy - r * 0.52}C${-r * 0.6} ${hy - r * 0.45} ${-r * 0.8} ${hy - r * 0.2} ${-r * 0.95} ${hy + r * 0.05}Z`, 'h');
-      if (look.hair === 'side') els.push(<L key="part" d={`M${-r * 0.3} ${hy - r * 0.95}L${-r * 0.36} ${hy - r * 0.55}`} w={4} c="white" o={0.6} />);
+      // rẽ ngôi, mái hất sang một bên thành một khối cong
+      hp(`${cap(0.02)}C${r * 0.9} ${hy - r * 0.42} ${r * 0.3} ${hy - r * 0.46} ${-r * 0.1} ${hy - r * 0.62}C${-r * 0.3} ${hy - r * 0.34} ${-r * 0.7} ${hy - r * 0.3} ${-r * 1.0} ${hy + r * 0.02}Z`, 'h');
+      els.push(<L key="hl" d={`M${-r * 0.5} ${hy - r * 0.86}q${r * 0.3} ${-r * 0.14} ${r * 0.6} ${-r * 0.06}`} w={6} c="white" o={0.35} />);
       break;
     case 'short':
     case 'kid':
-      hp(`M${-r * 0.95} ${hy + r * 0.1}C${-r * 1.05} ${hy - r * 1.42} ${r * 1.05} ${hy - r * 1.42} ${r * 0.95} ${hy + r * 0.1}L${r * 0.8} ${hy - r * 0.3}L${r * 0.5} ${hy - r * 0.45}L${r * 0.3} ${hy - r * 0.32}L${0} ${hy - r * 0.5}L${-r * 0.3} ${hy - r * 0.35}L${-r * 0.6} ${hy - r * 0.5}L${-r * 0.8} ${hy - r * 0.25}Z`, 'h');
+      hp(fringe(6, 0.16, 0.06), 'h');
       break;
     case 'bun':
+      hp(`${cap(0.12)}C${r * 0.82} ${hy - r * 0.42} ${r * 0.3} ${hy - r * 0.58} 0 ${hy - r * 0.6}C${-r * 0.3} ${hy - r * 0.58} ${-r * 0.82} ${hy - r * 0.42} ${-r * 1.0} ${hy + r * 0.12}Z`, 'h');
+      break;
     case 'long':
-      hp(`M${-r * 0.95} ${hy + r * 0.2}C${-r * 1.0} ${hy - r * 1.42} ${r * 1.0} ${hy - r * 1.42} ${r * 0.95} ${hy + r * 0.2}C${r * 0.8} ${hy - r * 0.45} ${r * 0.1} ${hy - r * 0.7} ${0} ${hy - r * 0.62}C${-r * 0.1} ${hy - r * 0.7} ${-r * 0.8} ${hy - r * 0.45} ${-r * 0.95} ${hy + r * 0.2}Z`, 'h');
+      // mái thưa chia đôi + hai lọn tóc ôm mặt xuống quá cằm
+      hp(`${cap(0.3)}C${r * 0.8} ${hy - r * 0.3} ${r * 0.34} ${hy - r * 0.44} ${r * 0.06} ${hy - r * 0.66}C${-r * 0.2} ${hy - r * 0.34} ${-r * 0.7} ${hy - r * 0.36} ${-r * 1.0} ${hy + r * 0.3}Z`, 'h');
+      for (const sg of [-1, 1]) hp(`M${sg * r * 0.98} ${hy - r * 0.1}C${sg * r * 1.06} ${hy + r * 0.6} ${sg * r * 1.0} ${hy + r * 1.1} ${sg * r * 0.84} ${hy + r * 1.36}C${sg * r * 0.8} ${hy + r * 1.0} ${sg * r * 0.8} ${hy + r * 0.4} ${sg * r * 0.82} ${hy - r * 0.1}Z`, 'lk' + sg);
+      els.push(<L key="hl" d={`M${-r * 0.56} ${hy - r * 0.84}q${r * 0.24} ${-r * 0.14} ${r * 0.5} ${-r * 0.1}`} w={6} c="white" o={0.35} />);
       break;
     case 'curly':
       for (let i = 0; i < 7; i++) {
-        const a = Math.PI * (1.12 + (i / 6) * 0.76);
-        els.push(<S key={'cf' + i} d={E(Math.cos(a) * r * 0.78, hy + Math.sin(a) * r * 0.82, r * 0.3, r * 0.26)} f={hairC} />);
+        const a = Math.PI * (1.08 + (i / 6) * 0.84);
+        els.push(<S key={'cf' + i} d={E(Math.cos(a) * r * 0.8, hy + Math.sin(a) * r * 0.84, r * 0.32, r * 0.28)} f={hairC} />);
       }
       break;
     case 'thin':
-      hp(`M${-r * 0.92} ${hy}C${-r * 0.95} ${hy - r * 0.5} ${-r * 0.7} ${hy - r * 0.62} ${-r * 0.5} ${hy - r * 0.6}L${-r * 0.66} ${hy + r * 0.1}Z`, 'h1');
-      hp(`M${r * 0.92} ${hy}C${r * 0.95} ${hy - r * 0.5} ${r * 0.7} ${hy - r * 0.62} ${r * 0.5} ${hy - r * 0.6}L${r * 0.66} ${hy + r * 0.1}Z`, 'h2');
+      hp(`M${-r * 0.95} ${hy + r * 0.05}C${-r * 0.98} ${hy - r * 0.5} ${-r * 0.7} ${hy - r * 0.66} ${-r * 0.48} ${hy - r * 0.64}C${-r * 0.6} ${hy - r * 0.3} ${-r * 0.68} ${hy - r * 0.05} ${-r * 0.72} ${hy + r * 0.1}Z`, 'h1');
+      hp(`M${r * 0.95} ${hy + r * 0.05}C${r * 0.98} ${hy - r * 0.5} ${r * 0.7} ${hy - r * 0.66} ${r * 0.48} ${hy - r * 0.64}C${r * 0.6} ${hy - r * 0.3} ${r * 0.68} ${hy - r * 0.05} ${r * 0.72} ${hy + r * 0.1}Z`, 'h2');
       break;
   }
 
@@ -396,90 +415,96 @@ const Head: React.FC<{look: Look; hy: number; R: number; expr: Expr; talk: numbe
     els.push(<S key="bd" d={R(-r * 0.95, hy - r * 0.62, r * 1.9, r * 0.24)} f={hatC} />);
   }
 
-  // biểu cảm
+  // biểu cảm — luật mặt dễ thương: mắt to có 2 điểm sáng, đặt thấp (dưới giữa mặt); mày ngắn bo tròn;
+  // miệng NHỎ và gần mắt; KHÔNG vẽ răng (miệng mở = khoang tối + lưỡi hồng); má hồng to, mềm.
   const blink = ((t * 1000 + blinkPh * 700) % 3700) < 120;
   const ex = r * 0.34;
-  const ey = hy + r * 0.04;
+  const ey = hy + r * 0.2;
+  const er = r * 0.12;
   const browC = look.brows ?? (g ? 'white' : 'hair');
-  const bw = 7;
   const brow = (dl: number, dr: number, lift = 0) => {
-    els.push(<L key="bl" d={`M${-ex - r * 0.2 + gx} ${ey - r * 0.3 - lift + dl}L${-ex + r * 0.18 + gx} ${ey - r * 0.3 - lift - dl}`} w={bw} c={browC} />);
-    els.push(<L key="br" d={`M${ex + r * 0.2 + gx} ${ey - r * 0.3 - lift + dr}L${ex - r * 0.18 + gx} ${ey - r * 0.3 - lift - dr}`} w={bw} c={browC} />);
+    const by = ey - r * 0.32 - lift;
+    els.push(<L key="bl" d={`M${-ex - r * 0.12 + gx} ${by + dl}Q${-ex + gx} ${by - r * 0.05} ${-ex + r * 0.12 + gx} ${by - dl}`} w={7} c={browC} />);
+    els.push(<L key="br" d={`M${ex + r * 0.12 + gx} ${by + dr}Q${ex + gx} ${by - r * 0.05} ${ex - r * 0.12 + gx} ${by - dr}`} w={7} c={browC} />);
   };
-  const eyesDot = (sz = 8) => {
+  const shine = (x: number, y: number, k: string, s = 1) => els.push(
+    <circle key={k + 'a'} cx={x + er * 0.38} cy={y - er * 0.42} r={er * 0.34 * s} fill={PAL.white} />,
+    <circle key={k + 'b'} cx={x - er * 0.36} cy={y + er * 0.4} r={er * 0.15 * s} fill={PAL.white} />);
+  const eyesDot = (k = 1) => {
     if (blink) {
-      els.push(<L key="e1" d={`M${-ex - 10 + gx} ${ey}h20`} w={5} />, <L key="e2" d={`M${ex - 10 + gx} ${ey}h20`} w={5} />);
-    } else {
-      els.push(<ellipse key="e1" cx={-ex + gx} cy={ey} rx={sz} ry={sz * 1.15} fill={PAL.ink} />, <ellipse key="e2" cx={ex + gx} cy={ey} rx={sz} ry={sz * 1.15} fill={PAL.ink} />);
-      els.push(<circle key="e1h" cx={-ex + gx + 2.5} cy={ey - 3} r={2.4} fill={PAL.white} />, <circle key="e2h" cx={ex + gx + 2.5} cy={ey - 3} r={2.4} fill={PAL.white} />);
+      els.push(<L key="e1" d={`M${-ex - er + gx} ${ey}q${er} ${er * 0.6} ${2 * er} 0`} w={5.5} />, <L key="e2" d={`M${ex - er + gx} ${ey}q${er} ${er * 0.6} ${2 * er} 0`} w={5.5} />);
+    } else for (const sg of [-1, 1]) {
+      els.push(<ellipse key={'e' + sg} cx={sg * ex + gx} cy={ey} rx={er * k} ry={er * 1.18 * k} fill={PAL.ink} />);
+      shine(sg * ex + gx, ey, 'eh' + sg, k);
     }
   };
   const eyesArc = (up = true) => {
     const s = up ? -1 : 1;
-    els.push(<L key="e1" d={`M${-ex - 13 + gx} ${ey + 3}q13 ${s * 12} 26 0`} w={5.5} />, <L key="e2" d={`M${ex - 13 + gx} ${ey + 3}q13 ${s * 12} 26 0`} w={5.5} />);
+    for (const sg of [-1, 1]) els.push(<L key={'e' + sg} d={`M${sg * ex - er * 1.1 + gx} ${ey + 3}q${er * 1.1} ${s * er * 1.2} ${er * 2.2} 0`} w={6} />);
   };
   const eyesWide = () => {
-    els.push(<S key="e1w" d={E(-ex + gx, ey, 15, 17)} f="white" sw={4} />, <S key="e2w" d={E(ex + gx, ey, 15, 17)} f="white" sw={4} />);
-    els.push(<circle key="e1" cx={-ex + gx} cy={ey + 2} r={5.5} fill={PAL.ink} />, <circle key="e2" cx={ex + gx} cy={ey + 2} r={5.5} fill={PAL.ink} />);
+    for (const sg of [-1, 1]) {
+      els.push(<S key={'ew' + sg} d={E(sg * ex + gx, ey, er * 1.45, er * 1.6)} f="white" sw={4} />);
+      els.push(<circle key={'ep' + sg} cx={sg * ex + gx} cy={ey + 2} r={er * 0.7} fill={PAL.ink} />);
+      shine(sg * ex + gx, ey + 2, 'ws' + sg, 0.6);
+    }
   };
   const eyesNarrow = () => {
-    els.push(<L key="e1" d={`M${-ex - 14 + gx} ${ey}h28`} w={6} />, <L key="e2" d={`M${ex - 14 + gx} ${ey}h28`} w={6} />);
-    els.push(<circle key="e1p" cx={-ex + gx + 6} cy={ey + 3} r={4} fill={PAL.ink} />, <circle key="e2p" cx={ex + gx + 6} cy={ey + 3} r={4} fill={PAL.ink} />);
+    // mí trên phẳng che nửa mắt
+    for (const sg of [-1, 1]) {
+      els.push(<ellipse key={'e' + sg} cx={sg * ex + gx} cy={ey + er * 0.25} rx={er} ry={er * 0.8} fill={PAL.ink} />);
+      els.push(<L key={'lid' + sg} d={`M${sg * ex - er * 1.3 + gx} ${ey - er * 0.2}h${er * 2.6}`} w={6} />);
+      els.push(<circle key={'s' + sg} cx={sg * ex + gx + er * 0.35} cy={ey + er * 0.25} r={er * 0.22} fill={PAL.white} />);
+    }
   };
 
-  const my = hy + r * 0.56;
-  // son môi: vẽ chính nét miệng màu đỏ, dày hơn — không đặt hình son đè lên miệng (đè lên răng khi cười)
+  const my = hy + r * 0.52;
   const lipC = look.lips ? 'red' : 'ink';
-  const lipW = look.lips ? 8 : 5.5;
+  const lipW = look.lips ? 7 : 5;
+  const cavity = look.lips ? PAL.red : PAL.ink;
+  const openMouth = (w: number, h: number, k: string) => {
+    // miệng mở: hình chữ D, khoang tối, lưỡi hồng ở đáy — không răng
+    const d = `M${-w + gx} ${my - 2}Q${gx} ${my + 2} ${w + gx} ${my - 2}Q${w * 0.9 + gx} ${my + h} ${gx} ${my + h}Q${-w * 0.9 + gx} ${my + h} ${-w + gx} ${my - 2}Z`;
+    const cid = `mc-${look.name ?? 'x'}-${k}`;
+    els.push(<clipPath key={k + 'c'} id={cid}><path d={d} /></clipPath>,
+      <path key={k + 'f'} d={d} fill={PAL.redDark} />,
+      <ellipse key={k + 't'} cx={gx} cy={my + h} rx={w * 0.6} ry={h * 0.45} fill={PAL.pink} clipPath={`url(#${cid})`} />,
+      <path key={k + 'l'} d={d} fill="none" stroke={cavity} strokeWidth={look.lips ? 5.5 : 4.5} strokeLinejoin="round" />);
+  };
   const mouth = (kind: string) => {
-    if (talk > 0.05 && kind !== 'wail' && kind !== 'O') {
-      const o = 6 + talk * 20;
-      els.push(<S key="m" d={`M${-r * 0.2 + gx} ${my}Q${gx} ${my - 4} ${r * 0.2 + gx} ${my}Q${gx} ${my + o * 1.6} ${-r * 0.2 + gx} ${my}Z`} f="redDark" sw={4.5} />);
-      return;
-    }
+    if (talk > 0.05 && kind !== 'wail' && kind !== 'O') { openMouth(r * 0.13, 6 + talk * r * 0.16, 'tk'); return; }
     switch (kind) {
-      case 'flat': els.push(<L key="m" d={`M${-r * 0.16 + gx} ${my}h${r * 0.32}`} w={lipW} c={lipC} />); break;
-      case 'smile': els.push(<L key="m" d={`M${-r * 0.24 + gx} ${my - 4}q${r * 0.24} ${r * 0.2} ${r * 0.48} 0`} w={lipW} c={lipC} />); break;
-      case 'grin': {
-        // răng nằm TRONG miệng: dải trắng dưới môi trên, cắt theo đúng hình miệng (không chòi ra ngoài viền môi)
-        const md = `M${-r * 0.3 + gx} ${my - 8}Q${gx} ${my - 2} ${r * 0.3 + gx} ${my - 8}Q${gx} ${my + r * 0.42} ${-r * 0.3 + gx} ${my - 8}Z`;
-        const cid = `mclip-${look.name ?? 'x'}`;
-        els.push(
-          <clipPath key="mc" id={cid}><path d={md} /></clipPath>,
-          <path key="mf" d={md} fill={PAL.redDark} />,
-          <rect key="mt" x={-r * 0.3 + gx} y={my - 12} width={r * 0.6} height={r * 0.15 + 4} fill={PAL.white} clipPath={`url(#${cid})`} />,
-          <path key="ml" d={md} fill="none" stroke={look.lips ? PAL.red : PAL.ink} strokeWidth={look.lips ? 7 : 4.5} strokeLinejoin="round" />,
-        );
-        break;
-      }
-      case 'frown': els.push(<L key="m" d={`M${-r * 0.22 + gx} ${my + 6}q${r * 0.22} ${-r * 0.18} ${r * 0.44} 0`} w={lipW} c={lipC} />); break;
-      case 'smirk': els.push(<L key="m" d={`M${-r * 0.18 + gx} ${my + 2}q${r * 0.24} ${r * 0.04} ${r * 0.4} ${-r * 0.14}`} w={lipW} c={lipC} />); break;
-      case 'O': els.push(<S key="m" d={E(gx, my + 6, r * 0.12, r * 0.17)} f="redDark" sw={4.5} />); break;
-      case 'wail': els.push(<S key="m" d={`M${-r * 0.28 + gx} ${my + r * 0.2}Q${gx} ${my - r * 0.18} ${r * 0.28 + gx} ${my + r * 0.2}Q${gx} ${my + r * 0.36} ${-r * 0.28 + gx} ${my + r * 0.2}Z`} f="redDark" sw={4.5} />); break;
-      case 'shh': els.push(<S key="m" d={E(gx, my + 2, r * 0.08, r * 0.08)} f="redDark" sw={4} />); break;
+      case 'flat': els.push(<L key="m" d={`M${-r * 0.09 + gx} ${my}q${r * 0.09} ${r * 0.03} ${r * 0.18} 0`} w={lipW} c={lipC} />); break;
+      case 'smile': els.push(<L key="m" d={`M${-r * 0.14 + gx} ${my - 3}q${r * 0.14} ${r * 0.14} ${r * 0.28} 0`} w={lipW} c={lipC} />); break;
+      case 'grin': openMouth(r * 0.17, r * 0.2, 'gr'); break;
+      case 'frown': els.push(<L key="m" d={`M${-r * 0.13 + gx} ${my + 5}q${r * 0.13} ${-r * 0.12} ${r * 0.26} 0`} w={lipW} c={lipC} />); break;
+      case 'smirk': els.push(<L key="m" d={`M${-r * 0.1 + gx} ${my + 2}q${r * 0.14} ${r * 0.04} ${r * 0.24} ${-r * 0.1}`} w={lipW} c={lipC} />); break;
+      case 'O': els.push(<S key="m" d={E(gx, my + 5, r * 0.08, r * 0.11)} f="redDark" sw={4} lc={look.lips ? PAL.red : undefined} />); break;
+      case 'wail': openMouth(r * 0.2, r * 0.24, 'wl'); break;
+      case 'shh': els.push(<S key="m" d={E(gx, my + 2, r * 0.05, r * 0.05)} f="redDark" sw={4} />); break;
     }
   };
 
   switch (expr) {
     case 'neutral': brow(0, 0); eyesDot(); mouth('flat'); break;
-    case 'deadpan': brow(0, 0, -6); eyesDot(7); els.push(<L key="lid1" d={`M${-ex - 13 + gx} ${ey - 6}h26`} w={5} />, <L key="lid2" d={`M${ex - 13 + gx} ${ey - 6}h26`} w={5} />); mouth('flat'); break;
-    case 'stern': brow(7, 7, -2); eyesDot(7.5); mouth('frown'); break;
-    case 'angry': brow(12, 12, -2); eyesNarrow(); mouth(talk > 0.05 ? 'flat' : 'frown'); break;
-    case 'smug': brow(-3, 6); eyesArc(false); mouth('smirk'); break;
-    case 'sly': brow(6, -4); eyesNarrow(); mouth('smirk'); break;
-    case 'shock': brow(-6, -6, 12); eyesWide(); mouth('O'); break;
-    case 'sad': brow(-9, -9, 4); eyesDot(7); mouth('frown'); break;
-    case 'cry': brow(-10, -10, 6); eyesArc(true); mouth('wail');
-      for (const sg of [-1, 1]) els.push(<path key={'tr' + sg} d={`M${sg * ex + gx} ${ey + 10}q${sg * 8} ${30 + Math.sin(t * 12) * 6} 0 ${60}`} stroke={PAL.blue} strokeWidth={9} fill="none" strokeLinecap="round" />);
+    case 'deadpan': brow(0, 0, -5); eyesDot(0.9); for (const sg of [-1, 1]) els.push(<L key={'lid' + sg} d={`M${sg * ex - er * 1.2 + gx} ${ey - er * 0.3}h${er * 2.4}`} w={6} />); mouth('flat'); break;
+    case 'stern': brow(6, 6, -2); eyesDot(0.9); mouth('frown'); break;
+    case 'angry': brow(10, 10, -3); eyesNarrow(); mouth(talk > 0.05 ? 'flat' : 'frown'); break;
+    case 'smug': brow(-3, 5); eyesArc(false); mouth('smirk'); break;
+    case 'sly': brow(5, -3); eyesNarrow(); mouth('smirk'); break;
+    case 'shock': brow(-5, -5, 10); eyesWide(); mouth('O'); break;
+    case 'sad': brow(-8, -8, 3); eyesDot(0.95); mouth('frown'); break;
+    case 'cry': brow(-9, -9, 5); eyesArc(true); mouth('wail');
+      for (const sg of [-1, 1]) els.push(<path key={'tr' + sg} d={`M${sg * ex + gx} ${ey + 8}q${sg * 6} ${r * 0.25 + Math.sin(t * 12) * 5} 0 ${r * 0.5}`} stroke={PAL.blue} strokeWidth={8} fill="none" strokeLinecap="round" />);
       break;
-    case 'joy': brow(-4, -4, 8); eyesArc(true); mouth('grin'); break;
-    case 'eager': brow(-5, -5, 10); eyesWide(); mouth('grin'); break;
-    case 'shh': brow(4, 4); eyesWide(); mouth('shh'); break;
+    case 'joy': brow(-3, -3, 6); eyesArc(true); mouth('grin'); break;
+    case 'eager': brow(-4, -4, 8); eyesDot(1.1); mouth('grin'); break;
+    case 'shh': brow(3, 3); eyesWide(); mouth('shh'); break;
   }
 
-  // má hồng, mũi
-  if (!g) els.push(<ellipse key="bl1" cx={-r * 0.55 + gx} cy={hy + r * 0.36} rx={r * 0.15} ry={r * 0.09} fill={PAL.blush} opacity={0.5} />, <ellipse key="bl2" cx={r * 0.55 + gx} cy={hy + r * 0.36} rx={r * 0.15} ry={r * 0.09} fill={PAL.blush} opacity={0.5} />);
-  els.push(<L key="nose" d={`M${gx * 1.3} ${hy + r * 0.14}q${-r * 0.1} ${r * 0.18} ${r * 0.05} ${r * 0.24}`} w={4.5} c={g ? 'ghostDeep' : 'skinShade'} />);
+  // má hồng to, mềm, ngay dưới mắt; mũi chỉ là một nét nhỏ
+  if (!g) for (const sg of [-1, 1]) els.push(<ellipse key={'bl' + sg} cx={sg * r * 0.6 + gx} cy={ey + r * 0.22} rx={r * 0.15} ry={r * 0.09} fill={PAL.blush} opacity={0.42} />);
+  els.push(<L key="nose" d={`M${gx * 1.2 - r * 0.03} ${hy + r * 0.36}q${r * 0.04} ${r * 0.04} ${r * 0.07} 0`} w={4.5} c={g ? 'ghostDeep' : 'skinShade'} />);
 
   if (look.mustache) els.push(<S key="mu" d={`M${-r * 0.34 + gx} ${my - 8}q${r * 0.34} ${-r * 0.2} ${r * 0.68} 0q${-r * 0.1} ${r * 0.1} ${-r * 0.34} ${r * 0.02}q${-r * 0.24} ${r * 0.08} ${-r * 0.34} ${-r * 0.02}Z`} f={look.beardC ?? hairC} />);
   if (look.beard === 'goatee' || look.beard === 'long') {
@@ -489,8 +514,8 @@ const Head: React.FC<{look: Look; hy: number; R: number; expr: Expr; talk: numbe
 
   if (look.glasses === 'round' || look.glasses === 'square') {
     const gr = look.glasses === 'round';
-    for (const sg of [-1, 1]) els.push(gr ? <circle key={'gl' + sg} cx={sg * ex + gx} cy={ey} r={r * 0.24} fill={PAL.white} fillOpacity={0.25} stroke={PAL.ink} strokeWidth={5} /> : <rect key={'gl' + sg} x={sg * ex + gx - r * 0.26} y={ey - r * 0.18} width={r * 0.52} height={r * 0.36} rx={6} fill={PAL.white} fillOpacity={0.25} stroke={PAL.ink} strokeWidth={5} />);
-    els.push(<L key="glb" d={`M${-ex + r * 0.24 + gx} ${ey}h${2 * ex - r * 0.48}`} w={4} />);
+    for (const sg of [-1, 1]) els.push(gr ? <circle key={'gl' + sg} cx={sg * ex + gx} cy={ey} r={r * 0.22} fill={PAL.white} fillOpacity={0.25} stroke={PAL.ink} strokeWidth={5} /> : <rect key={'gl' + sg} x={sg * ex + gx - r * 0.26} y={ey - r * 0.18} width={r * 0.52} height={r * 0.36} rx={6} fill={PAL.white} fillOpacity={0.25} stroke={PAL.ink} strokeWidth={5} />);
+    els.push(<L key="glb" d={`M${-ex + r * 0.22 + gx} ${ey}h${2 * ex - r * 0.44}`} w={4} />);
   } else if (look.glasses === 'sun') {
     // kính râm cài trên đầu
     els.push(<S key="sg1" d={Rr(-r * 0.62, hy - r * 0.86, r * 0.52, r * 0.26, 10)} f="ink" sw={3} />, <S key="sg2" d={Rr(r * 0.1, hy - r * 0.86, r * 0.52, r * 0.26, 10)} f="ink" sw={3} />);
