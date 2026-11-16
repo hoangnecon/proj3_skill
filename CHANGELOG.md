@@ -11,7 +11,7 @@ User feedback on the "Nước mắt chia đất" draft:
 - **Close-up pass for characters (sv-20 characters §4).**
   - Hair caps now reach −1.42 r, so the scalp no longer shows above the hair.
   - `lips` colours the mouth stroke itself instead of an ellipse drawn over the mouth, which covered the
-    teeth in grin ("răng ghê").
+    teeth in grin ("răng ghê"). Teeth are now a band clipped to the mouth path, so they stay inside the lips.
 - **Visual rest (sv-20 tokens §8).** Grain is now static at alpha 0.14 (it flickered at 15 Hz), and the
   vignette is down to 0.18 ("nhìn mắc mệt").
 - **Delivery (sv-41).** `deliver.mjs` changes:

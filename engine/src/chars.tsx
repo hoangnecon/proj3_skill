@@ -440,7 +440,18 @@ const Head: React.FC<{look: Look; hy: number; R: number; expr: Expr; talk: numbe
     switch (kind) {
       case 'flat': els.push(<L key="m" d={`M${-r * 0.16 + gx} ${my}h${r * 0.32}`} w={lipW} c={lipC} />); break;
       case 'smile': els.push(<L key="m" d={`M${-r * 0.24 + gx} ${my - 4}q${r * 0.24} ${r * 0.2} ${r * 0.48} 0`} w={lipW} c={lipC} />); break;
-      case 'grin': els.push(<S key="m" d={`M${-r * 0.3 + gx} ${my - 8}Q${gx} ${my - 2} ${r * 0.3 + gx} ${my - 8}Q${gx} ${my + r * 0.42} ${-r * 0.3 + gx} ${my - 8}Z`} f="redDark" sw={4.5} />, <path key="mt" d={`M${-r * 0.24 + gx} ${my - 4}Q${gx} ${my + 2} ${r * 0.24 + gx} ${my - 4}L${r * 0.2 + gx} ${my + 6}L${-r * 0.2 + gx} ${my + 6}Z`} fill={PAL.white} />); break;
+      case 'grin': {
+        // răng nằm TRONG miệng: dải trắng dưới môi trên, cắt theo đúng hình miệng (không chòi ra ngoài viền môi)
+        const md = `M${-r * 0.3 + gx} ${my - 8}Q${gx} ${my - 2} ${r * 0.3 + gx} ${my - 8}Q${gx} ${my + r * 0.42} ${-r * 0.3 + gx} ${my - 8}Z`;
+        const cid = `mclip-${look.name ?? 'x'}`;
+        els.push(
+          <clipPath key="mc" id={cid}><path d={md} /></clipPath>,
+          <path key="mf" d={md} fill={PAL.redDark} />,
+          <rect key="mt" x={-r * 0.3 + gx} y={my - 12} width={r * 0.6} height={r * 0.15 + 4} fill={PAL.white} clipPath={`url(#${cid})`} />,
+          <path key="ml" d={md} fill="none" stroke={look.lips ? PAL.red : PAL.ink} strokeWidth={look.lips ? 7 : 4.5} strokeLinejoin="round" />,
+        );
+        break;
+      }
       case 'frown': els.push(<L key="m" d={`M${-r * 0.22 + gx} ${my + 6}q${r * 0.22} ${-r * 0.18} ${r * 0.44} 0`} w={lipW} c={lipC} />); break;
       case 'smirk': els.push(<L key="m" d={`M${-r * 0.18 + gx} ${my + 2}q${r * 0.24} ${r * 0.04} ${r * 0.4} ${-r * 0.14}`} w={lipW} c={lipC} />); break;
       case 'O': els.push(<S key="m" d={E(gx, my + 6, r * 0.12, r * 0.17)} f="redDark" sw={4.5} />); break;

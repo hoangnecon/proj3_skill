@@ -90,6 +90,8 @@ Soft (G4 review — the reviewer must answer each):
     ≤ −1.42 r so the curve peak (≈ 0.75 × control) covers the skull top at −r;
   - mouth decorations: `lips` colours the mouth stroke itself (red, thicker) — never an extra shape drawn
     on top of the mouth: it covers the teeth in `grin`/`joy` and reads as a gruesome mouth ("răng ghê");
+  - teeth sit INSIDE the mouth: a white band under the upper lip, clipped to the mouth path — never a
+    separate shape that can poke past the lip line;
   - glasses, brows, mustache staying on the face in profile and when the head tilts.
 
 ## 5. Recipes (starting points — change at least two fields per character)
