@@ -1,5 +1,37 @@
 # Changelog
 
+## `v3.2.0` — 2026-11-16
+User feedback on the "Nước mắt chia đất" draft:
+- **State board (sv-20 sets §8, sv-22 grammar).** Numbers that change across the film go on one diagram
+  insert whose blocks tween with the numbers; reuse it at the opening and at every change. The reference
+  implementation is `examples/devices/state-board.tsx`. The user rejected a push into a static deed cabinet
+  as the opening ("mở đầu visual tệ").
+- **Prop tip to the face (sv-21 acting §10).** The IK target `taste` puts the hand under the chin so the
+  spoon tip lands on the lips. With the hand at `mouth`, the spoon was going to the forehead.
+- **Close-up pass for characters (sv-20 characters §4).**
+  - Hair caps now reach −1.42 r, so the scalp no longer shows above the hair.
+  - `lips` colours the mouth stroke itself instead of an ellipse drawn over the mouth, which covered the
+    teeth in grin ("răng ghê").
+- **Visual rest (sv-20 tokens §8).** Grain is now static at alpha 0.14 (it flickered at 15 Hz), and the
+  vignette is down to 0.18 ("nhìn mắc mệt").
+- **Delivery (sv-41).** `deliver.mjs` changes:
+  - It renders to `out/_render.mp4`, then muxes in the sound straight from `public/mix.wav`. Remotion's AAC
+    priming had made the sound 43 ms late.
+  - The phone copy is one encode at CRF 33 (the user: "1 bản thôi").
+  - It checks free disk space before rendering, because ENOSPC killed a render at 44 %.
+  - `SV_SKIP_RENDER=1` is for audio-only fixes.
+
+## `v3.1.0` — 2026-11-16
+- **Story spine, not a gag list (sv-10).** The user rejected "Giỗ chia đất": the middle was a list of gags
+  ("khai thác này kia"), the narrator only watched, the twist came from outside the rule, and the ending was
+  a pun ("cái kết nhảm"). Changes:
+  - craft.md §2 now asks for a causal chain in the middle, not a catalogue of groups;
+  - new §2b "Spine" tests: want, chain/delete-test, hidden logic, trap, ending, gags;
+  - G2 rubric questions 11–13.
+- `brief.md` gains `## Spine`: want, the rule's hidden logic, trap, how the ending re-reads the hook.
+  Gate G1 requires it.
+- `beats.md` gains `## Spine`. New lint SC-19 requires ≥ 4 "- vì thế …" / "- nhưng …" causal lines.
+
 ## `v3.0.0` — 2026-11-16
 **Repository restructured: one kind of thing per top-level folder** (the user: the template under the skills
 mixed engine code, standards, demo and reference content with no structure).

@@ -18,13 +18,15 @@ A weak script cannot be saved by pictures. This skill turns an idea into `brief.
 ### G1 — brief
 1. Pitch 3 premises to the user in 1–2 lines each (absurd rule + who suffers + where it ends). Each must
    pass the bible's premise test. Let the user pick (or pick yourself if they delegated, and say so).
-2. Fill `brief.md`: Premise, Why it is funny (+ 3 escalation steps), Characters (2–3 principals + supports,
+2. Fill `brief.md`: Premise, Spine (want, hidden logic of the rule, trap, how the ending re-reads the hook —
+   craft.md §2b), Why it is funny (+ 3 escalation steps), Characters (2–3 principals + supports,
    each with a trait and a visual hook), Locations (3–6, each with a drawable gag sign), Ending, Not copying.
 3. Show the brief; get approval. `gates/G1.review.md`: verdict, `approval: user|delegated`, `user_quote`.
 4. `python3 scripts/sv_gate.py pass G1`.
 
 ### G2 — beats and script
-5. `beats.md`: the six sections (Hook, Setup, Escalation, Turn, Payoff, Button) and the segment map
+5. `beats.md`: Spine first (the causal chain, one "- vì thế …" or "- nhưng …" line per escalation step), then the
+   six sections (Hook, Setup, Escalation, Turn, Payoff, Button) and the segment map
    (`| s1 | Hook | main image |`) — write the map BEFORE the text; every row must be one drawable picture.
 6. `script.json`: write segment by segment from the map. Read craft.md §3–4 while writing, not after.
 7. `python3 scripts/script_lint.py` → fix all SC errors (rules below), consider every warning.
@@ -52,10 +54,14 @@ A weak script cannot be saved by pictures. This skill turns an idea into `brief.
 | SC-16 | no "…" in the spoken text (it becomes a hole in the voice) |
 | SC-17 | no emotion tags (`voice_standard.json` allows none) |
 | SC-18 | pause_after 0.1–0.6 s |
+| SC-19 | beats.md `## Spine` has a causal chain of ≥ 4 "- vì thế …" / "- nhưng …" lines |
 
 ## Rules
 - Narrator: first person, northern, calm deadpan. No southern words, no English, no slang from the internet.
 - One absurd rule, played completely straight, escalating to a system. No magic explained, no moral stated.
+- A spine, not a gag list (craft.md §2b): someone we follow wants something and acts; every beat causes the
+  next; the turn reveals what the rule really measures; the ending springs the rule's trap. Twists from
+  outside the rule (a road, a dream, a disaster) are rejected.
 - Every named person has a place ("tầng năm"), every number is spoken in words.
 - Pacing is a house standard (`standards/pacing.json`): the same words budget and length for every episode, so
   any agent produces the same speed. Emotion lives in the writing; the voice adds none (sv-12).
@@ -68,5 +74,7 @@ A weak script cannot be saved by pictures. This skill turns an idea into `brief.
 | SC-07 monotone | split a long sentence into build + 3-word punch; merge two medium ones |
 | Too long (SC-05) | cut a whole consequence segment, not words from every line; never plan to speed the voice up |
 | Twist feels cheap | plant it: a detail in s1–s3 that the turn recasts |
+| "Kể sự việc", "chỉ là khai thác này kia" | the middle is a catalogue: give the narrator's side a want, rebuild the middle as a vì thế / nhưng chain, delete beats that fail the delete-test |
+| "Cái kết nhảm" | the ending must come from the rule's hidden logic and spring its trap; no puns, no outside events |
 | Segment you cannot picture | rewrite around an object or a place, or merge it with its neighbour |
 | User says "chưa hài" | sharpen specifics (numbers, names, objects) and cut explanations; do not add jokes words |

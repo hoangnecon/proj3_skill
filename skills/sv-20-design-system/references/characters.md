@@ -84,6 +84,13 @@ Soft (G4 review — the reviewer must answer each):
 - Does any principal's top vanish against the wall of their main set? (compare with the set plates)
 - Are heights varied (at least one of: child, short, tall, broad)?
 - Is the ghost/supernatural look used only for the supernatural?
+- **Close-up pass (user, 2026-11-16).** Render every principal/support at close-up size (head ≥ 300 px)
+  in ALL 12 expressions and look for drawing faults that a 25 % thumbnail hides:
+  - scalp showing above the hair line ("lòi đầu hói"): a hair cap's cubic control points must sit at
+    ≤ −1.42 r so the curve peak (≈ 0.75 × control) covers the skull top at −r;
+  - mouth decorations: `lips` colours the mouth stroke itself (red, thicker) — never an extra shape drawn
+    on top of the mouth: it covers the teeth in `grin`/`joy` and reads as a gruesome mouth ("răng ghê");
+  - glasses, brows, mustache staying on the face in profile and when the head tilts.
 
 ## 5. Recipes (starting points — change at least two fields per character)
 

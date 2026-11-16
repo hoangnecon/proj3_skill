@@ -120,8 +120,13 @@ and is framed at zoom ≥ 1.2 when the narration points at it.
 
 ## 8. Screen finishing (applied by Film.tsx — do not re-implement)
 
-Grain (`#grain` turbulence, multiply, reseeded every 2 frames), vignette (`#vig`, navy 0.35 at the edge),
+Grain (`#grain` turbulence, multiply, alpha 0.14, **static seed**), vignette (`#vig`, navy 0.18 at the edge),
 optional night grade (`shot.night` 0..1), captions at y 1640, chunks ≤ 26 characters, active word yellow.
+**Visual rest (user, 2026-11-16: "nhìn mắc mệt").** The film is watched on a phone for 2–3 minutes. Never
+animate full-frame texture (grain reseeded every 2 frames flickered at 15 Hz over the whole picture); keep
+grain ≤ 0.15 alpha and the vignette ≤ 0.2. Halftone dots stay at the §4 opacities — do not stack a second
+dots layer on a set that already has one. If a contact sheet looks busy at thumbnail size, remove texture
+before removing story detail.
 Keep the caption band y 1480–1760 free of overlays (lint OV-03) and of important set text at the
 framing used while narration plays.
 

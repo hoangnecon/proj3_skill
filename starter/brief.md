@@ -5,6 +5,13 @@
 ## Premise
 TODO một câu: AI muốn GÌ, bị CÁI GÌ chặn, chuyện vô lý leo thang thế nào. (vd: "Một toà nhà 17 tầng họp 3 buổi để quyết thang máy có được chở người không.")
 
+## Spine
+TODO bốn dòng (sv-10 craft.md §2b):
+- Muốn: ai (tôi / người nhà tôi) muốn gì dưới luật này, và làm gì để có nó.
+- Luật thật: điều luật THỰC SỰ đo / thưởng — lộ ra ở cú lật, làm các câu đầu đọc khác đi.
+- Bẫy: luật bắt chính người thắng (hoặc tôi) thế nào ở cao trào.
+- Kết: câu cuối đọc lại câu mở đầu ra sao.
+
 ## Why it is funny
 TODO cơ chế hài chính (quy tắc vô lý được thi hành nghiêm túc / hiểu nhầm leo thang / ai cũng giấu một bí mật...) và 3 nấc leo thang dự kiến.
 

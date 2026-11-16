@@ -68,12 +68,12 @@ export const Defs: React.FC<{seed?: number}> = ({seed = 1}) => (
     </pattern>
     <filter id="grain" x="0" y="0" width="100%" height="100%">
       <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed={seed} />
-      <feColorMatrix type="matrix" values="0 0 0 0 0.12  0 0 0 0 0.18  0 0 0 0 0.43  0 0 0 0.42 0" />
+      <feColorMatrix type="matrix" values="0 0 0 0 0.12  0 0 0 0 0.18  0 0 0 0 0.43  0 0 0 0.14 0" />
       <feComposite in2="SourceGraphic" operator="in" />
     </filter>
     <radialGradient id="vig" cx="0.5" cy="0.5" r="0.75">
       <stop offset="0.6" stopColor={PAL.navy} stopOpacity={0} />
-      <stop offset="1" stopColor={PAL.navy} stopOpacity={0.35} />
+      <stop offset="1" stopColor={PAL.navy} stopOpacity={0.18} />
     </radialGradient>
     <radialGradient id="glowY">
       <stop offset="0" stopColor="#fff2b8" stopOpacity={0.9} />

@@ -166,6 +166,15 @@ receipt, a ledger page, a TV screen. No floor, no actors. They carry the reveal 
 sizes, a stamp/signature/doodle, a hand or object edge entering frame for scale. Use `keys` to write
 lines in progressively or stamp at a word.
 
+**Numbers that change across the film → a state board, not a document with text numbers.** When the story
+tracks a quantity over and over (who owns how many m², votes, money, days), build ONE diagram insert whose
+blocks are proportional to the numbers and tween between keys (shotlist `keys: {ca: [[208, 0], [214, 'sX@word', 0.6]]}`).
+Each owner = one colour block + face badge + "name · value" tag; a block too thin for its tag gets a
+callout line to a tag in a free area (never in the caption band). Reuse the same board at every change —
+the opening (rule shown by blocks reshuffling year to year), each gain/loss, the twist, the ending.
+The user rejected a text-only "sổ đỏ" page in the remake of "Giỗ chia đất": the original's moving parcel
+map was the image they remembered. Reference implementation: `examples/devices/state-board.tsx`.
+
 ## 9. Object bank — Vietnamese everyday locations
 
 Pick from these (and add your own) — every set needs fixtures + furniture + text + clutter + light.

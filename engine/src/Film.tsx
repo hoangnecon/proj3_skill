@@ -368,7 +368,7 @@ export const Film: React.FC = () => {
   const wipe = shot.tr === 'wipe' ? clamp(ts / 0.3) : 1;
   const fadeIn = 1 - clamp(t / 0.3);
   const fadeOut = clamp((t - (DURATION - 0.8)) / 0.7);
-  const grainSeed = Math.floor(frame / 2) % 6;
+  const grainSeed = 0; // hạt tĩnh: hạt nhấp nháy mỗi 2 khung làm mỏi mắt
 
   return (
     <AbsoluteFill style={{background: PAL.navy}}>

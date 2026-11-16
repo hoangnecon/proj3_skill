@@ -63,8 +63,15 @@ between) so the turn reads.
 Walk from/to x beyond the camera edge (`cam` x ± 540/k + 150). Fades (`enter`/`exit`) are only for
 memories, ghosts, imagination.
 
+## 10. Hand prop to the face (taste, drink, smoke, phone to ear)
+The IK target is where the HAND goes, but the eye reads the prop's TIP. A spoon is ~96 px long, so a hand
+at `mouth` put the bowl on the forehead ("đưa lên trán chứ không phải miệng"). Use the prop-aware target
+(`taste`: hand under the chin, tip at the lips) or add one for a new prop: tip = hand + prop vector after
+the prop's rotation. Check it in a close-up strip, frame by frame, at the moment of contact.
+
 ## Acting checklist per shot
 - Who is the subject? They move or change expression on the shot's key word.
 - Anticipation before every action (settle before reach, crouch before sit is automatic).
 - The world reacts (keys) and the sound follows (automatic from keys/reaches/overlays).
 - Listeners react too: give non-talking characters an expression key on the punch word.
+- Any prop touching the face: the prop's tip (not the hand) reaches the mouth/ear/eye (§10).

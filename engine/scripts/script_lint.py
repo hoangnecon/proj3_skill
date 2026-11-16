@@ -113,9 +113,14 @@ beats = (ROOT / "beats.md").read_text() if (ROOT / "beats.md").exists() else ""
 if not beats or "TODO" in beats:
     err("SC-12", "beats.md missing or still has TODO")
 else:
-    for h in ["## Hook", "## Setup", "## Escalation", "## Turn", "## Payoff", "## Button", "## Segment map"]:
+    for h in ["## Spine", "## Hook", "## Setup", "## Escalation", "## Turn", "## Payoff", "## Button", "## Segment map"]:
         if h not in beats:
             err("SC-12", f"beats.md lacks section '{h}'")
+    # a spine, not a gag list (sv-10 craft.md §2b): the middle is a causal chain
+    spine = beats.split("## Spine", 1)[1].split("\n## ", 1)[0] if "## Spine" in beats else ""
+    links = re.findall(r"^\s*-\s*(vì thế|nhưng)\b", spine, re.M | re.I)
+    if len(links) < 4:
+        err("SC-19", f"beats.md ## Spine has {len(links)} causal links; write the chain as >= 4 '- vì thế …' / '- nhưng …' lines")
     for i in ids:
         if not re.search(rf"\|\s*{i}\s*\|", beats):
             err("SC-13", f"beats.md segment map has no row for {i}")

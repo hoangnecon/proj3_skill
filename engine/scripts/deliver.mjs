@@ -19,24 +19,39 @@ if (mr.inputs.shots !== sha('qa/shots.json')) die('shots changed after the mix �
 if (mr.inputs.voice !== sha('audio/voice.wav')) die('voice changed after the mix — re-run scripts/mix.py');
 
 fs.mkdirSync('out', {recursive: true});
-const serveUrl = await bundle({entryPoint: path.resolve('src/index.ts')});
-const comp = await selectComposition({serveUrl, id: 'Film', chromiumOptions: {gl: 'angle'}});
+// Remotion writes every frame to the temp dir (~0.5 MB each) before encoding; ENOSPC at 44 % cost a 10-minute render once.
+{
+  const need = (P.DURATION * 30 * 0.6) / 1024 + 1.5; // GB
+  const free = +execFileSync('df', ['-k', '/private/var/folders']).toString().trim().split('\n').pop().split(/\s+/)[3] / 1024 / 1024;
+  if (free < need) die(`only ${free.toFixed(1)} GB free, render needs ~${need.toFixed(1)} GB — free disk space first (ask the user before deleting their files)`);
+}
+const raw = 'out/_render.mp4';
 const final = 'out/final.mp4';
-let last = 0;
-await renderMedia({serveUrl, composition: comp, codec: 'h264', crf: 18, outputLocation: final, chromiumOptions: {gl: 'angle'}, concurrency: 4,
-  onProgress: ({progress}) => { if (progress - last > 0.1) { last = progress; process.stdout.write(`\rrender ${(progress * 100).toFixed(0)}%`); } }});
-console.log('\nok', final);
+// SV_SKIP_RENDER=1 reuses out/_render.mp4 when it is newer than the shotlist and the mix (audio-only fixes, re-encodes)
+const fresh = fs.existsSync(raw) && ['src/episode/shotlist.ts', 'src/episode/sets.tsx', 'src/episode/cast.ts'].every((f) => fs.statSync(raw).mtimeMs > fs.statSync(f).mtimeMs);
+if (process.env.SV_SKIP_RENDER && fresh) {
+  console.log('reuse', raw);
+} else {
+  const serveUrl = await bundle({entryPoint: path.resolve('src/index.ts')});
+  const comp = await selectComposition({serveUrl, id: 'Film', chromiumOptions: {gl: 'angle'}});
+  let last = 0;
+  await renderMedia({serveUrl, composition: comp, codec: 'h264', crf: 18, outputLocation: raw, chromiumOptions: {gl: 'angle'}, concurrency: 4,
+    onProgress: ({progress}) => { if (progress - last > 0.1) { last = progress; process.stdout.write(`\rrender ${(progress * 100).toFixed(0)}%`); } }});
+  console.log('\nok', raw);
+}
+// Remotion's AAC keeps the 2048-sample encoder priming without an edit list -> sound plays ~43 ms late.
+// Take the picture from the render and the sound straight from public/mix.wav; ffmpeg's AAC writes a proper edit list.
+const vdur = +JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=duration', '-of', 'json', raw]).toString()).streams[0].duration;
+const AUD = ['-map', '0:v:0', '-map', '1:a:0', '-af', 'apad', '-t', vdur.toFixed(3)];
+execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', raw, '-i', 'public/mix.wav', ...AUD, '-c:v', 'copy', '-c:a', 'aac', '-b:a', '256k', '-movflags', '+faststart', final]);
+console.log('ok', final);
 
 const script = JSON.parse(fs.readFileSync('script.json', 'utf8'));
 const slug = (script.title ?? 'episode').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const phone = `out/${slug}_phone.mp4`;
-let crf = 25;
-for (;;) {
-  execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', final, '-c:v', 'libx264', '-preset', 'slow', '-crf', String(crf), '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', phone]);
-  const mb = fs.statSync(phone).size / 1e6;
-  if (mb <= 30 || crf >= 34) break;
-  crf += 2;
-}
+// one encode only (the user does not want a search over several CRFs); crf 33 lands ~26 MB for a 2:40 flat-colour episode
+const crf = +(process.env.SV_PHONE_CRF || 33);
+execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', raw, '-i', 'public/mix.wav', ...AUD, '-c:v', 'libx264', '-preset', 'medium', '-crf', String(crf), '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', phone]);
 const probe = (f) => JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', f]).toString());
 const pf = probe(final);
 const v = pf.streams.find((s) => s.codec_type === 'video');

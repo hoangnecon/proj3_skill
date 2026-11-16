@@ -66,6 +66,10 @@ the set `bounds` (CA-05 error — the edge of the world is showing).
 **Turn:** cut wide on the twist word, punch or flash, silence beat (music drop, see sv-40).
 **Button (last 1–2 shots):** a single held image ≥ 2.5 s with a drift and one last small gag, then the end.
 
+**Opening hook.** Show the story's rule as a picture in motion within the first 4 s (the state board
+reshuffling year to year, sv-20 sets.md §8), not a slow push into a static prop. In the remake of
+"Giỗ chia đất" the user called a push into the deed cabinet "mở đầu visual tệ".
+
 ## 8. Self-check before G5
 - Mean shot length 1.8–2.8 s; none < 0.45 s (SH-14) unless waived; long holds (> 6.5 s) justified.
 - Every set's first shot establishes. Every principal has at least one medium or close shot.

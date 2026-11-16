@@ -11,8 +11,14 @@ description: Final QA and delivery of a story-video episode — render the maste
 ## Workflow
 1. Status: `python3 scripts/sv_gate.py status` — G1–G6 must be PASS (not STALE). If something is stale,
    go back to that skill; never deliver around a stale gate.
-2. Render: `node scripts/deliver.mjs` (≈ 4–8 min for 150 s; run it in the background). It refuses a stale mix.
-   Outputs: `out/final.mp4` (master), `out/<slug>_phone.mp4` (CRF 25 → +2 until ≤ 30 MB),
+2. Render: `node scripts/deliver.mjs` (≈ 10–15 min for 150 s; run it in the background). It refuses a stale
+   mix and refuses to start when the disk has less free space than the frames need (~0.6 MB per frame + 1.5 GB):
+   free space first, and ask the user before deleting anything of theirs (caches included).
+   The Remotion render goes to `out/_render.mp4`; ffmpeg then takes its picture and the sound straight from
+   `public/mix.wav` (Remotion's AAC kept 2048 priming samples → sound 43 ms late, sync check failed).
+   `SV_SKIP_RENDER=1` reuses `_render.mp4` for audio-only fixes.
+   Outputs: `out/final.mp4` (master), `out/<slug>_phone.mp4` (ONE encode at CRF 33, `SV_PHONE_CRF` to change —
+   the user objected to encoding several copies to search for a size),
    `qa/deliver_report.json` (duration, size, fps, audio, hashes), `qa/final_check.png` (12 frames),
    `qa/video_audio.json` (sv-42 delivery checks on the audio inside both mp4s: AAC loudness drift, true
    peak, audio/video length, sync by cross-correlation with the mix). Any failed check blocks G7.
@@ -25,6 +31,6 @@ description: Final QA and delivery of a story-video episode — render the maste
    anything you knowingly left imperfect.
 
 ## Rules
-- The phone copy is the one the user shares; always ≤ 30 MB.
+- The phone copy is the one the user shares; one encode, normally 25–30 MB for 2–3 min.
 - Never hand over a file whose gate is not PASS, and never claim "checked" for something you did not open.
 - Keep `out/final.mp4` as the master; re-encode copies from it, never from the phone copy.
