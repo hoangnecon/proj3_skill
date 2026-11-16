@@ -1,4 +1,4 @@
-# story-video-skills (`v3.0.0`)
+# story-video-skills (`v3.4.0`)
 
 A gated production suite for **Vietnamese 2D story videos**: vertical 1080×1920 at 30 fps, 2–3 minutes,
 narrated by the northern male voice Hải Đăng, drawn in a flat "riso ink" style, and animated in Remotion

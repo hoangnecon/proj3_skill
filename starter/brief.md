@@ -1,28 +1,36 @@
 # Brief — TODO tên tập
 
-> Gate G1. Điền mọi mục, xoá hết TODO, rồi đưa người dùng duyệt. Xem sv-01-series-bible và sv-10-script.
+> Gate G1. Điền mọi mục, xoá hết TODO, rồi đưa người dùng duyệt. Xem `sv-01-series-bible` và `sv-10-script` (`premise-ideation.md`, `craft.md`).
+
+## Archetype
+- Chọn 1: TODO `Personal Rule-Trap | Systemic Satire | Hybrid VN Trap`
+- Generative lens: TODO (1 trong 4 lăng kính trong `sv-10/references/premise-ideation.md`: Đảo tiên đề vật lý-tri giác | Đồ vật có luật trạng thái | Hai nửa nhân loại đối lập/cộng sinh | Dị biệt cá nhân ngược đời)
 
 ## Premise
-TODO một câu: AI muốn GÌ, bị CÁI GÌ chặn, chuyện vô lý leo thang thế nào. (vd: "Một toà nhà 17 tầng họp 3 buổi để quyết thang máy có được chở người không.")
+- Câu mở `s1` (`≤ 16–20` từ, tạo ngay câu hỏi "Khoan, sống kiểu gì?!"): TODO
+- Cơ chế & hình ảnh vẽ được 1 khung (`sv-20`): TODO
+- Bịt cửa thoát miễn phí (`s2–s3` — vì sao không thể tắt hay né dễ): TODO
 
 ## Spine
-TODO bốn dòng (sv-10 craft.md §2b):
-- Muốn: ai (tôi / người nhà tôi) muốn gì dưới luật này, và làm gì để có nó.
-- Luật thật: điều luật THỰC SỰ đo / thưởng — lộ ra ở cú lật, làm các câu đầu đọc khác đi.
-- Bẫy: luật bắt chính người thắng (hoặc tôi) thế nào ở cao trào.
-- Kết: câu cuối đọc lại câu mở đầu ra sao.
+TODO — Nút thắt 5 điểm (viết ngược từ Điểm Mở trước, `craft.md §2–§2b`):
+- **Điểm Thắt 1 (Want & Handicap ở `s4–s7`) + Foil:** Tôi (hoặc người nhà) muốn gì, chịu bất lợi cụ thể nào dưới luật, nhân vật đối cực (Foil) là ai?
+- **Vật Gài (`Plant` ở `≤ 45%`):** Chi tiết vật lý, bố cục không gian hoặc điều khoản phụ nào được gài tự nhiên ở Hồi 1?
+- **Điểm Thắt 2 (Crisis & Ticking Clock ở `~38%–45%`):** Biến cố nào đánh thẳng vào `Plant`, đồng hồ đếm ngược là gì, 2–3 cách giải thông thường thất bại thế nào?
+- **Điểm Thắt 3 (Thế Kẹt Hai Chiều — Double-Bind):** Chọn A (dùng luật bình thường) mất gì; chọn B (không dùng luật) chết kẹt ra sao?
+- **Điểm Mở (Lateral Rule-Hack + Trả giá ở `≥ 65%`):** Dùng đúng vật lý/câu chữ nội tại của luật + `Plant` để phá bẫy thế nào, và nhân vật trả giá thực tế gì?
+- **Cú Lật Quá Khứ (`Turn`):** Chi tiết/hành vi khó hiểu của Foil hoặc gia đình ở Hồi 1 đổi nghĩa ra sao (tuyệt đối không tai nạn ngoài luật hay phủ nhận phép màu)?
 
 ## Why it is funny
-TODO cơ chế hài chính (quy tắc vô lý được thi hành nghiêm túc / hiểu nhầm leo thang / ai cũng giấu một bí mật...) và 3 nấc leo thang dự kiến.
+TODO cơ chế hài deadpan chính (luật ngược đời thi hành nghiêm túc, thích nghi đời thường ở xóm/trường/chợ) và tối đa 2–3 gag Hồi 1 ngắn gọn.
 
 ## Characters
-TODO 2–3 nhân vật chính (principal) + phụ: tên, vai, một nét tính cách, một nét ngoại hình dễ nhận ra từ xa.
+TODO 2–3 nhân vật chính (principal) + phụ: tên, vai + nơi ở (`"Bà Hạnh tầng năm"`), một nét tính cách, một nét ngoại hình `sv-20` dễ nhận ra từ xa.
 
 ## Locations
-TODO 3–6 bối cảnh; mỗi bối cảnh một dòng: là nơi nào, đồ vật đặc trưng, một chữ/biển hiệu gây cười.
+TODO 3–6 bối cảnh thuộc bank `sv-20`; mỗi bối cảnh một dòng: là nơi nào, đồ vật đặc trưng, một chữ/biển hiệu gây cười.
 
 ## Ending
-TODO câu chốt cuối (punch) và hình ảnh chốt (button) — phải đảo lại hoặc đẩy cái vô lý lên nấc cuối.
+TODO câu chốt cuối (`Button` `≤ 12` từ, deadpan, 0 giảng đạo lý) và hình ảnh chốt lật lại câu mở đầu.
 
 ## Not copying
-TODO nêu rõ khác các kênh tham khảo ở đâu (cốt truyện, nhân vật, câu chốt). Không dùng lại tình huống, câu thoại, nhân vật của họ.
+TODO nêu rõ tập tham khảo gần nhất từ khảo sát/kênh ngoài và giải thích khác hoàn toàn ở đâu (luật, cơ chế bẫy, cú hack cao trào, câu kết).

@@ -1,6 +1,8 @@
 # Exemplar script — "Thang máy ăn bí mật" (annotated)
 
-Our own reference episode (not from any channel). Read it for structure and rhythm; never reuse its premise,
+> **v3.4.0 Structural Warning:** Keep *Thang máy ăn bí mật* as a reference **only** for its deadpan northern voice, concrete floor/price/room details, and sentence-length rhythm (`mean 9.4`, `SD 4.3`). Do **not** copy its `s4–s20` structure or its ending: a passive neighbour tour (`s4–s20`) with no protagonist agency until `s21`, followed by a magic-denial reveal (`s22–s24`, *"it ran on electricity"*), are pre-v3.4 anti-patterns now blocked by `SC-20`, `SC-21`, `SC-24`, and `SC-25`. For narrative architecture, follow `craft.md` (§2–§2b) and `premise-ideation.md`.
+
+Our own early reference episode (not from any channel). Read it for voice and rhythm; never reuse its premise,
 lines or characters. Each segment: text, then what it does.
 
 **s1** — Chung cư tôi cao mười bảy tầng. Thang máy ở đây không cần thẻ từ. Nó cần sự thật.  

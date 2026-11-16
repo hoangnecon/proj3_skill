@@ -18,8 +18,8 @@ checks), `mix_targets.json` (voice chain, music 15–18 dB under, −14 LUFS), `
 ## Phase map
 | Gate | Phase | Skill | Machine check | Evidence you must open | Approval |
 |---|---|---|---|---|---|
-| G1 | Brief | sv-10 (+ sv-01) | brief sections filled | brief.md | **user** |
-| G2 | Script + beats | sv-10 | `script_lint.py` | qa/script_lint.json | **user** |
+| G1 | Brief | sv-10 (+ sv-01) | Archetype, Blocker, 5-Knot Spine filled | brief.md | **user** |
+| G2 | Script + beats | sv-10 | `script_lint.py` (`SC-01..26`) | qa/script_lint.json | **user** |
 | G3 | Voice | sv-12 | one take/line vs voice_standard.json + pacing.json | qa/voice_report.json + listening | — |
 | G4 | Scene plan + cast + sets | sv-23, sv-20 | `scene_audit.py plan` (SC) + `lint.mjs design` (CH/TK/SE) | qa/scene_board.png, qa/design/*.png | **user** |
 | G5 | Shots + motion | sv-22, sv-21, sv-23 | `lint.mjs shots` + `scene_audit.py shots` (clutter) | qa/contact_p*.png, qa/strips/*.png, qa/clutter_board.png | — |

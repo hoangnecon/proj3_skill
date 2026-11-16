@@ -94,7 +94,7 @@ def checks(g):
         txt = b.read_text() if b.exists() else ""
         if not txt or "TODO" in txt:
             bad.append("brief.md missing or has TODO")
-        for h in ["## Premise", "## Spine", "## Why it is funny", "## Characters", "## Locations", "## Ending", "## Not copying"]:
+        for h in ["## Archetype", "## Premise", "## Spine", "## Why it is funny", "## Characters", "## Locations", "## Ending", "## Not copying"]:
             if h not in txt:
                 bad.append(f"brief.md lacks '{h}'")
     elif g == "G2":

@@ -1,6 +1,14 @@
 # Changelog
 
-## v3.3.0 — 2026-11-16 · scene design process + cute faces
+## `v3.4.0` — 2026-11-16 · 5-Knot story engine + premise ideation (548-script survey)
+Grounded in the 548-script / 28-channel World-Rule Shorts survey (`docs/world-rule-survey-2026-11-16.md`), keeping `standards/pacing.json` unchanged (`140–165 s`, `600–720` words at Hải Đăng `1.0×`):
+- **Three archetypes & upgraded Premise Test (`sv-01-series-bible`):** Supports `Personal Rule-Trap` (default, 6.0× median views over external-monster templates), `Systemic Satire` (active moves only), and `Hybrid VN Trap`. Adds *Instant Cognitive Itch (`s1 ≤ 18w`)*, *Cannot-Turn-Off*, *Surface-Loophole Blocker*, *Weaponizable Flaw*, and *Banned Premise Traps* (no arbitrary wrist/step quotas, no generic moral-to-element clichés, no external monsters/magic-denial, no `"name = superpower"`).
+- **New ideation guide (`sv-10-script/references/premise-ideation.md`):** Four Generative Lenses (perceptual/physical axiom inversion, strict object state law, binary split humanity, backwards personal glitch) plus Reverse-Design Protocol (designing the Lateral Rule-Hack and Double-Bind before `s1`).
+- **3-Act / 10-Beat 5-Knot Engine (`sv-10-script` `SKILL.md` + `craft.md` + `exemplar.md`):** Enforces Act 1 `≤ 42%`, personal pivot by `s7` / `< 40%`, ticking Double-Bind, internal Lateral Rule-Hack from Act-1 `Plant`, Past-Reinterpreting `Turn`, and `≤ 12w` deadpan `Button`; updates rubric to 14 checks and marks *Thang máy* `s4–s20` / `s22–s24` as pre-v3.4 voice/rhythm-only reference.
+- **Starter templates (`starter/`):** `brief.md` adds `## Archetype`, Generative Lens, Surface Blocker, and 5-Knot `## Spine`; `beats.md` adds `## Plant & Payoff`, `[sX]` spine citations, and 10-beat `## Segment map` labels; `G1.review.md` & `G2.review.md` aligned.
+- **Automated script lint (`engine/scripts/script_lint.py`, `sv_gate.py`, `CONVENTIONS.md`):** Raises `SC-09` short-sentence (`≤ 5w`) floor to `≥ 6` (`< 10` warn), adds `SC-20..26` (middle protagonist agency, Act-1 `≤ 42%` ceiling, `Plant -> Payoff` mapping, `## Archetype` + urgency cues, `≤ 12w` non-moralizing/non-magic-denial endings, early personal pivot, `[sN]` Spine integrity), and requires `## Archetype` in `G1`.
+
+## `v3.3.0` — 2026-11-16 · scene design process + cute faces
 - New skill **sv-23-scene-design**. It adds:
   - a location bible (≤ 6 places, each with a purpose, a hero prop, a wall hue and a three-plane layout);
   - `scenes.json`, mapping every beat to a scene;

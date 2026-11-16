@@ -1,4 +1,4 @@
-# Conventions (`v3.0.0`)
+# Conventions (`v3.4.0`)
 
 Enforced by `tools/validate_skills.py`.
 
@@ -31,7 +31,7 @@ pin `standards/` by hash.
 ## Rules and lint IDs
 | Prefix | Area | Where |
 |---|---|---|
-| SC-01..19 | script, words budget, voice text rules, story spine | `scripts/script_lint.py` |
+| SC-01..26 | script, words budget, voice text rules, 5-Knot spine & Act-1/Plant/Button/Pivot checks | `scripts/script_lint.py` |
 | CH-01..09 | characters | `scripts/lint.mjs design` |
 | TK-01..03 | tokens (no raw colours, one font) | `lint.mjs design` |
 | SE-01..13 | sets: density, text, halftone, glow, bounds, life, rendered-plate emptiness | `lint.mjs design` |
