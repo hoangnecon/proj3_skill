@@ -1,5 +1,12 @@
 # Changelog
 
+## `v3.4.1` — 2026-11-16 · scene-design rollback
+- Removed **sv-23-scene-design** and `engine/scripts/scene_audit.py`.
+  - Its caps (≤ 4–5 props per plane, plain floors, "delete props when busy", edge ≤ 0.075, ≤ 15 colours) produced sparse, block-built sets.
+  - The user rejected them in favour of the dense v3.2.0 sets.
+- G4/G5 in `sv_gate.py` and `sv-00` are back to the v3.2.0 set and layout checks.
+- The cute face rig from v3.3.0 (`chars.tsx`, `side.tsx`, sv-20 `characters.md` §1b) stays.
+
 ## `v3.4.0` — 2026-11-16 · 5-Knot story engine + premise ideation (548-script survey)
 Grounded in the 548-script / 28-channel World-Rule Shorts survey (`docs/world-rule-survey-2026-11-16.md`), keeping `standards/pacing.json` unchanged (`140–165 s`, `600–720` words at Hải Đăng `1.0×`):
 - **Three archetypes & upgraded Premise Test (`sv-01-series-bible`):** Supports `Personal Rule-Trap` (default, 6.0× median views over external-monster templates), `Systemic Satire` (active moves only), and `Hybrid VN Trap`. Adds *Instant Cognitive Itch (`s1 ≤ 18w`)*, *Cannot-Turn-Off*, *Surface-Loophole Blocker*, *Weaponizable Flaw*, and *Banned Premise Traps* (no arbitrary wrist/step quotas, no generic moral-to-element clichés, no external monsters/magic-denial, no `"name = superpower"`).

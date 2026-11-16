@@ -41,7 +41,7 @@ One weird, topsy-turvy rule enters ordinary northern Vietnamese life and is trea
 - **"Birth name = superpower" / generic fantasy gifts:** Avoid tropes where names grant powers, or everyone gets cool superpowers with no paradoxical handicap.
 
 ## World and motifs
-- Places (`sv-20` / `sv-23` location bank): chung cư, ngõ, chợ, phường, tổ dân phố, nhà văn hoá, quán nước, trường học, gác xép, hầm gửi xe.
+- Places (`sv-20` location bank): chung cư, ngõ, chợ, phường, tổ dân phố, nhà văn hoá, quán nước, trường học, gác xép, hầm gửi xe.
 - People: bà tổ trưởng, ông bảo vệ, cán bộ phường, bà bán nước, thằng cu, ông cụ, cặp vợ chồng trẻ, anh shipper — named with a place (`"Bà Hạnh tầng năm"`, `"chú Toàn số nhà mười hai"`).
 - Recurring Vietnamese texture (use only where it sharpens stakes, never as filler): official notices, red stamps, price boards, loudspeaker announcements, narrow alleys, shared courtyards.
 
