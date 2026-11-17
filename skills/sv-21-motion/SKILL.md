@@ -19,7 +19,7 @@ mechanics (anticipation → contact → the world reacting). This skill is how t
    it lands on. Write the actor with anchors, coordinates from `src/episode/geo.ts`.
 2. `node scripts/lint.mjs shots` — fix every MO-*, SZ-*, SH-* error. It also writes
    `qa/strips_needed.json`: one strip for every walk, reach, sit/stand, ride and animated set key.
-3. `node scripts/qa.mjs strips` → `qa/strips/<name>.png` (6–10 frames with timestamps).
+3. `node scripts/qa.mjs strips` → `qa/strips/<name>.jpg` (6–10 full frames with timestamps, 2 rows, light JPEG).
 4. Look at EVERY strip with the checklist below. Fix, re-render that strip
    (`node scripts/qa.mjs strips <name>`), look again.
 5. In `gates/G5.review.md`, one line per strip saying what you verified.
@@ -41,7 +41,9 @@ mechanics (anticipation → contact → the world reacting). This skill is how t
 - Talkers are big enough to read (≥ 480 px tall on screen, lint SZ-01). Listeners react on the punch word.
 - Every shot changes something (lint MO-08 warns on frozen shots).
 - Never close G5 on strips you did not open. The gate checks that every strip in
-  `qa/strips_needed.json` exists, is newer than the shotlist, and is named in the review with a remark.
+  `qa/strips_needed.json` exists, matches the current shot (content hash), and is named in the review with a remark.
+- For hands, feet and contact, open the measurement crops (`node scripts/qa.mjs crops <i>`): the strip shows the
+  move, the crops show whether the hand is really ON the target and the foot really ON the floor.
 
 ## Fixes for common defects
 | Defect in the strip | Fix |

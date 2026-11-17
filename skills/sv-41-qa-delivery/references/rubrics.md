@@ -29,7 +29,7 @@ See sv-21 strip checklist (walk, reach, sit/stand, ride, set key).
 | Ending | button line holds ≥ 2.5 s, music resolves, no black frames at the end |
 | Technical | 1080×1920, 30 fps, duration = voice + tail, file plays on a phone |
 
-## Spot-check sheet (`qa/final_check.png`)
+## Spot-check sheet (`qa/final_check.jpg`)
 12 frames sampled from the encoded mp4. Compare against the contact sheet: same pictures, no
-encoding artefacts (banding on halftone is acceptable at the phone copy's CRF, blocking is not), captions
+encoding artefacts (banding on halftone is acceptable at the delivery CRF, blocking is not), captions
 present.

@@ -4,7 +4,7 @@
 | Check | Range | Reason |
 |---|---|---|
 | integrated_lufs | −14.5…−13.5 | YouTube/TikTok/Facebook normalise to about −14; mastering there means the platform does not turn us down or up, and every episode plays at the same level |
-| true_peak_dbtp | ≤ −1.0 | AAC encoding adds overshoot; −1 dBTP on the master keeps the phone copy below −0.5 |
+| true_peak_dbtp | ≤ −1.0 | AAC encoding adds overshoot; −1 dBTP on the master keeps the delivered AAC below −0.5 |
 | lra_lu | 1…8 | continuous fast narration is naturally compact (≈ 1–3 LU); above 8 the quiet lines get lost on a phone |
 | max_short_term_lufs | ≤ −9 | no 3-second stretch blasts (sfx pile-ups, a shouted line plus music) |
 | clipped_samples / dc_offset | 0 / ±0.001 | hard errors |

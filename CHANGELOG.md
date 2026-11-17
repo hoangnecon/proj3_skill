@@ -1,5 +1,23 @@
 # Changelog
 
+## `v3.6.0` — 2026-11-17 · speed + per-shot review (perf plan, docs/perf-plan-2026-11-17.md)
+- **No phone copy:** `deliver.mjs` makes only `out/final.mp4`; G7 drops the size check; `final_check.jpg`. Render concurrency adapts to the CPU count (4–8).
+- **Fast QA renders:** `qa.mjs` and `design.mjs` share one browser and 4 workers (`SV_QA_WORKERS`), with QA frames at half size. On hắt-xì (70 shots): full contact 3 min → 33 s, a re-run with no change takes 5 s, 26 strips take 40 s, and a one-shot check takes 3 s.
+- **Light QA images:** contact, strips, shot, cards and crops are JPEG at 100–400 KB. Design sheets get `_v.jpg` views and set plates a `_zoom.jpg` (3×3). Strips stay full frame, in 2 rows.
+- **Incremental by content hash:**
+  - Each shot has a hash in `qa/cache.json`; `contact` re-renders only changed shots, marks them ● and writes `qa/changed.json`.
+  - `design.mjs --changed` and `--status`.
+  - Gates G4 and G5 check freshness by hash (`qa.mjs status`, `design.mjs --status`), not by file time.
+- **Visual fix ≠ remix:** `qa/timing.json` (cut times, keys, reaches, overlays) is the mix's dependency (G6 input, `deliver.mjs` check). Pose, prop, set or camera fixes no longer stale the mix.
+- **Per-shot review:**
+  - `qa.mjs cards` (3 frames, words, flags) and `qa.mjs crops <i>` (full-resolution head, hands, feet and overlap crops placed by `geom.mjs`).
+  - `qa/review/NN.json` per shot with 7 checks; reviewer ≠ builder.
+  - G5 requires a current review for every shot, crops for HOT shots, and a 10 % cross-check. This replaces the per-shot lines in `G5.review.md`.
+- **Geometry lint:** GE-01 (body overlap), GE-04 (head cut by the frame, face in the caption band) and GE-07 (1.25–1.6× size jump) write `qa/hot.json`.
+- **Roles:** sv-00 `references/roles.md` gives one-page briefs for the conductor, builders and reviewers. One render at a time per episode (`qa/.render.lock`).
+- No reuse of sets or characters across episodes (house rule).
+- **Not done yet:** pixel checks (PX-*), hand-to-target distance and foot-on-floor measures (these need reach targets and floor y in the shot table), G4 portrait cards.
+
 ## `v3.5.0` — 2026-11-17 · per-sentence 5.25 ups rhythm, bilingual `<en>`, ellipsis & emotion tags
 - **Offline per-sentence fast rhythm (`standards/voice_standard.json` v2.0, `standards/pacing.json` v2.0, `engine/scripts/voice.py`, `sv-12`):**
   - Synthesizes sentence-by-sentence with VieNeu V3 Turbo `Hải Đăng` (`use_ref_codes=True`, `temperature=0.7`, `top_k=25`, `top_p=0.95`), trims internal pauses `> 0.32 s` down to `0.16 s`, and brings each sentence to `5.25` syllable-units/s with `pitch_ratio = 1.02` via built-in FFmpeg WSOLA (`asetrate + aresample + atempo`) — 100% offline, without uniform `1.25×` distortion and without external Edge-TTS or RubberBand dependencies.

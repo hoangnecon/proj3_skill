@@ -38,5 +38,13 @@ for i, c in enumerate(cells):
             sub = sub[:-2]
         d.text((x + 4, y + h + 30), sub, fill=(180, 190, 230), font=f)
 Path(spec["out"]).parent.mkdir(parents=True, exist_ok=True)
-sheet.save(spec["out"])
-print("ok", spec["out"])
+out = spec["out"]
+if out.lower().endswith((".jpg", ".jpeg")):
+    # QA sheets are for a model to read: light JPEG, long side <= 1600 px, normally 100-400 KB (sv-41 QA-IMG)
+    m = max(sheet.size)
+    if m > 1600:
+        sheet = sheet.resize((round(sheet.size[0] * 1600 / m), round(sheet.size[1] * 1600 / m)), Image.LANCZOS)
+    sheet.save(out, quality=int(spec.get("q", 70)), optimize=True)
+else:
+    sheet.save(out)
+print("ok", out, f"{Path(out).stat().st_size // 1024} KB")

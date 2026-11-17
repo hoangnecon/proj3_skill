@@ -28,7 +28,8 @@ belongs in the same series and carry the same density of detail. Agents that ski
    objects on the lobby plate, notice the small print, the halftone, the glows.
 2. **Cast.** Follow characters.md §3: list everyone from the segment map → card (`vi`) → silhouette →
    colours → story trait → register → `node scripts/design.mjs` → look at `cast_episode_p*.png` and every
-   `expr_<key>.png` → fix → repeat. Run `node scripts/lint.mjs design` until CH-* errors are gone.
+   `expr_<key>.png` (open the light `_v.jpg` views; sets also get `set_<id>_zoom.jpg`, 3×3 full-resolution
+   ninths to judge detail and text) → fix → `node scripts/design.mjs --changed` (re-renders only what changed) → repeat. Run `node scripts/lint.mjs design` until CH-* errors are gone.
 3. **Sets.** For each location: location card → object list (≥ 15, sets.md §9) → blocking sketch with
    touch points in `geo.ts` → six passes, rendering `node scripts/design.mjs --only set:<id>` after each
    pass → compare with the exemplar plate of the same kind → `bounds` → register.

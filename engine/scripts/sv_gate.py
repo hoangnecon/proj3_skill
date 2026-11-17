@@ -58,7 +58,7 @@ INPUTS = {
     "G3": ["script.json", "audio/voice.wav", "src/data/words.json", "standards/voice_standard.json", "standards/pacing.json"],
     "G4": ["src/episode/cast.ts", "src/episode/sets.tsx", "src/episode/geo.ts", "src/props.tsx", "src/sets"],
     "G5": ["src/episode/shotlist.ts", "src/episode/cast.ts", "src/episode/sets.tsx", "src/data/words.json", "standards/pacing.json"],
-    "G6": ["audio.json", "audio/voice.wav", "src/episode/shotlist.ts", "standards/mix_targets.json", "scripts/theme.py"],
+    "G6": ["audio.json", "audio/voice.wav", "qa/timing.json", "standards/mix_targets.json", "scripts/theme.py"],
     "G7": ["out/final.mp4"],
 }
 
@@ -75,13 +75,13 @@ def evidence(g):
         d = ROOT / "qa/design"
         return sorted(str(p.relative_to(ROOT)) for p in d.glob("*.png") if "_ex" not in p.name and "ex-" not in p.name and "exemplar" not in p.name) if d.exists() else []
     if g == "G5":
-        ev = sorted(str(p.relative_to(ROOT)) for p in (ROOT / "qa").glob("contact_p*.png"))
+        ev = sorted(str(p.relative_to(ROOT)) for p in (ROOT / "qa").glob("contact_p*.jpg"))
         need = jload("qa/strips_needed.json") or []
-        return ev + [f"qa/strips/{s['name']}.png" for s in need]
+        return ev + [f"qa/strips/{s['name']}.jpg" for s in need]
     if g == "G6":
         return ["qa/mix_report.json", "qa/mix/overview.png", "qa/mix/segments.png"]
     if g == "G7":
-        return ["qa/deliver_report.json", "qa/final_check.png", "qa/video_audio.json"]
+        return ["qa/deliver_report.json", "qa/final_check.jpg", "qa/video_audio.json"]
     return []
 
 
@@ -132,32 +132,34 @@ def checks(g):
             bad.append("design lint failed:\n" + "\n".join(l for l in out.splitlines() if l.startswith("ERROR")))
         if not any((ROOT / "qa/design").glob("cast_episode_p*.png")):
             bad.append("qa/design/cast_episode_p1.png missing — node scripts/design.mjs")
-        newest_src = max((ROOT / p).stat().st_mtime for p in ["src/episode/cast.ts", "src/episode/sets.tsx", "src/episode/geo.ts"])
-        for f in evidence("G4"):
-            if (ROOT / f).stat().st_mtime < newest_src:
-                bad.append(f"{f} is older than the design source — re-render (node scripts/design.mjs)")
-                break
+        # by content hash, not file time: only sheets whose inputs changed need a re-render
+        code, out = run(["node", "scripts/design.mjs", "--status"])
+        try:
+            stale = json.loads(out.strip().splitlines()[-1])["stale"]
+        except Exception:
+            stale = ["(design.mjs --status failed: " + out[-200:] + ")"]
+        if stale:
+            bad.append(f"design sheets out of date: {stale[:6]}{'...' if len(stale) > 6 else ''} — node scripts/design.mjs --changed")
         if not any("set_" in f and "_grid" in f for f in evidence("G4")):
             bad.append("no episode set plates rendered")
     elif g == "G5":
         code, out = run(["node", "scripts/lint.mjs", "shots"])
         if code:
             bad.append("shot lint failed:\n" + "\n".join(l for l in out.splitlines() if l.startswith("ERROR")))
-        src_t = (ROOT / "src/episode/shotlist.ts").stat().st_mtime
         ev = evidence("G5")
         if not any("contact_p" in e for e in ev):
             bad.append("no contact sheet — node scripts/qa.mjs contact")
-        for f in ev:
-            p = ROOT / f
-            if not p.exists():
-                bad.append(f"{f} missing — node scripts/qa.mjs strips")
-            elif p.stat().st_mtime < src_t:
-                bad.append(f"{f} is older than src/episode/shotlist.ts — re-render it")
-        shots = jload("qa/shots.json") or []
-        rv = (G / "G5.review.md").read_text() if (G / "G5.review.md").exists() else ""
-        miss = [s["i"] for s in shots if not re.search(rf"^\s*-?\s*#{s['i']}\b\s*[:·-]\s*\S+", rv, re.M)]
-        if miss:
-            bad.append(f"G5.review.md has no per-shot verdict line for shots {miss[:15]}{'...' if len(miss) > 15 else ''} (format: '#12: ok — <what you checked>')")
+        # by per-shot content hash (qa/cache.json), not file time
+        code, out = run(["node", "scripts/qa.mjs", "status"])
+        st = jload("qa/qa_status.json") if code == 0 else None
+        if not st:
+            st = {"contact_stale": ["?"], "strips_stale": [], "hashes": {}}
+            bad.append("qa.mjs status failed: " + out[-200:])
+        if st["contact_stale"]:
+            bad.append(f"contact frames out of date for shots {st['contact_stale'][:15]} — node scripts/qa.mjs contact (re-renders only those)")
+        if st["strips_stale"]:
+            bad.append(f"strips out of date: {st['strips_stale'][:8]} — node scripts/qa.mjs strips")
+        bad += shot_reviews(st)
     elif g == "G6":
         r = jload("qa/mix_report.json")
         if not r:
@@ -192,20 +194,58 @@ def checks(g):
                 bad.append(f"format {r['width']}x{r['height']}@{r['fps']}")
             if not r["audio"]:
                 bad.append("no audio stream")
-            if r["phone_size_mb"] > 30:
-                bad.append(f"phone copy {r['phone_size_mb']} MB > 30")
             if r["final_sha"] != sha("out/final.mp4"):
                 bad.append("out/final.mp4 changed after the report")
         va = jload("qa/video_audio.json") or {}
-        for name in ["final.mp4", (r or {}).get("phone", "").split("/")[-1]]:
-            if not name:
-                continue
+        for name in ["final.mp4"]:
             if name not in va:
                 bad.append(f"no audio measurement for {name} — deliver.mjs runs audio_qa.py --video")
                 continue
             for c in va[name]["checks"]:
                 if not c["ok"]:
                     bad.append(f"{name} audio: {c['check']} = {c['value']} outside {c['range']}")
+    return bad
+
+
+REVIEW_CHECKS = ["acting", "contact", "overlap", "set", "text", "caption", "beat"]
+
+
+def shot_reviews(st):
+    """Per-shot review files qa/review/NN.json (sv-22 "review cards"). Each must match the shot's CURRENT hash,
+    come from a reviewer who is not the builder, answer every check, and — for a HOT shot (geometry lint,
+    reach, key event) — say it opened the measurement crops, which must be current."""
+    bad, miss, old, notok, thin, nocrop = [], [], [], [], [], []
+    hashes = {int(k): v for k, v in st.get("hashes", {}).items()}
+    crops_ok = {int(k): v for k, v in st.get("crops_ok", {}).items()}
+    hot = {int(k): v for k, v in (jload("qa/hot.json") or {}).items()}
+    for i, h in sorted(hashes.items()):
+        r = jload(f"qa/review/{i:02d}.json")
+        if not r:
+            miss.append(i)
+            continue
+        if r.get("hash") != h:
+            old.append(i)
+            continue
+        if not r.get("reviewer") or r.get("reviewer") == r.get("builder", "builder"):
+            bad.append(f"qa/review/{i:02d}.json: reviewer must be named and must not be the builder")
+        checks = r.get("checks") or {}
+        if r.get("verdict") != "ok" or any(not str(checks.get(c, "")).startswith("ok") for c in REVIEW_CHECKS):
+            notok.append(i)
+        if len(re.findall(r"\w+", str(r.get("note", "")))) < 6:
+            thin.append(i)
+        if i in hot and ("crops" not in (r.get("looked") or []) or not crops_ok.get(i)):
+            nocrop.append(i)
+    fmt = lambda xs: f"{xs[:15]}{'...' if len(xs) > 15 else ''}"  # noqa: E731
+    if miss:
+        bad.append(f"no review for shots {fmt(miss)} — node scripts/qa.mjs cards changed, then a reviewer writes qa/review/NN.json")
+    if old:
+        bad.append(f"review is for an older version of shots {fmt(old)} (hash changed) — re-review those cards")
+    if notok:
+        bad.append(f"shots {fmt(notok)} are not ok in review (verdict/checks) — fix them (sv-22 fix loop), re-review")
+    if thin:
+        bad.append(f"review note too thin for shots {fmt(thin)} (say what you saw, >= 6 words)")
+    if nocrop:
+        bad.append(f"HOT shots {fmt(nocrop)} need current crops opened — node scripts/qa.mjs crops <i>, add \"crops\" to looked")
     return bad
 
 
@@ -266,6 +306,9 @@ def status():
 
 
 def main():
+    # refresh qa/shots.json + qa/timing.json so G6 goes STALE only when shot TIMING changed (not on a visual fix)
+    if (ROOT / "scripts/times.mjs").exists() and (ROOT / "src/episode/shotlist.ts").exists():
+        run(["node", "scripts/times.mjs", "--quiet"])
     if len(sys.argv) < 2 or sys.argv[1] == "status":
         return status()
     cmd, g = sys.argv[1], sys.argv[2].upper()

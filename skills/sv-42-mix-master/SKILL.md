@@ -46,7 +46,7 @@ the suite's `standards/mix_targets.json` with a CHANGELOG line, and it makes G6 
 6. `gates/G6.review.md` (template lists what to write), `python3 scripts/sv_gate.py pass G6`.
    The gate re-reads every check, refuses a non-theme music, a master limiter working > 6 dB, a voice peak limiter working > 10 dB (a click
    or pop in a take → re-take in sv-12), a mix_report without the voice peak stage, or a stale mix.
-7. At delivery (sv-41) `deliver.mjs` runs `audio_qa.py --video` on the master and the phone copy →
+7. At delivery (sv-41) `deliver.mjs` runs `audio_qa.py --video` on the master →
    `qa/video_audio.json`; G7 refuses any failed delivery check.
 
 ## Commands

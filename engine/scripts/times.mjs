@@ -1,8 +1,8 @@
-// Write qa/shots.json (shot table with absolute times + events). Run after every shotlist edit.
+// Write qa/shots.json (shot table with absolute times + events) and qa/timing.json (the part the mix uses).
+// Run after every shotlist edit. `--quiet` prints nothing (sv_gate.py runs it before every status).
 import fs from 'node:fs';
-import {loadProject} from './load.mjs';
+import {loadProject, writeTables} from './load.mjs';
 const P = await loadProject();
-fs.mkdirSync('qa', {recursive: true});
 const rows = P.shotTable();
-fs.writeFileSync('qa/shots.json', JSON.stringify(rows, null, 1));
-console.log(`qa/shots.json: ${rows.length} shots, ${P.DURATION.toFixed(2)} s`);
+writeTables(fs, rows);
+if (!process.argv.includes('--quiet')) console.log(`qa/shots.json: ${rows.length} shots, ${P.DURATION.toFixed(2)} s`);

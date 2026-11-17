@@ -17,7 +17,8 @@ is why it holds attention. An agent that puts one wide frame per sentence has fa
 
 ## Inputs → outputs
 - In: G4 passed (cast, sets, geo), `beats.md` segment map, `src/data/words.json` (from G3).
-- Out: `src/episode/shotlist.ts`, `qa/contact_p*.png`, `qa/strips/*.png`, `qa/shots.json`, `gates/G5.review.md`.
+- Out: `src/episode/shotlist.ts`, `qa/contact_p*.jpg`, `qa/strips/*.jpg`, `qa/cards/NN.jpg`, `qa/review/NN.json`,
+  `qa/shots.json`, `gates/G5.review.md`.
 
 ## Workflow
 1. **Shot plan on paper first.** For each segment, list the words that need a picture (new person, place,
@@ -27,17 +28,28 @@ is why it holds attention. An agent that puts one wide frame per sentence has fa
 2. **Write shots** segment by segment. Size from the grammar table, cam numbers from the set's grid plate
    (`qa/design/set_<id>_grid.png`), actors from sv-21 recipes, keys on words.
 3. **Lint**: `node scripts/lint.mjs shots` until 0 errors. Read every warning; fix it or waive it with a
-   reason (`// lint-ok: RULE reason`).
-4. **Contact sheets**: `node scripts/qa.mjs contact` → open EVERY `qa/contact_p*.png`. Each shot shows
-   two frames (25 % and 75 %). Per shot ask: subject clear? framing intended? nothing cut by the frame
-   edge? captions band clear? world edge not visible? same look as the design sheets?
-5. **Strips**: `node scripts/qa.mjs strips` → open every `qa/strips/*.png` and apply the sv-21 checklist.
-6. **Fix loop**: change, re-lint, re-render only what changed (`node scripts/qa.mjs shot <i>` for one shot,
-   `strips <name>` for one strip), look again. Repeat until a full contact pass finds nothing.
-7. **Review file** `gates/G5.review.md`: a verdict line for EVERY shot (`#12: medium on Hạnh, bubble reads,
-   reach lands on "năm"`), a line per contact page and per strip, waivers justified.
-8. **Gate**: `python3 scripts/sv_gate.py pass G5`. (G5 needs no user approval; showing the user a contact
-   page is still a good idea on the first episode of a series.)
+   reason (`// lint-ok: RULE reason`). The geometry rules (GE-01 overlap, GE-04 head cut / face in the
+   caption band, GE-07 size jump) measure the frame from the shot table and mark shots HOT in `qa/hot.json`
+   (reaches and set keys are HOT too).
+4. **Contact sheets**: `node scripts/qa.mjs contact` → open EVERY `qa/contact_p*.jpg` (light JPEGs, ~300 KB).
+   Only shots whose hash changed are re-rendered; they carry a ● and are listed in `qa/changed.json`.
+   Look at the whole film once: rhythm, continuity, look against the design sheets.
+5. **Strips**: `node scripts/qa.mjs strips` → open every `qa/strips/*.jpg` (full frames, 2 rows) and apply
+   the sv-21 checklist.
+6. **Per-shot review (cards)** — `references/review-cards.md`. `node scripts/qa.mjs cards changed` (or `all`
+   the first time) → one card per shot. A REVIEWER who did not build the shots opens each card, and for every
+   HOT shot also `node scripts/qa.mjs crops <i>` (full-resolution head / hands / feet / overlap crops), then
+   writes `qa/review/NN.json` answering the 7 checks. Reviewers run in parallel batches of ~10 shots.
+7. **Fix loop** (only the shots marked `fix`): change → `node scripts/lint.mjs shots` → `node scripts/qa.mjs
+   shot <i>` (and `crops <i>` if HOT) → look → the reviewer re-reviews that card. At most 3 tries per shot,
+   then escalate (re-stage the shot or ask the user). Re-run `contact` (incremental) at the end; a full
+   `--all` contact pass at most twice per episode.
+8. **Review file** `gates/G5.review.md`: a line per contact page and per strip (≥ 4 words of what you saw),
+   waivers justified, plus the cross-check: the conductor re-opens ≥ 10 % of the cards at random (all HOT
+   ones included) and names them.
+9. **Gate**: `python3 scripts/sv_gate.py pass G5`. It reads every `qa/review/NN.json`: present, made for the
+   shot's CURRENT hash, reviewer ≠ builder, all checks ok, crops opened for HOT shots. (G5 needs no user
+   approval; showing the user a contact page is still a good idea on the first episode of a series.)
 
 ## Rules
 - Cut on words, never on seconds. Numbers are only for offsets inside a shot.
@@ -46,6 +58,9 @@ is why it holds attention. An agent that puts one wide frame per sentence has fa
 - The world never shows its edge (CA-05) and the caption band stays clear (OV-03).
 - Every shot has life: a move, an expression change, a gesture, a key, or a moving set element.
 - If the voice changes (G3 re-run), anchors move: re-run lint and contact; G5 goes stale automatically.
+- A visual-only fix (pose, prop, set detail, camera) does not change `qa/timing.json`, so the mix (G6) stays
+  valid; only a fix that moves cut times or keys sends you back to the mix.
+- Open the light JPEGs (`*.jpg`, `_v.jpg`), never the multi-MB PNG masters, unless you zoom into one spot.
 - Do not touch cast or set code in this phase; if a design is wrong, go back to sv-20 (G4 re-opens).
 
 ## Failure → fix
@@ -61,3 +76,6 @@ is why it holds attention. An agent that puts one wide frame per sentence has fa
 | World edge visible (CA-05) | reduce the move or the zoom-out; or extend the set and its `bounds` in sv-20 |
 | Action happens between words | anchor the reach/key to the word: `'s6@bấm+0.05'` |
 | Contact sheet reads but the story does not | you missed a beat: re-read beats.md, add the insert/reaction shot |
+
+## Read next
+`references/review-cards.md` — cards, crops, the review file and its 7 checks, GE rules, the cross-check.

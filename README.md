@@ -32,7 +32,7 @@ bash tools/new_episode.sh ~/Work/PROJ3/<slug> --node-modules ~/Work/PROJ3/mua-no
 | `sv-22-shots-camera` | anchors, shot sizes, motivated camera, overlays, contact-sheet review | G5 |
 | `sv-40-audio` | audio.json: beds, foley, accents, silences, series theme music (theme.py) | G6 |
 | `sv-42-mix-master` | house mix/master chain + 21 measured checks (mix_targets.json), plots, audio checks inside the video | G6, G7 |
-| `sv-41-qa-delivery` | master render, phone copy ≤ 30 MB, final-watch rubric | G7 |
+| `sv-41-qa-delivery` | master render, final-watch rubric | G7 |
 
 ## Repository layout
 ```

@@ -507,7 +507,7 @@ report = {
                    "music_target_under_voice_db": TARGET},
     "duration": round(end_len / SR, 2), "last_word_end": round(last_s, 2), "sections": sections,
     "sfx": [{"fx": f, "t": round(t, 2), "why": w} for f, t, w in sorted(placed, key=lambda x: x[1])],
-    "warnings": warnings, "inputs": {"voice": sha("audio/voice.wav"), "shots": sha("qa/shots.json"), "plan": sha("audio.json"),
+    "warnings": warnings, "inputs": {"voice": sha("audio/voice.wav"), "shots": sha("qa/shots.json"), "timing": sha("qa/timing.json"), "plan": sha("audio.json"),
                                      "targets": sha("standards/mix_targets.json")},
 }
 (ROOT / "qa").mkdir(exist_ok=True)

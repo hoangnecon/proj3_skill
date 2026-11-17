@@ -1,6 +1,6 @@
 ---
 name: sv-41-qa-delivery
-description: Final QA and delivery of a story-video episode — render the master (h264 CRF 18, 1080×1920, 30 fps), make the phone copy ≤ 30 MB, write qa/deliver_report.json and a 12-frame spot-check sheet, watch the full film against the rubric, pass gate G7 and send the phone copy to the user. Use when an episode is ready to render, when the user asks for the video/file/"bản gửi bạn", when a re-render is needed after any change, or to check what QA evidence exists.
+description: Final QA and delivery of a story-video episode — render the master (h264 CRF 18, 1080×1920, 30 fps), write qa/deliver_report.json and a 12-frame spot-check sheet, watch the full film against the rubric, pass gate G7 and send the master to the user. Use when an episode is ready to render, when the user asks for the video/file/"bản gửi bạn", when a re-render is needed after any change, or to check what QA evidence exists.
 ---
 
 # sv-41 · QA and delivery (gate G7)
@@ -17,20 +17,18 @@ description: Final QA and delivery of a story-video episode — render the maste
    The Remotion render goes to `out/_render.mp4`; ffmpeg then takes its picture and the sound straight from
    `public/mix.wav` (Remotion's AAC kept 2048 priming samples → sound 43 ms late, sync check failed).
    `SV_SKIP_RENDER=1` reuses `_render.mp4` for audio-only fixes.
-   Outputs: `out/final.mp4` (master), `out/<slug>_phone.mp4` (ONE encode at CRF 33, `SV_PHONE_CRF` to change —
-   the user objected to encoding several copies to search for a size),
-   `qa/deliver_report.json` (duration, size, fps, audio, hashes), `qa/final_check.png` (12 frames),
-   `qa/video_audio.json` (sv-42 delivery checks on the audio inside both mp4s: AAC loudness drift, true
+   Outputs: `out/final.mp4` (the only video file — no phone copy, the user does not want one),
+   `qa/deliver_report.json` (duration, size, fps, audio, hashes), `qa/final_check.jpg` (12 frames, light JPEG),
+   `qa/video_audio.json` (sv-42 delivery checks on the audio inside the mp4: AAC loudness drift, true
    peak, audio/video length, sync by cross-correlation with the mix). Any failed check blocks G7.
-3. Open `qa/final_check.png` and compare with the contact sheets.
+3. Open `qa/final_check.jpg` and compare with the contact sheets.
 4. Watch `out/final.mp4` full length with sound (`open out/final.mp4`) against the final-watch rubric.
    Note timestamps of anything wrong. Fix at the source skill (shots → sv-22, sounds → sv-40, levels → sv-42), re-render.
 5. `gates/G7.review.md`: deliver report line, final_check line, the rubric table with your notes.
    `python3 scripts/sv_gate.py pass G7`.
-6. Send the phone copy to the user (SendUserFile) with a one-line caption: title, length, size. Mention
+6. Send `out/final.mp4` to the user (SendUserFile) with a one-line caption: title, length, size. Mention
    anything you knowingly left imperfect.
 
 ## Rules
-- The phone copy is the one the user shares; one encode, normally 25–30 MB for 2–3 min.
+- One video file only: `out/final.mp4`. Do not make a compressed phone copy.
 - Never hand over a file whose gate is not PASS, and never claim "checked" for something you did not open.
-- Keep `out/final.mp4` as the master; re-encode copies from it, never from the phone copy.

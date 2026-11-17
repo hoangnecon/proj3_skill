@@ -5,6 +5,7 @@
 // line in shotlist.ts — the reviewer must accept each waiver in the gate review.
 import fs from 'node:fs';
 import {loadProject} from './load.mjs';
+import {actorBoxes, inter, area, CAPTION, W, H} from './geom.mjs';
 
 const phase = process.argv[2] ?? 'all';
 const P = await loadProject();
@@ -280,7 +281,48 @@ if (phase !== 'design') {
       console.log(`pacing: ${durs.length} shots, mean ${mean.toFixed(2)} s, ${perMin.toFixed(1)}/min, p10 ${p10.toFixed(2)} s`);
     }
   }
+  // ---- screen geometry (GE-*): measured from the shot table, no render. Each hit makes the shot HOT:
+  // its review must open the measurement crops (node scripts/qa.mjs crops <i>) — see sv-22 "review cards".
+  const looks = {...(P.EX_LOOKS ?? {}), ...P.CAST};
+  const hot = {};
+  const seen = new Set();
+  const flag = (r, rule, msg, who = '') => {
+    if (waived(rule, r.name) || seen.has(`${r.i}|${rule}|${who}`)) return; // one warning per shot, rule and actor
+    seen.add(`${r.i}|${rule}|${who}`);
+    warn(rule, `#${r.i} '${r.name}': ${msg}`); (hot[r.i] ??= []).push(rule);
+  };
+  const lastH = {};
+  for (const r of rows) {
+    for (const u of [0.15, 0.5, 0.85]) {
+      const t = r.t0 + (r.t1 - r.t0) * u;
+      const B = actorBoxes(r, t, looks);
+      for (let a = 0; a < B.length; a++) for (let b = a + 1; b < B.length; b++) {
+        const o = inter(B[a].body, B[b].body) / Math.max(1, Math.min(area(B[a].body), area(B[b].body)));
+        if (o > 0.25 && !r.actors[a].ride && !r.actors[b].ride) { flag(r, 'GE-01', `${B[a].id} and ${B[b].id} bodies overlap ${(o * 100).toFixed(0)} % at ${t.toFixed(2)} s — check who is in front and that nothing reads as one blob`, B[a].id + B[b].id); break; }
+      }
+      for (const x of B) {
+        const {x: hx, y: hy, r: hr} = x.hc;
+        const onScreen = hx + hr > 0 && hx - hr < W && hy + hr > 0 && hy - hr < H;
+        const cut = hy - hr < -0.25 * hr || hx - hr < -0.25 * hr || hx + hr > W + 0.25 * hr; // > ~¼ of the head outside
+        if (onScreen && cut && x.h < H * 1.1) flag(r, 'GE-04', `${x.id}'s head is cut by the frame edge at ${t.toFixed(2)} s`, x.id + 'cut');
+        if (onScreen && hy + hr * 0.5 > CAPTION[0] && hy - hr * 0.5 < CAPTION[1]) flag(r, 'GE-04', `${x.id}'s face sits in the caption band at ${t.toFixed(2)} s`, x.id + 'cap');
+      }
+      if (u === 0.5) {
+        for (const x of B) {
+          const p = lastH[x.id];
+          if (p && p.set === r.set && p.i === r.i - 1 && r.tr === 'cut') {
+            const ratio = x.h / Math.max(1, p.h);
+            if (ratio > 1.25 && ratio < 1.6) flag(r, 'GE-07', `${x.id} jumps ${ratio.toFixed(2)}× in size from #${p.i} in the same set — a jump cut that is neither a match nor a clear punch-in (make it ≥ 1.6× or ≤ 1.1×)`, x.id);
+          }
+          lastH[x.id] = {h: x.h, set: r.set, i: r.i};
+        }
+      }
+    }
+    if (r.reaches.length) (hot[r.i] ??= []).push('reach');
+    if (r.keys.length) (hot[r.i] ??= []).push('key');
+  }
   fs.mkdirSync('qa', {recursive: true});
+  fs.writeFileSync('qa/hot.json', JSON.stringify(Object.fromEntries(Object.entries(hot).map(([k, v]) => [k, [...new Set(v)]])), null, 1));
   fs.writeFileSync('qa/strips_needed.json', JSON.stringify(strips, null, 1));
 }
 
