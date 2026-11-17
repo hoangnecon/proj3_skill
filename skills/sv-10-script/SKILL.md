@@ -34,18 +34,20 @@ A weak script cannot be saved by pictures. This skill turns an idea into `brief.
 |---|---|
 | SC-01/02 | title not DEMO; voice is Hải Đăng |
 | SC-03 | ids `s1, s2, …` unique and ordered (`s3b` allowed) |
-| SC-04 | 22–34 segments (`standards/pacing.json`) |
-| SC-05 | 600–720 spoken words and estimated 140–165 s at Hải Đăng 1.0× speed |
+| SC-04 | 22–40 segments (`standards/pacing.json`) |
+| SC-05 | 620–860 spoken words and estimated 125–170 s at Hải Đăng 5.25 ups per-sentence rhythm |
 | SC-06 | ≤ 45 words per segment |
 | SC-07 | sentence length SD ≥ 3.0 |
 | SC-08 | no sentence > 24 words |
 | SC-09 | ≥ 6 short sentences ≤ 5 words (error if < 6, warn if < 10) |
-| SC-10 | southern words (error) / southern-leaning words (warning) |
+| SC-10 | southern words (error) / southern-leaning words (warning), excluding `<en>...</en>` spans |
 | SC-11 | repeated phrases |
 | SC-12/13 | `beats.md` required sections present (no TODO); segment map covers every id |
 | SC-14 | `s1` ≤ 20 words |
-| SC-15/16/17 | no digits, no `"…"`, no emotion tags in spoken text (`voice_standard.json`) |
-| SC-18 | `pause_after` 0.1–0.6 s |
+| SC-15 | no digits in spoken text (`voice_standard.json`) |
+| SC-16 | balanced `<en>...</en>` bilingual tags (`...` and `…` ellipsis are allowed) |
+| SC-17 | only supported VieNeu inline emotion tags (`[cười]`, `[thở dài]`, `[hắng giọng]`, `[chuckle]`, `[sigh]`, `[clear throat]`) |
+| SC-18 | `pause_after` 0.08–0.70 s |
 | SC-19 | `beats.md ## Spine` has ≥ 4 `- vì thế …` / `- nhưng …` causal lines |
 | SC-20 | active protagonist/family agency in ≥ 25% of middle segments (`35%–70%`) |
 | SC-21 | Act-1 setup/world ceiling ≤ 42% of segments (before `Crisis`/`Escalation`/`Bind`) + narrator enters by `s7` |
@@ -56,9 +58,9 @@ A weak script cannot be saved by pictures. This skill turns an idea into `brief.
 | SC-26 | every `- vì thế` / `- nhưng` line in `beats.md ## Spine` cites valid `[sN]` / `[sN-sM]` IDs in non-decreasing order |
 
 ## Rules
-- Narrator: first person, northern, calm deadpan. Zero southern words, zero English, zero internet slang.
+- Narrator: first person, northern Vietnamese. Zero southern words, zero internet slang. Foreign proper nouns or loanwords (`Graham`, `Henderson`, `London`) keep clean spelling in `text` and are declared in `"english": [...]` at the top of `script.json` (or wrapped in `<en>...</en>` in `tts_text`). Ellipsis (`...` / `…`) and native VieNeu emotion tags (`[cười]`, `[thở dài]`, `[hắng giọng]`) are allowed where expressive phrasing earns them (stripped automatically from burned-in captions).
 - One uncanny rule played completely straight. **Never** pad the middle with passive neighbour catalogues, never solve with outside accidents, never deny the magic, and never end with a stated moral.
-- Pacing stays locked to `standards/pacing.json` (`600–720` words, `140–165` s at `1.0×`). Fix bloat by tightening Act 1 to `≤ 42%`, never by speeding up the voice.
+- Pacing stays locked to `standards/pacing.json` (`620–860` words, `125–170` s at `5.25` ups per-sentence rhythm; individual segments or `sentences` may fine-tune `wps` and `pause_after` for dramatic turns). Fix bloat by tightening Act 1 to `≤ 42%`.
 - After G2 passes, any change to `script.json` or `beats.md` makes G2 and G3 STALE.
 
 ## Failure → fix

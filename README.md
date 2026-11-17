@@ -1,4 +1,4 @@
-# story-video-skills (`v3.4.1`)
+# story-video-skills (`v3.5.0`)
 
 A gated production suite for **Vietnamese 2D story videos**: vertical 1080×1920 at 30 fps, 2–3 minutes,
 narrated by the northern male voice Hải Đăng, drawn in a flat "riso ink" style, and animated in Remotion
@@ -26,7 +26,7 @@ bash tools/new_episode.sh ~/Work/PROJ3/<slug> --node-modules ~/Work/PROJ3/mua-no
 | `sv-00-pipeline` | entry point: phase map, commands, gate mechanics, house rules | all |
 | `sv-01-series-bible` | series identity, narrator, comedic engine, premise test, no-copying rule | G1 |
 | `sv-10-script` | brief → beats → script.json; rhythm benchmarks, northern wording, rubric | G1, G2 |
-| `sv-12-voice` | Hải Đăng TTS to the voice standard: one take per line, measured per line, word alignment, voice report | G3 |
+| `sv-12-voice` | Hải Đăng TTS (`v2.0`): per-sentence 5.25 ups rhythm + 1.02 pitch, bilingual `<en>`, `…` & emotion tags, word alignment | G3 |
 | `sv-20-design-system` | tokens, characters (sheet procedure), sets (six passes, human scale), props, overlays | G4 |
 | `sv-21-motion` | actor API, walks/reaches/sits/rides, acting recipes, strip checklist | G5 |
 | `sv-22-shots-camera` | anchors, shot sizes, motivated camera, overlays, contact-sheet review | G5 |

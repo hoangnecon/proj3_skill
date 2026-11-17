@@ -1,12 +1,12 @@
 # Script craft
 
 ## 1. Benchmarks (house standard + 548-script survey)
-House pacing (`standards/pacing.json`) stays fixed across episodes (`Hải Đăng` native 1.0× speed, ~4.49 in-line wps):
+House pacing (`standards/pacing.json` v2.0) uses the lively per-sentence `Hải Đăng` rhythm (`5.25` syllable-units/s, `pitch 1.02`):
 
 | Measure | House / Survey Benchmark | Required (`script_lint.py`) |
 |---|---|---|
-| Segments | 22–34 (reference 30) | 22–34 (`SC-04`) |
-| Words & Duration | 600–720 spoken words, 140–165 s | 600–720 words, 140–165 s (`SC-05`) |
+| Segments | 22–40 (reference 30) | 22–40 (`SC-04`) |
+| Words & Duration | 620–860 spoken words, 125–170 s | 620–860 words, 125–170 s (`SC-05`) |
 | Words per segment | 18–26 mean | ≤ 45 (`SC-06`) |
 | Sentence rhythm | mean 7.2–10.0 words, SD ≥ 4.0 | SD ≥ 3.0 (`SC-07`), none > 24 words (`SC-08`) |
 | Short punch sentences (≤ 5w) | Top 10% VoidCast uses 25–35 per clip | ≥ 6 hard floor, target ≥ 10 (`SC-09`) |
@@ -68,7 +68,10 @@ Every beat in `brief.md` (`## Spine`) and `beats.md` (`## Spine` + `## Plant & P
 - First person `"tôi"`, calm, slightly tired, observant.
 - Northern vocabulary (`vào, bố, mẹ, lợn, thìa, cốc, bát, đắt, gọi, bảo, hôm đấy, thế, nhỉ, à, chứ`). Never southern (`SC-10`: `tui, hông, nhen, vô nhà, ly nước, dìa, mần, ổng, bả, xài, muỗng, heo`).
 - Numbers written in full Vietnamese words in spoken text (`SC-15`: `"mười bảy"`, `"chín linh hai"`, `"mười lăm giây"`).
-- Write for the ear: short clauses, early verbs, no parentheses, no `"…"` (`SC-16`), no emotion tags (`SC-17`), no English words.
+- Bilingual & expressive phrasing (`voice_standard.json` v2.0):
+  - Foreign proper nouns/loanwords (`Graham`, `Henderson`, `London`) are declared in `"english": [...]` at the top of `script.json` (or wrapped in `<en>...</en>` in `tts_text`; `SC-16` checks balanced `<en>` tags and `SC-10` excludes them from dialect checks).
+  - Ellipsis (`...` / `…`) is allowed (`no_ellipsis: false` — internal pauses `> 0.32s` are trimmed automatically to `0.16s` in `voice.py`).
+  - VieNeu V3 Turbo's 3 native inline emotion tags (`[cười]`, `[thở dài]`, `[hắng giọng]` / `[chuckle]`, `[sigh]`, `[clear throat]`) are allowed (`SC-17`) and stripped automatically from burned-in captions.
 
 ## 5. Writing for pictures
 Every segment is a picture change; every noun must be drawable in `sv-20` flat 2D riso-ink style. Note the main frame in `beats.md` (`## Segment map`). Avoid large crowds (> ~9 characters), fast vehicles in wide motion, or photorealistic hands.
@@ -76,15 +79,21 @@ Every segment is a picture change; every noun must be drawable in `sv-20` flat 2
 ## 6. script.json format
 ```json
 {"title": "Tiêu đề tập", "voice": "Hải Đăng", "pause_after": 0.18,
+ "english": ["Graham", "Henderson"],
  "segments": [
   {"id": "s1", "text": "Ở xóm này, …", "pause_after": 0.3},
-  {"id": "s3b", "text": "…"},
-  {"id": "s8", "text": "… mười một.", "tts_text": "… mười một."}
+  {"id": "s8", "text": "Tôi gặp Graham.", "tts_text": "Tôi gặp <en>Graham</en>."},
+  {"id": "s21", "text": "Em biết… Nhưng Mơ chỉ lên bảy một lần.",
+   "sentences": [
+    {"tts_text": "Em biết…"},
+    {"tts_text": "[thở dài] Nhưng Mơ chỉ lên bảy một lần.", "wps": 4.5, "pause_after": 0.3}
+   ], "pause_after": 0.45}
  ]}
 ```
 - IDs `s1, s2, ...` strictly ordered (`SC-03`); insert revisions as `s3b` rather than renumbering.
-- `pause_after` default `0.18` s (`0.1`–`0.6` s, `SC-18`); `0.3` after a punch; `0.45` before `Turn`.
-- `tts_text` only when TTS mispronounces a syllable; `text` drives burned-in captions.
+- `pause_after` default `0.18` s (`0.08`–`0.70` s, `SC-18`); `0.3` after a punch; `0.45` before `Turn`.
+- Optional `"english"` (top-level or per-segment) auto-wraps whole-word matches in `<en>...</en>` for VieNeu V3 Turbo while keeping `text` captions clean.
+- Optional `"wps"` or `"sentences": [...]` fine-tunes speed, `pause_after`, `tts_text`, or `seed` on individual sentences without affecting the rest of the episode.
 
 ## 7. Process
 1. `premise-ideation.md` Reverse-Design → fill `brief.md` → get user approval (`G1`).
@@ -106,5 +115,5 @@ Every segment is a picture change; every noun must be drawable in `sv-20` flat 2
 10. **Past-Reinterpreting Turn:** How does `Turn` re-read the Foil's or parent's Act-1 behavior without outside rescues or magic-denial (`SC-24`)?
 11. **Deadpan Button:** Is the final segment `≤ 12` words, free of stated morals (`SC-24`), and does it land one final ironic flip?
 12. **Rhythm & Punch:** Are there `≥ 6` (aim `10+`) short sentences `≤ 5` words (`SC-09`) and `SD ≥ 3.0` (`SC-07`) with zero joke-explaining?
-13. **Northern Ear:** Zero southern words (`SC-10`), digits (`SC-15`), `"…"` (`SC-16`), or emotion tags (`SC-17`)?
+13. **Northern Ear & Bilingual/Tag Hygiene:** Zero southern words (`SC-10`), zero digits in spoken text (`SC-15`), balanced `<en>...</en>` bilingual tags (`SC-16`), and only valid VieNeu emotion tags (`SC-17`)?
 14. **Visual Drawability:** Can every row of `## Segment map` be drawn in one `sv-20` frame?

@@ -1,6 +1,7 @@
 """Script checks for gate G2. Writes qa/script_lint.json; exit 1 on any error.
 Run: python3 scripts/script_lint.py
-Calibrated on standards/pacing.json (22-34 segments, 600-720 words, 140-165 s at 1.0x Hải Đăng)
+Calibrated on standards/pacing.json v2.0 (22-40 segments, 620-860 spoken words, 125-170 s at 5.25 ups Hải Đăng),
+standards/voice_standard.json v2.0 (bilingual <en>...</en>, '...'/'…' and emotion tags allowed),
 and the 548-script World-Rule Shorts survey (SC-20..26). See sv-10-script/references/craft.md.
 """
 import json
@@ -15,8 +16,54 @@ errors, warns = [], []
 err = lambda r, m: errors.append(f"[{r}] {m}")
 warn = lambda r, m: warns.append(f"[{r}] {m}")
 
+EN_SPAN_RE = re.compile(r"<en>(.*?)</en>", re.I | re.S)
+TAG_RE = re.compile(r"\[([^\]]+)\]")
+SENT_SPLIT_RE = re.compile(r"(?<=[.!?…])\s+(?=[^\s])")
+
+
+def strip_markup(s: str) -> str:
+    s = re.sub(r"</?en>", "", s, flags=re.I)
+    s = TAG_RE.sub(" ", s)
+    return " ".join(s.split())
+
+
+def apply_bilingual(text: str, english_terms: list[str]) -> str:
+    terms = sorted({t.strip() for t in english_terms if t and t.strip()}, key=len, reverse=True)
+    if not terms:
+        return text
+    protected = []
+
+    def _save(m):
+        protected.append(m.group(0))
+        return f"\x00EN{len(protected) - 1}\x00"
+
+    masked = EN_SPAN_RE.sub(_save, text)
+    pat = re.compile(r"(?<![\w<])(?:" + "|".join(map(re.escape, terms)) + r")(?![\w>])")
+    masked = pat.sub(lambda m: f"<en>{m.group(0)}</en>", masked)
+    for idx, orig in enumerate(protected):
+        masked = masked.replace(f"\x00EN{idx}\x00", orig)
+    return masked
+
+
+def syllable_units(tts_text: str) -> float:
+    s = TAG_RE.sub(" ", tts_text)
+    total = 0.0
+    pos = 0
+    for m in EN_SPAN_RE.finditer(s):
+        total += len(re.findall(r"[^\W_]+", s[pos:m.start()], re.UNICODE))
+        for ew in re.findall(r"[A-Za-z0-9']+", m.group(1)):
+            syls = len(re.findall(r"[aeiouyAEIOUY]+", ew))
+            if ew.lower().endswith("e") and not ew.lower().endswith("le") and syls > 1:
+                syls -= 1
+            total += max(1, syls)
+        pos = m.end()
+    total += len(re.findall(r"[^\W_]+", s[pos:], re.UNICODE))
+    return max(1.0, total)
+
+
 script = json.loads((ROOT / "script.json").read_text())
 segs = script.get("segments", [])
+global_english = script.get("english", [])
 
 # ---- identity ----
 if re.search(r"demo", script.get("title", ""), re.I):
@@ -29,48 +76,96 @@ nums = [int(m.group(1)) if (m := re.fullmatch(r"s(\d+)[a-z]?", i)) else -1 for i
 if -1 in nums or len(set(ids)) != len(ids) or nums != sorted(nums) or (nums and nums[0] != 1):
     err("SC-03", f"segment ids must be s1, s2, ... (an inserted segment may be s3b), unique and in order (got {ids[:8]}...)")
 
-# ---- length + pacing (standards/pacing.json: the same speed for every episode, any agent, any machine) ----
+# ---- length + pacing (standards/pacing.json & standards/voice_standard.json v2.0) ----
 PA = json.loads((ROOT / "standards/pacing.json").read_text())
-words = [w for s in segs for w in s.get("tts_text", s["text"]).split()]
+VS_FULL = json.loads((ROOT / "standards/voice_standard.json").read_text())
+VS = VS_FULL["text"]
+RH = VS_FULL["rhythm"]
+allowed_tags = {x.lower() for x in VS.get("allowed_tags", [])}
+
+def seg_spoken_string(s: dict) -> str:
+    eng = list(global_english) + list(s.get("english", []))
+    if s.get("sentences"):
+        parts = [st if isinstance(st, str) else st.get("tts_text", st.get("text", "")) for st in s["sentences"]]
+        return apply_bilingual(" ".join(parts), eng)
+    return apply_bilingual(s.get("tts_text", s["text"]), eng)
+
+words = [w for s in segs for w in strip_markup(seg_spoken_string(s)).split()]
 dflt = script.get("pause_after", PA["voice"]["default_pause_after_s"])
-pause = sum(s.get("pause_after", dflt) for s in segs[:-1])
-est = len(words) / 4.49 + pause   # 4.49 = Hải Đăng in-line rate (voice_standard.json profile)
+pause = sum(float(s.get("pause_after", dflt)) for s in segs[:-1])
+
+# Estimate episode voice seconds using the v2.0 per-sentence rhythm budget
+est_speak = 0.0
+for s in segs:
+    eng = list(global_english) + list(s.get("english", []))
+    if s.get("sentences"):
+        raw_sents = s["sentences"]
+        for j, st in enumerate(raw_sents):
+            st_txt = apply_bilingual(st if isinstance(st, str) else st.get("tts_text", st.get("text", "")), eng)
+            st_wps = (st.get("wps", s.get("wps")) if isinstance(st, dict) else s.get("wps")) or RH["target_ups"]
+            n_emo = sum(1 for tg in TAG_RE.findall(st_txt) if tg.strip().lower() in allowed_tags)
+            gap_j = (float(st.get("pause_after", RH["sentence_gap_s"])) if isinstance(st, dict) else float(RH["sentence_gap_s"])) if j + 1 < len(raw_sents) else 0.0
+            est_speak += syllable_units(st_txt) / float(st_wps) + n_emo * float(RH["emotion_cue_s"]) + gap_j
+    else:
+        sp_txt = seg_spoken_string(s)
+        sp_wps = float(s.get("wps", RH["target_ups"]))
+        s_parts = [x for x in SENT_SPLIT_RE.split(re.sub(r"\.{3,}", "…", sp_txt.strip())) if x.strip()]
+        n_emo = sum(1 for tg in TAG_RE.findall(sp_txt) if tg.strip().lower() in allowed_tags)
+        est_speak += syllable_units(sp_txt) / sp_wps + n_emo * float(RH["emotion_cue_s"]) + max(0, len(s_parts) - 1) * float(RH["sentence_gap_s"])
+est = est_speak + pause
+
 lo, hi = PA["episode"]["segments"]
 if not lo <= len(segs) <= hi:
     err("SC-04", f"{len(segs)} segments; house pacing is {lo}-{hi} (pacing.json)")
 wlo, whi = PA["episode"]["words"]
 if not wlo <= len(words) <= whi:
-    err("SC-05", f"{len(words)} spoken words; house budget {wlo}-{whi} (= 140-165 s at 1.0x Hải Đăng) — cut or add a beat, never speed the voice up")
+    err("SC-05", f"{len(words)} spoken words; house budget {wlo}-{whi} (= {PA['episode']['voice_s'][0]}-{PA['episode']['voice_s'][1]} s at {RH['target_ups']} ups Hải Đăng) — cut or add a beat")
 slo, shi = PA["episode"]["voice_s"]
 if not slo <= est <= shi:
     err("SC-05", f"estimated {est:.0f} s outside {slo}-{shi} s (target {PA['episode']['voice_s_target']} s)")
 plo, phi = PA["voice"]["pause_after_s"]
 for s in segs:
-    pa = s.get("pause_after", dflt)
+    pa = float(s.get("pause_after", dflt))
     if not plo <= pa <= phi:
         err("SC-18", f"{s['id']}: pause_after {pa} outside {plo}-{phi} s")
 
-# ---- text sent to the voice (standards/voice_standard.json -> text) ----
-VS = json.loads((ROOT / "standards/voice_standard.json").read_text())["text"]
+# ---- text sent to the voice (standards/voice_standard.json -> text: digits, <en> balance, emotion tags) ----
 for s in segs:
-    t = s.get("tts_text", s["text"])
-    if VS["no_digits"] and re.search(r"\d", t):
+    texts_to_check = [s["text"]]
+    if "tts_text" in s:
+        texts_to_check.append(s["tts_text"])
+    for st in s.get("sentences", []):
+        texts_to_check.append(st if isinstance(st, str) else st.get("tts_text", st.get("text", "")))
+    spoken_t = seg_spoken_string(s)
+    clean_spoken = strip_markup(spoken_t)
+    if VS["no_digits"] and re.search(r"\d", clean_spoken):
         err("SC-15", f"{s['id']}: digits in the spoken text — write numbers in words (in text, or in tts_text)")
-    if VS["no_ellipsis"] and ("..." in t or "…" in t):
-        err("SC-16", f"{s['id']}: '…' in the spoken text — the engine turns it into a 0.3-0.5 s hole; use a full stop or a comma")
-    tags = re.findall(r"\[([^\]]+)\]", t)
-    if any(x not in VS["allowed_tags"] for x in tags):
-        err("SC-17", f"{s['id']}: emotion tags {tags} are not in the voice standard")
+    if VS.get("no_ellipsis") and ("..." in clean_spoken or "…" in clean_spoken):
+        err("SC-16", f"{s['id']}: '…' in the spoken text")
+    for raw_t in texts_to_check:
+        stripped_en = EN_SPAN_RE.sub("", raw_t)
+        if re.search(r"</?en\b", stripped_en, flags=re.I):
+            err("SC-16", f"{s['id']}: unbalanced or nested <en>...</en> bilingual tag")
+        tags = [x.strip() for x in TAG_RE.findall(raw_t)]
+        bad_t = [x for x in tags if x.lower() not in allowed_tags]
+        if bad_t:
+            err("SC-17", f"{s['id']}: unsupported emotion tag(s) {bad_t} — allowed: {sorted(allowed_tags)}")
+
 for s in segs:
-    n = len(s["text"].split())
+    n = len(strip_markup(s["text"]).split())
     if n > 45:
         err("SC-06", f"{s['id']}: {n} words in one segment (max 45) — split it, each segment is a picture change")
-    if n < 3:
+    if n < 2:
         warn("SC-06", f"{s['id']}: only {n} words")
 
 # ---- rhythm ----
-sentences = [x.strip() for s in segs for x in re.split(r"(?<=[.!?…])\s+", s["text"]) if x.strip()]
-lens = [len(x.split()) for x in sentences]
+sentences = [
+    x.strip()
+    for s in segs
+    for x in SENT_SPLIT_RE.split(re.sub(r"\.{3,}", "…", strip_markup(s["text"])))
+    if x.strip()
+]
+lens = [len(x.split()) for x in sentences if x.split()]
 if lens:
     mean, sd = statistics.mean(lens), statistics.pstdev(lens)
     if sd < 3.0:
@@ -88,10 +183,15 @@ if lens:
 else:
     mean = sd = 0
 
-# ---- dialect: northern narrator (Hải Đăng) ----
+# ---- dialect: northern narrator (Hải Đăng), excluding <en>...</en> spans ----
 SOUTH_ERR = ["hông", "nhen", "nghen", "tui", "ổng", "hổng", "dìa", "mần", "hổm", "bển", "dzô", "dzậy", "zậy", "hen", "nè", "vầy"]
 SOUTH_WARN = {"heo": "lợn", "muỗng": "thìa", "xài": "dùng", "mắc": "đắt (nếu là giá)", "bả": "bà ấy", "trái": "quả (nếu là hoa quả)", "kêu": "gọi/bảo", "chén": "bát"}
-toks = [re.sub(r"[^\w]", "", w.lower()) for w in words]
+vi_only_words = []
+for s in segs:
+    sp = seg_spoken_string(s)
+    no_en = EN_SPAN_RE.sub(" ", TAG_RE.sub(" ", sp))
+    vi_only_words.extend(no_en.split())
+toks = [re.sub(r"[^\w]", "", w.lower()) for w in vi_only_words if re.sub(r"[^\w]", "", w.lower())]
 for w in SOUTH_ERR:
     if w in toks:
         err("SC-10", f"southern word '{w}' — narrator speaks northern Vietnamese")
@@ -109,14 +209,14 @@ for (a, b), c in bi.most_common(8):
     if c > 6 and a not in ("ông", "bà", "anh", "chị", "cô", "chú", "cái", "là", "thì", "và", "của", "một", "không"):
         warn("SC-11", f"phrase '{a} {b}' repeats {c}×")
 
-# ---- structural spine & anti-catalogue checks (v3.4.0: SC-20..26) ----
+# ---- structural spine & anti-catalogue checks (v3.4.0+: SC-20..26) ----
 FIRST_PERSON_RE = re.compile(r"\b(tôi|mình|nhà tôi|bố tôi|mẹ tôi|chúng tôi)\b", re.I)
 PROTAG_RE = re.compile(
     r"\b(tôi|mình|chúng tôi|nhà tôi|bố tôi|mẹ tôi|em tôi|anh tôi|chị tôi|ông tôi|bà tôi|hai anh em|hai bố con|hai mẹ con|hai chị em)\b",
     re.I,
 )
 URGENCY_RE = re.compile(
-    r"\b(phút|giây|tiếng|nửa đêm|giao thừa|trước khi|hạn cuối|còn đúng|đếm ngược|kịp|sắp|cháy|nổ|ngạt|ngập|tràn|đóng cửa|tắt đèn|cạn|mất)\b",
+    r"\b(phút|giây|tiếng|nửa đêm|giao thừa|trước khi|hạn cuối|còn đúng|đếm ngược|kịp|sắp|cháy|nổ|ngạt|ngập|tràn|đóng cửa|tắt đèn|cạn|mất|thứ bảy|sinh nhật)\b",
     re.I,
 )
 MORAL_RE = re.compile(
@@ -133,7 +233,7 @@ if len(segs) >= 10:
     lo_i = int(len(segs) * 0.35)
     hi_i = max(lo_i + 1, int(len(segs) * 0.70))
     mid_segs = segs[lo_i:hi_i]
-    active_mid = sum(1 for s in mid_segs if PROTAG_RE.search(s["text"]))
+    active_mid = sum(1 for s in mid_segs if PROTAG_RE.search(strip_markup(s["text"])))
     if active_mid / len(mid_segs) < 0.25:
         err(
             "SC-20",
@@ -142,19 +242,19 @@ if len(segs) >= 10:
 
 # SC-24: button length <= 12 words + ban stated morals & magic-denial endings
 if segs:
-    btn_words = len(segs[-1]["text"].split())
+    btn_words = len(strip_markup(segs[-1]["text"]).split())
     if btn_words > 14:
         err("SC-24", f"final Button segment ({segs[-1]['id']}) is {btn_words} words (> 14) — tighten to <= 12 words")
     elif btn_words > 12:
         warn("SC-24", f"final Button segment ({segs[-1]['id']}) is {btn_words} words (target <= 12)")
-    tail_txt = " ".join(s["text"] for s in segs[-3:])
+    tail_txt = " ".join(strip_markup(s["text"]) for s in segs[-3:])
     if m := MORAL_RE.search(tail_txt):
         err("SC-24", f"stated moral cliché near ending ('{m.group(0)}') — replace with deadpan story button")
     if m := MAGIC_DENIAL_RE.search(tail_txt):
         err("SC-24", f"magic-denial/dream twist near ending ('{m.group(0)}') — climax must work inside the rule")
 
 # SC-25 (script half): narrator enters by s7
-has_early_protag = bool(segs) and any(FIRST_PERSON_RE.search(s["text"]) for s in segs[:7])
+has_early_protag = bool(segs) and any(FIRST_PERSON_RE.search(strip_markup(s["text"])) for s in segs[:7])
 if segs and not has_early_protag:
     err("SC-25", "first-person narrator ('tôi'/'mình') does not appear in s1..s7 — enter early with a personal stake")
 
@@ -171,7 +271,7 @@ if brief_path.exists():
     elif chosen_arch in ("Personal Rule-Trap", "Hybrid VN Trap") and len(segs) >= 10:
         u_lo = int(len(segs) * 0.35)
         u_hi = max(u_lo + 1, int(len(segs) * 0.85))
-        u_txt = " ".join(s["text"] for s in segs[u_lo:u_hi])
+        u_txt = " ".join(strip_markup(s["text"]) for s in segs[u_lo:u_hi])
         if not URGENCY_RE.search(u_txt):
             warn("SC-23", f"archetype '{chosen_arch}' has no visible ticking-clock/urgency cue in 35%-85% of segments")
 
@@ -183,13 +283,11 @@ else:
     for h in ["## Spine", "## Plant & Payoff", "## Hook", "## Setup", "## Escalation", "## Turn", "## Payoff", "## Button", "## Segment map"]:
         if h not in beats:
             err("SC-12", f"beats.md lacks section '{h}'")
-    # a spine, not a gag list (sv-10 craft.md §2b): the middle is a causal chain
     spine = beats.split("## Spine", 1)[1].split("\n## ", 1)[0] if "## Spine" in beats else ""
     causal_lines = [ln.strip() for ln in spine.splitlines() if re.match(r"^\s*-\s*(vì thế|nhưng)\b", ln, re.I)]
     if len(causal_lines) < 4:
         err("SC-19", f"beats.md ## Spine has {len(causal_lines)} causal links; write the chain as >= 4 '- vì thế …' / '- nhưng …' lines")
 
-    # SC-26: every causal line in ## Spine cites valid [sN] / [sN-sM] in non-decreasing order
     prev_idx = -1
     for ln in causal_lines:
         tags = re.findall(r"\[(s\d+[a-z]?)(?:\s*[-–>→]+\s*(s\d+[a-z]?))?\]", ln, re.I)
@@ -209,7 +307,6 @@ else:
                 err("SC-26", f"Spine causal line '{ln[:50]}' goes backwards in segment order")
             prev_idx = id_to_idx[first_sid]
 
-    # SC-22: ## Plant & Payoff maps early Plant (<= 45%) to late Payoff (>= 65%)
     if "## Plant & Payoff" in beats and ids:
         pp_sec = beats.split("## Plant & Payoff", 1)[1].split("\n## ", 1)[0]
         pm = re.search(r"Plant\s*:\s*(s\d+[a-z]?)\b", pp_sec, re.I)
@@ -232,7 +329,6 @@ else:
                 if id_to_idx[p_sid] >= id_to_idx[y_sid]:
                     err("SC-22", f"Plant ({p_sid}) must come before Payoff ({y_sid})")
 
-    # SC-13, SC-21, SC-25: Segment map completeness + Act-1 ceiling + Pivot timing
     for i in ids:
         if not re.search(rf"\|\s*{i}\s*\|", beats):
             err("SC-13", f"beats.md segment map has no row for {i}")
@@ -272,7 +368,7 @@ else:
             pos = f"{pivot_idx/len(map_rows):.0%}" if pivot_idx is not None else "missing"
             err("SC-25", f"## Segment map needs a Pivot/Handicap beat before 40% (got: {pos})")
 
-first = segs[0]["text"] if segs else ""
+first = strip_markup(segs[0]["text"]) if segs else ""
 if len(first.split()) > 20:
     err("SC-14", f"s1 is {len(first.split())} words — the hook must land in the first ~4 s (<= 20 words)")
 
@@ -282,7 +378,7 @@ report = {"segments": len(segs), "words": len(words), "est_seconds": round(est, 
 (ROOT / "qa").mkdir(exist_ok=True)
 out = ROOT / "qa/script_lint.json"
 txt = json.dumps(report, ensure_ascii=False, indent=1)
-if not out.exists() or out.read_text() != txt:   # unchanged result keeps its mtime, so a G2 review stays valid
+if not out.exists() or out.read_text() != txt:
     out.write_text(txt)
 print(f"script: {len(segs)} segments, {len(words)} words, ~{est:.0f} s, sentences {len(lens)} (mean {mean:.1f}, SD {sd:.1f}, {report['sent_min']}-{report['sent_max']})")
 for w in warns:

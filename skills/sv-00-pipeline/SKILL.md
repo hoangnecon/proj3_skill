@@ -11,8 +11,8 @@ reference episode "Thang máy ăn bí mật" (153 s, 67 shots, 26 segments) is t
 
 ## House standards (same output from any agent, any machine)
 Three files in `standards/` plus the theme generator `scripts/theme.py`, versioned in the suite, never edited
-per episode (a change is a series decision with a CHANGELOG line; the gates go stale where they changed): `pacing.json` (length 140–165 s, 600–720 words,
-voice 1.0×, 2.0–3.0 s per shot), `voice_standard.json` (Hải Đăng preset, t0.8/k25, one take, per-line
+per episode (a change is a series decision with a CHANGELOG line; the gates go stale where they changed): `pacing.json` (length 125–170 s, 620–860 words,
+5.25 ups per-sentence rhythm, 2.0–3.0 s per shot), `voice_standard.json` (Hải Đăng preset, t0.7/k25, pitch 1.02, bilingual `<en>`, `…` & emotion tags, per-line
 checks), `mix_targets.json` (voice chain, music 15–18 dB under, −14 LUFS), `theme.py` (the series theme).
 
 ## Phase map

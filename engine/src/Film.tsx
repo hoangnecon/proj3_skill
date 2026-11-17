@@ -269,7 +269,7 @@ const Captions: React.FC<{t: number}> = ({t}) => {
       const len = cur.map((x) => x.w).join(' ').length + w.w.length + 1;
       if (len > 26 && cur.length) flush();
       cur.push(w);
-      if (/[.,:?!]$/.test(w.w) && cur.length >= 2) flush();
+      if (/[.,:?!…]$/.test(w.w) && cur.length >= 2) flush();
     });
     flush();
     return out;
@@ -281,7 +281,7 @@ const Captions: React.FC<{t: number}> = ({t}) => {
   return (
     <text x={540} y={y} textAnchor="middle" fontFamily={FONT} fontWeight={900} fontSize={66} paintOrder="stroke" stroke={PAL.ink} strokeWidth={16} strokeLinejoin="round">
       {ch.w.map((w, i) => (
-        <tspan key={i} fill={t >= w.s && t < w.e + 0.15 ? PAL.yellow : PAL.white}>{(i ? ' ' : '') + w.w.replace(/[,.:]$/, '')}</tspan>
+        <tspan key={i} fill={t >= w.s && t < w.e + 0.15 ? PAL.yellow : PAL.white}>{(i ? ' ' : '') + w.w.replace(/\.{3,}$/, '…').replace(/[,.:]$/, '')}</tspan>
       ))}
     </text>
   );

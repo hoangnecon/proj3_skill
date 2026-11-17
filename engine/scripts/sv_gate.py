@@ -116,10 +116,11 @@ def checks(g):
                 if r[k] != sha(f):
                     bad.append(f"{f} changed after the voice was made — re-run voice.py")
             e = r["engine"]
-            if e.get("clone") or e.get("speed") != 1.0 or e.get("takes") != 1:
-                bad.append(f"engine settings off-standard: {e}")
+            rh = r.get("rhythm", {})
+            if e.get("clone") or e.get("mode") != "per_sentence_rhythm" or e.get("takes") != 1 or rh.get("target_ups") != 5.25 or rh.get("pitch_ratio") != 1.02:
+                bad.append(f"engine/rhythm settings off-standard: {e} / {rh}")
             for sid, fails in r["failed_lines"].items():
-                bad.append(f"{sid} fails {fails} after all attempts — fix its tts_text (numbers in words, plain punctuation, split a long line), then voice.py --only {sid}")
+                bad.append(f"{sid} fails {fails} after all attempts — fix its tts_text / sentences (numbers in words, <en>...</en> for English, split a long line), then voice.py --only {sid}")
             if r["stale_lines"]:
                 bad.append(f"text changed after these lines were made: {r['stale_lines']} — voice.py --only {','.join(r['stale_lines'])}")
             for c in r["episode_checks"]:

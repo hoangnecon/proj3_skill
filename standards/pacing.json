@@ -1,34 +1,36 @@
 {
- "_doc": "House pacing standard: every episode, made by any agent on any machine, runs at the same speed. Shared; do not edit per episode (series decision + CHANGELOG line). Enforced by script_lint.py (G2: word budget), voice.py/sv_gate G3 (measured voice), lint.mjs shots PC-01..03 (G5: cutting), deliver report (G7: length).",
- "version": "1.0",
+ "_doc": "House pacing standard v2.0: offline per-sentence lively Hải Đăng rhythm (~5.25 syllable-units/s inside segments, ~4.8-5.3 overall wps including pauses, pitch_ratio 1.02). Shared across episodes; do not edit per episode. Enforced by script_lint.py (G2: word & duration budget), voice.py/sv_gate G3 (measured voice), lint.mjs shots PC-01..03 (G5: cutting), deliver report (G7: length).",
+ "version": "2.0",
  "calibration": {
-  "_doc": "measured 2026-11-16 on the three approved episodes",
-  "thang-may": {"video_s": 149.0, "voice_wps": 4.34, "shots": 67, "shot_mean_s": 2.22, "shots_per_min": 27.0},
-  "con-so-dam-ma": {"video_s": 147.9, "voice_s": 144.9, "words": 624, "voice_wps": 4.32, "segment_wps_median": 4.56, "pause_total_s": 6.1, "shots": 52, "shot_mean_s": 2.84, "shots_per_min": 21.1},
-  "tiem-cam-tuoi": {"video_s": 164.6, "voice_s": 161.6, "words": 705, "voice_wps": 4.37, "segment_wps_median": 4.56, "pause_total_s": 6.3, "shots": 67, "shot_mean_s": 2.46, "shots_per_min": 24.4}
+  "_doc": "v1.0 reference episodes at 1.0x plus v2.0 5.25-ups calibration (2026-11-17)",
+  "london-approved-zip": {"sentences": 16, "speak_s": 51.95, "gap_s": 2.64, "total_s": 54.59, "target_ups": 5.25, "pitch_ratio": 1.02},
+  "thang-may": {"video_s": 149.0, "shots": 67, "shot_mean_s": 2.22, "shots_per_min": 27.0}
  },
  "voice": {
-  "speed": 1.0,
-  "_speed_why": "Hải Đăng is used at the engine's native speed (1.0x, about 4.5 words/s inside a line). Never time-stretch, speed up (atempo) or pitch-shift: pictures follow the voice.",
-  "overall_wps": [4.1, 4.6],
+  "mode": "per_sentence_rhythm",
+  "target_ups": 5.25,
+  "pitch_ratio": 1.02,
+  "_speed_why": "Per-sentence adaptive rhythm (not a flat 1.25x multiplier): each sentence is synthesized with Hải Đăng (t0.7/k25), internal holes >0.32s are trimmed to 0.16s, and per-sentence WSOLA tempo + 1.02 pitch brings speech to ~5.25 syllable-units/s while allowing per-sentence/per-segment wps & pause_after fine-tuning in script.json.",
+  "overall_wps": [4.6, 5.5],
+  "sentence_gap_s": 0.16,
   "default_pause_after_s": 0.18,
-  "pause_after_s": [0.1, 0.6],
-  "pause_share": [0.02, 0.08]
+  "pause_after_s": [0.08, 0.7],
+  "pause_share": [0.02, 0.09]
  },
  "episode": {
   "voice_s_target": 150,
-  "voice_s": [140, 165],
-  "voice_s_hard": [130, 175],
-  "words": [600, 720],
-  "segments": [22, 34],
-  "_why": "user: 'tầm 2,5 phút'. Words budget = 140-165 s x 4.33 words/s (voice incl. pauses)."
+  "voice_s": [125, 170],
+  "voice_s_hard": [115, 180],
+  "words": [620, 860],
+  "segments": [22, 40],
+  "_why": "2-3 minute vertical story (~2.5 min target = 150 s). At ~5.0 overall words/s (5.25 in-segment ups + sentence/segment pauses), 620-860 spoken words run 125-170 s."
  },
  "shots": {
   "mean_s": [2.0, 3.0],
   "shots_per_min": [20, 28],
   "p10_s_min": 1.2,
   "max_s": 6.5,
-  "_why": "approved episodes cut every 2.2-2.8 s on average (21-27 shots/min); faster reads frantic for this deadpan narrator, slower lets a 2.5 min episode sag"
+  "_why": "Approved episodes cut every 2.0-3.0 s on average (20-28 shots/min); cuts land on word anchors."
  },
  "music": {"bpm": 118, "theme": "series"}
 }

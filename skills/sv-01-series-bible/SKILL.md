@@ -6,7 +6,7 @@ description: The identity of the story-video series — format, narrator persona
 # sv-01 · Series bible
 
 ## Format
-- Vertical 1080×1920, 2–3 minutes (house standard 140–165 s, 600–720 words), one narrator, captions burned in.
+- Vertical 1080×1920, 2–3 minutes (house standard 125–170 s, 620–860 words at 5.25 ups), one narrator, captions burned in.
 - Flat "riso ink" 2D illustration (`sv-20` tokens): ink-navy outlines, halftone dots, paper grain,
   Be Vietnam Pro type. Animated in Remotion, every shot anchored to a word.
 - Sound: voice Hải Đăng (northern male), the series theme music (`scripts/theme.py`) 15–18 dB under the voice, mixed by the `sv-42` standard, room ambience per location, small foley.

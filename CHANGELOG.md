@@ -1,5 +1,15 @@
 # Changelog
 
+## `v3.5.0` — 2026-11-17 · per-sentence 5.25 ups rhythm, bilingual `<en>`, ellipsis & emotion tags
+- **Offline per-sentence fast rhythm (`standards/voice_standard.json` v2.0, `standards/pacing.json` v2.0, `engine/scripts/voice.py`, `sv-12`):**
+  - Synthesizes sentence-by-sentence with VieNeu V3 Turbo `Hải Đăng` (`use_ref_codes=True`, `temperature=0.7`, `top_k=25`, `top_p=0.95`), trims internal pauses `> 0.32 s` down to `0.16 s`, and brings each sentence to `5.25` syllable-units/s with `pitch_ratio = 1.02` via built-in FFmpeg WSOLA (`asetrate + aresample + atempo`) — 100% offline, without uniform `1.25×` distortion and without external Edge-TTS or RubberBand dependencies.
+  - Supports surgical per-segment and per-sentence fine-tuning (`wps`, `pause_after`, `tts_text`, `seed`, `sentences: [...]`), `--only s7.2` single-sentence regeneration, and `--reuse` instant rhythm rebuild from cached raw sentence WAVs.
+  - Updates episode word/runtime window for `5.25` ups pacing (`620–860` words, `125–170 s`, `22–40` segments, `4.6–5.5` overall wps), leaving `sv-40`/`sv-42` mix & master (`-14 LUFS`, `theme.py`) untouched.
+- **Standardized bilingual `<en>...</en>` (`voice.py`, `script_lint.py`, `sv-10`, `sv-12`):**
+  - Supports top-level/per-segment `"english": [...]` lists in `script.json` and inline `<en>...</en>` spans for native English G2P in VieNeu V3 Turbo, counting English vowel-cluster syllables accurately for pacing, excluding `<en>` spans from `SC-10` Vietnamese dialect checks, and stripping markup cleanly from burned-in captions (`words.json`).
+- **Ellipsis & emotion tags unbanned (`voice_standard.json`, `script_lint.py`, `Film.tsx`):**
+  - Unbans `...` / `…` (`no_ellipsis: false`; `SC-16` now checks `<en>...</en>` tag balance) and enables VieNeu V3 Turbo's native inline emotion tags (`[cười]`, `[thở dài]`, `[hắng giọng]`, `[chuckle]`, `[sigh]`, `[clear throat]`) in `SC-17`, stripping tags from `words.json` captions and accounting for non-verbal cue duration in rhythm & ASR checks.
+
 ## `v3.4.1` — 2026-11-16 · scene-design rollback
 - Removed **sv-23-scene-design** and `engine/scripts/scene_audit.py`.
   - Its caps (≤ 4–5 props per plane, plain floors, "delete props when busy", edge ≤ 0.075, ≤ 15 colours) produced sparse, block-built sets.
