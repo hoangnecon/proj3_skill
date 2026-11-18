@@ -1,5 +1,8 @@
 # Changelog
 
+## `v3.6.1` — 2026-11-18 · opt-in long episode (SC-27)
+- **SC-27:** `script.json` `"length": "long"` switches the length budget to `episode_long` in `standards/pacing.json` (170–240 s voice, 860–1150 words, 34–52 segments) for an adapted story the user wants kept longer than 2–3 min. `script_lint.py` requires `brief.md ## Length override` with `user_quote: "…"` (the user's own words); `voice.py` reads the same band. Shot pacing is unchanged. Never edit `pacing.json` per episode.
+
 ## `v3.6.0` — 2026-11-17 · speed + per-shot review (perf plan, docs/perf-plan-2026-11-17.md)
 - **No phone copy:** `deliver.mjs` makes only `out/final.mp4`; G7 drops the size check; `final_check.jpg`. Render concurrency adapts to the CPU count (4–8).
 - **Fast QA renders:** `qa.mjs` and `design.mjs` share one browser and 4 workers (`SV_QA_WORKERS`), with QA frames at half size. On hắt-xì (70 shots): full contact 3 min → 33 s, a re-run with no change takes 5 s, 26 strips take 40 s, and a one-shot check takes 3 s.

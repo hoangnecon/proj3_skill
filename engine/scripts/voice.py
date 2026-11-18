@@ -498,6 +498,8 @@ def main():
     if voice != "Hải Đăng" and not args.allow_voice:
         raise SystemExit(f"giọng '{voice}' không phải Hải Đăng — luật nhà. Dùng --allow-voice chỉ khi người dùng yêu cầu.")
     PA = json.loads((ROOT / "standards/pacing.json").read_text())
+    if script.get("length") == "long":  # opt-in band, approved in brief.md (script_lint SC-27)
+        PA["episode"] = PA["episode_long"]
     default_pause = script.get("pause_after", PA["voice"]["default_pause_after_s"])
     global_english = script.get("english", [])
     sents_dir = ROOT / "audio" / "_sents"

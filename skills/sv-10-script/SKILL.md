@@ -56,6 +56,7 @@ A weak script cannot be saved by pictures. This skill turns an idea into `brief.
 | SC-24 | final `Button` segment ≤ 12 words (warn 13–14, error > 14); last 3 segments forbid stated-moral clichés and magic-denial twists |
 | SC-25 | personal pivot timing: first-person enters in `s1..s7` AND `## Segment map` has `Pivot`/`Handicap`/`Want` < 40% |
 | SC-26 | every `- vì thế` / `- nhưng` line in `beats.md ## Spine` cites valid `[sN]` / `[sN-sM]` IDs in non-decreasing order |
+| SC-27 | `script.json` `"length": "long"` (opt-in, for an adapted story the user wants kept longer than 2–3 min) needs `brief.md ## Length override` with `user_quote: "…"`; the budget becomes `episode_long` in `pacing.json` (860–1150 words, 170–240 s, 34–52 segments). Never edit `pacing.json` per episode. |
 
 ## Rules
 - Narrator: first person, northern Vietnamese. Zero southern words, zero internet slang. Foreign proper nouns or loanwords (`Graham`, `Henderson`, `London`) keep clean spelling in `text` and are declared in `"english": [...]` at the top of `script.json` (or wrapped in `<en>...</en>` in `tts_text`). Ellipsis (`...` / `…`) and native VieNeu emotion tags (`[cười]`, `[thở dài]`, `[hắng giọng]`) are allowed where expressive phrasing earns them (stripped automatically from burned-in captions).

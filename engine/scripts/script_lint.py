@@ -78,6 +78,14 @@ if -1 in nums or len(set(ids)) != len(ids) or nums != sorted(nums) or (nums and 
 
 # ---- length + pacing (standards/pacing.json & standards/voice_standard.json v2.0) ----
 PA = json.loads((ROOT / "standards/pacing.json").read_text())
+# SC-27: a longer episode is allowed only when the user asked for it, in writing, in brief.md
+if script.get("length") == "long":
+    _b = (ROOT / "brief.md").read_text() if (ROOT / "brief.md").exists() else ""
+    _m = re.search(r"^## Length override\s*\n(.*?)(?=^## |\Z)", _b, re.M | re.S)
+    if not _m or not re.search(r'^user_quote:\s*"(.{4,})"\s*$', _m.group(1), re.M):
+        err("SC-27", 'script.json length "long" needs brief.md "## Length override" with a line user_quote: "<the user\'s words>"')
+    else:
+        PA["episode"] = PA["episode_long"]
 VS_FULL = json.loads((ROOT / "standards/voice_standard.json").read_text())
 VS = VS_FULL["text"]
 RH = VS_FULL["rhythm"]
