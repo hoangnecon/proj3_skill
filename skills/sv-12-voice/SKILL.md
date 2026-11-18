@@ -31,7 +31,7 @@ Why this exists: a flat uniform speedup (`1.25×` / `atempo` on a whole segment)
 | `timbre_vs_profile` | `±20 %` |
 | `max_hole_s` (unintended silence inside a segment) | `≤ 0.45 s` |
 
-Episode checks: `f0_spread_st ≤ 1.1`, `rate_cv ≤ 0.10` (over default-rate segments), `timbre_cv ≤ 0.12`, `retry_share ≤ 0.25`; pacing: `voice_s` `125–170 s`, `overall_wps` `4.6–5.5`, `pause_share` `2–9 %`, `22–40` segments.
+Episode checks: `f0_spread_st ≤ 1.1`, `rate_cv ≤ 0.10` (over default-rate segments), `timbre_cv ≤ 0.12`, `retry_share ≤ 0.25`, `between_words_db ≤ −50` (noise and reverb tails between words, measured through the same voice chain the mix uses — G6 gets the same number, ±0.15 dB on 6 episodes, so a noisy take is re-made here, not found after the shots are built; `voice.py` names the worst segments for `--only`); pacing: `voice_s` `125–170 s`, `overall_wps` `4.6–5.5`, `pause_share` `2–9 %`, `22–40` segments.
 
 ## Text, Bilingual & Expressive Tag Rules (`SC-15..17` + `voice.py`)
 - **Numbers in words** in spoken text (`"mười tỷ đồng"`, never `"10.000.000.000"`).

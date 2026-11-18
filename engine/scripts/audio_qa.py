@@ -125,12 +125,7 @@ def measure_mix():
     # noise + codec reverb tail between words (what the user heard as "noise, eco"): 10 ms frames of the voice stem
     # that are not speech and not digital silence; the quietest quarter (p25) relative to the speech level.
     # p25, not the median: whisper word ends are early, so many "gap" frames still hold speech.
-    h = SR // 100
-    nfr = len(mono["voice"]) // h
-    fr_db = 20 * np.log10(np.sqrt((mono["voice"][: nfr * h].reshape(nfr, h) ** 2).mean(1)) + 1e-12)
-    fr_sp = speak[: nfr * h].reshape(nfr, h).any(1)
-    gap = ~fr_sp & (fr_db > -120)
-    check(R, "voice", "between_words_db", (float(np.percentile(fr_db[gap], 25)) - A.rms_db(vsp)) if gap.sum() > 20 else -99.0)
+    check(R, "voice", "between_words_db", A.between_words_db(mono["voice"], speak))
 
     # ---- music vs voice
     has_music = np.any(mono["music"][speak])

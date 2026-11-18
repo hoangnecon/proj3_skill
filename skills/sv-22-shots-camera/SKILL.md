@@ -40,6 +40,15 @@ is why it holds attention. An agent that puts one wide frame per sentence has fa
    the first time) → one card per shot. A REVIEWER who did not build the shots opens each card, and for every
    HOT shot also `node scripts/qa.mjs crops <i>` (full-resolution head / hands / feet / overlap crops), then
    writes `qa/review/NN.json` answering the 7 checks. Reviewers run in parallel batches of ~10 shots.
+   **After any later change** (a fix, a helper edit, a re-made voice): `node scripts/qa.mjs cards changed`,
+   then `python3 scripts/carry.py` BEFORE briefing reviewers. It keeps the reviews of shots whose picture did
+   not change (≤ 20 pixels differ on each card frame) and of shots that were only retimed (same definition,
+   same words, start ±0.3 s, length ±10 %; HOT shots also need the same picture at their reach / key moments —
+   run `crops <i>` when it asks). Only `qa/carry.json` → `review` goes back to reviewers. The shot hash
+   (`scripts/deps.mjs`) covers only what the shot draws, so an edit to one prop or set stales only its shots.
+   **Episode reviewed under v3.6** (every hash changes once on upgrade): FIRST `node scripts/qa.mjs adopt`
+   (snapshots the card frames each review saw — only for shots unchanged since their review), THEN
+   `cards all` and `carry.py`: reviews whose card frames are the same picture are kept (`adopt`).
 7. **Fix loop** (only the shots marked `fix`): change → `node scripts/lint.mjs shots` → `node scripts/qa.mjs
    shot <i>` (and `crops <i>` if HOT) → look → the reviewer re-reviews that card. At most 3 tries per shot,
    then escalate (re-stage the shot or ask the user). Re-run `contact` (incremental) at the end; a full
@@ -48,7 +57,8 @@ is why it holds attention. An agent that puts one wide frame per sentence has fa
    waivers justified, plus the cross-check: the conductor re-opens ≥ 10 % of the cards at random (all HOT
    ones included) and names them.
 9. **Gate**: `python3 scripts/sv_gate.py pass G5`. It reads every `qa/review/NN.json`: present, made for the
-   shot's CURRENT hash, reviewer ≠ builder, all checks ok, crops opened for HOT shots. (G5 needs no user
+   shot's CURRENT hash (or carried to it — the gate re-checks every carry from the snapshots), reviewer ≠
+   builder, all checks ok, crops opened for HOT shots. (G5 needs no user
    approval; showing the user a contact page is still a good idea on the first episode of a series.)
 
 ## Rules

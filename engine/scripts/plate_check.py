@@ -35,6 +35,9 @@ for p in sys.argv[1:]:
         "edge_pct": round(float(edge.mean() * 100), 2),
         "rows": "".join(str(int(x)) for x in empty.sum(axis=1)),
         "mtime": p.stat().st_mtime,
+        # when design.mjs last confirmed this plate matches the source (a same-picture re-render keeps the file
+        # time, so lint SE-13 compares this, not mtime, with sets.tsx)
+        "measured": __import__("time").time(),
     }
     print(f"plate {sid}: {stats[sid]['empty_mid']} empty cells in the middle rows (rows {stats[sid]['rows']})")
 out.write_text(json.dumps(stats, indent=1))

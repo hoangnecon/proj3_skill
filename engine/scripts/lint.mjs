@@ -82,7 +82,7 @@ if (phase !== 'shots') {
       if (st.halftone < TH.halftone) err('SE-09', `${id}: halftone texture used ${st.halftone}× < ${TH.halftone} (walls/floor/shade side)`);
       const pl = plateStats[id];
       if (!pl) err('SE-13', `${id}: plate not measured yet — run node scripts/design.mjs`);
-      else if (pl.mtime * 1000 < fs.statSync('src/episode/sets.tsx').mtimeMs) err('SE-13', `${id}: plate is older than src/episode/sets.tsx — re-render with node scripts/design.mjs --only set:${id}`);
+      else if ((pl.measured ?? pl.mtime) * 1000 < fs.statSync('src/episode/sets.tsx').mtimeMs) err('SE-13', `${id}: plate is older than src/episode/sets.tsx — re-render with node scripts/design.mjs --only set:${id}`);
       else if (pl.empty_mid > 8) err('SE-13', `${id}: ${pl.empty_mid} empty 180-px cells in the visible middle of the plate (max 8; rows ${pl.rows}) — detail must be IN FRAME, not off-screen. Fill the wall band: notices, fixtures, clutter (sets.md §3)`);
       else if (pl.empty_mid > 5) warn('SE-13', `${id}: ${pl.empty_mid} empty cells in the middle of the plate (rows ${pl.rows}) — look for bare wall`);
       if (!st.moves) warn('SE-12', `${id}: nothing in the set changes over time — add life driven by o.t (LED pulse, fan, smoke, leaves, clock; sets.md §7)`);

@@ -88,7 +88,12 @@
   "retry_share": [
    0,
    0.25
-  ]
+  ],
+  "between_words_db": [
+   -99,
+   -50.0
+  ],
+  "_between_words_why": "Same chain and measure as G6 (audiolib.voice_chain + between_words_db, mix_targets voice.between_words_db). Measured at G3 since v3.7 so a noisy take is re-made before shots are timed to it."
  },
  "profile": {
   "_doc": "Calibrated Hải Đăng profile under v2.0 per-sentence rhythm (target_ups 5.25, pitch_ratio 1.02, inside holes >0.32s trimmed to 0.16s). rate_wps is syllable-units / segment duration (excluding emotion-cue allowance).",

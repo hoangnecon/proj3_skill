@@ -28,6 +28,9 @@ description: Final QA and delivery of a story-video episode — render the maste
    `python3 scripts/sv_gate.py pass G7`.
 6. Send `out/final.mp4` to the user (SendUserFile) with a one-line caption: title, length, size. Mention
    anything you knowingly left imperfect.
+   Delivery ends at `out/final.mp4` + SendUserFile. Never copy, move or sync it into the user's own folders
+   (`SCRIPT_YOUTUBE/`, Drive, Desktop) unless the user asks for that folder in this conversation —
+   `SCRIPT_YOUTUBE/` is the user's read-only source folder.
 
 ## Rules
 - One video file only: `out/final.mp4`. Do not make a compressed phone copy.

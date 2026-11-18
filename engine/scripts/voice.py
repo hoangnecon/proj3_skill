@@ -483,6 +483,37 @@ def seg_sha(seg: dict, global_english: list[str]) -> str:
     return hashlib.sha1(payload.encode()).hexdigest()[:12]
 
 
+
+def voice_bus_between_words(words, cues):
+    """between_words_db of the processed voice bus (same chain + measure as mix.py / audio_qa.py), whole episode
+    and per segment (worst first) so a failure names the lines to re-take."""
+    import json as _json
+    import audiolib as A
+    tg = _json.loads((ROOT / "standards/mix_targets.json").read_text())
+    v, vsr = sf.read(ROOT / "audio" / "voice.wav", always_2d=False)
+    if v.ndim > 1:
+        v = v.mean(axis=1)
+    if vsr != A.SR:
+        v = resample_poly(v, A.SR, vsr)
+    n = int(A.SR * (cues["total"] + 3.0))
+    buf = np.zeros(max(n, len(v)))
+    buf[: len(v)] = v
+    segs = sorted(cues["seg_starts"].items(), key=lambda kv: kv[1])
+    bounds = [(k, a, segs[i + 1][1] if i + 1 < len(segs) else cues["total"]) for i, (k, a) in enumerate(segs)]
+    bus, info = A.voice_chain(buf, tg["processing"]["voice"], words, bounds)
+    # between_words_db counts only frames above -120 dBFS, so it depends on the bus level. The mastered mix always
+    # lands the voice stem's speech at about -16 dBFS RMS (5 episodes: -15.8..-16.1); measure at that level.
+    if info["speak"].any():
+        bus = bus * 10 ** ((A.MIX_SPEECH_RMS_DB - A.rms_db(bus[info["speak"]])) / 20)
+    total = A.between_words_db(bus, info["speak"])
+    per = {}
+    for k, a, b in bounds:
+        sl = slice(int(a * A.SR), int(b * A.SR))
+        val = A.between_words_db(bus[sl], info["speak"][sl])
+        if val > -99:
+            per[k] = round(val, 2)
+    return total, dict(sorted(per.items(), key=lambda kv: -kv[1]))
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--voice", default=None)
@@ -783,6 +814,10 @@ def main():
         "timbre_cv": float(cents.std() / max(cents.mean(), 1e-6)) if len(cents) else 0.0,
         "retry_share": float(np.mean([a > 1 for a in tried])) if tried else 0.0,
     }
+    # G3 measures the voice bus exactly as G6 will (audiolib.voice_chain): noise / reverb tail between words.
+    # Before v3.7 this was first seen at G6 and sent the episode back through G2 -> G3 -> G5.
+    bw_total, bw_segs = voice_bus_between_words(words, cues)
+    ep_vals["between_words_db"] = bw_total
     voice_end = timeline[-1]["end"] if timeline else 0.0
     pauses_s = sum(float(s.get("pause_after", default_pause)) for s in script["segments"][:-1])
     total_units = sum(syllable_units(x["spoken"]) for x in timeline)
@@ -819,6 +854,7 @@ def main():
         "failed_lines": failed,
         "stale_lines": stale,
         "episode_checks": episode_checks,
+        "between_words_by_seg": bw_segs,
         "segments": [
             {k: x[k] for k in ("id", "start", "end", "similarity", "wps", "asr", "measure", "checks", "fails", "attempts", "sentences")}
             for x in timeline
@@ -827,6 +863,10 @@ def main():
     (ROOT / "qa" / "voice_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=1))
     bad_ep = [f"{c['group']}.{c['check']}={c['value']} ngoài {c['range']}" for c in episode_checks if not c["ok"]]
     print(f"voice report: {len(timeline)} đoạn, {voice_end:.1f}s, {report['wps']} đơn vị/giây, đoạn trượt: {failed or 'không'}, cả tập: {bad_ep or 'đạt'}")
+    bw_c = next(c for c in episode_checks if c["check"] == "between_words_db")
+    if not bw_c["ok"]:
+        worst = [k for k, v in bw_segs.items() if v > bw_c["range"][1]][:8] or list(bw_segs)[:5]
+        print(f"=> nhiễu/đuôi vang giữa các từ {bw_c['value']} dB (> {bw_c['range'][1]}): tạo lại các đoạn tệ nhất  --only " + ",".join(worst))
     if failed:
         print("=> sửa chữ (tts_text / sentences) của các đoạn trượt rồi:  --only " + ",".join(failed))
     if stale:

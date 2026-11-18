@@ -39,6 +39,15 @@ for i, c in enumerate(cells):
         d.text((x + 4, y + h + 30), sub, fill=(180, 190, 230), font=f)
 Path(spec["out"]).parent.mkdir(parents=True, exist_ok=True)
 out = spec["out"]
+# an evidence sheet re-rendered with the same picture keeps its old time, so sv_gate ("X is newer than
+# G.review.md") asks to look again only at the sheets that really changed
+import os
+prev = None
+if os.path.exists(out):
+    try:
+        prev = (Image.open(out).convert("L"), os.stat(out))
+    except Exception:
+        prev = None
 if out.lower().endswith((".jpg", ".jpeg")):
     # QA sheets are for a model to read: light JPEG, long side <= 1600 px, normally 100-400 KB (sv-41 QA-IMG)
     m = max(sheet.size)
@@ -47,4 +56,11 @@ if out.lower().endswith((".jpg", ".jpeg")):
     sheet.save(out, quality=int(spec.get("q", 70)), optimize=True)
 else:
     sheet.save(out)
-print("ok", out, f"{Path(out).stat().st_size // 1024} KB")
+same = False
+if prev is not None:
+    import numpy as np
+    a = np.asarray(prev[0], dtype=np.int16); b = np.asarray(Image.open(out).convert("L"), dtype=np.int16)
+    same = a.shape == b.shape and int((np.abs(a - b) > 24).sum()) <= 20
+    if same:
+        os.utime(out, (prev[1].st_atime, prev[1].st_mtime))
+print("ok", out, f"{Path(out).stat().st_size // 1024} KB" + (" (same picture: time kept)" if same else ""))

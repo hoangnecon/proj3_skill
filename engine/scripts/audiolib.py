@@ -229,3 +229,63 @@ def expander(x, thresh_below_peak_db=-28.0, ratio=4.0, floor_db=-40.0, release=0
     out = np.maximum(out, np.concatenate([out[2:], [out[-1]] * 2]))
     gain = np.interp(np.arange(len(x)), np.arange(n) * win + win / 2, 10 ** (out / 20))
     return x * gain
+
+
+MIX_SPEECH_RMS_DB = -16.0   # speech RMS of the voice stem in a finished -14 LUFS master (measured on 5 episodes)
+
+
+# ------------------------------------------------------------------ voice bus (shared by mix.py and voice.py / G3)
+def speech_mask(words, n):
+    m = np.zeros(n, bool)
+    for w in words:
+        m[int(w["s"] * SR):int(w["e"] * SR)] = True
+    return m
+
+
+def voice_chain(voice, pv, words, seg_bounds):
+    """House voice chain v2 (mix_targets 1.1 processing.voice). voice: mono 48 kHz. Returns (voice, info).
+    The same function runs in mix.py (G6) and at the end of voice.py (G3), so G3 measures what G6 will hear."""
+    voice = hpf(voice, pv["hpf_hz"], 4)
+    dn = pv["denoise"]
+    voice = spectral_denoise(voice, dn["max_reduction_db"], dn["over_subtract"])
+    voice = biquad(voice, *peq(*pv["mud_cut"]))
+    voice = biquad(voice, *peq(*pv["presence"]))
+    voice = biquad(voice, *shelf(*pv["air_shelf"], high=True))
+    voice = lpf(voice, pv["lpf_hz"], 4)
+    voice = deess(voice, *pv["deess"]["band"], pv["deess"]["thresh_db"], pv["deess"]["max_cut_db"])
+    c = pv["comp"]
+    voice, comp_gr = compress(voice, c["thresh_db"], c["ratio"], c["attack_ms"], c["release_ms"], knee_db=c.get("knee_db", 6.0))
+    seg_lufs = {}
+    for k, a, b in seg_bounds:
+        chunk = voice[int(a * SR):int(b * SR)]
+        if len(chunk) > SR * 0.5:
+            seg_lufs[k] = integrated(chunk)
+    med = float(np.median(list(seg_lufs.values()))) if seg_lufs else 0.0
+    lv = np.ones(len(voice))
+    for k, a, b in seg_bounds:
+        if k in seg_lufs:
+            lv[int(a * SR):int(b * SR)] = 10 ** (np.clip(med - seg_lufs[k], -pv["segment_level_clamp_db"], pv["segment_level_clamp_db"]) / 20)
+    bl, al = butter(2, 2 / (SR / 2), "low")
+    voice = voice * lfilter(bl, al, lv)
+    ex = pv["expander"]   # after compression + levelling: nothing later can lift the tails back up
+    voice = expander(voice, ex["thresh_below_peak_db"], ex["ratio"], ex["floor_db"], ex["release"])
+    speak = speech_mask(words, len(voice))
+    # voice peak limit, last stage: plosive/onset spikes sit 20+ dB over the speech level after the expander
+    pk = pv["peak_limit"]
+    v_rms = float(np.sqrt(np.mean(voice[speak] ** 2))) if speak.any() else 0.1
+    voice, pk_gr = true_peak_limit(voice[:, None], 20 * np.log10(v_rms + 1e-12) + pk["crest_db"], pk["lookahead_ms"], pk["release_ms"])
+    return voice[:, 0], {"comp_gr": comp_gr, "pk_gr": pk_gr, "seg_lufs": seg_lufs, "med": med, "speak": speak}
+
+
+def between_words_db(voice, speak):
+    """noise + codec reverb tail between words: 10 ms frames that are not speech and not digital silence;
+    the quietest quarter (p25) relative to the speech level. p25, not the median: whisper word ends are early,
+    so many "gap" frames still hold speech. -99 when there are too few gap frames to measure."""
+    h = SR // 100
+    nfr = len(voice) // h
+    if nfr == 0 or not speak.any():
+        return -99.0
+    fr_db = 20 * np.log10(np.sqrt((voice[: nfr * h].reshape(nfr, h) ** 2).mean(1)) + 1e-12)
+    fr_sp = speak[: nfr * h].reshape(nfr, h).any(1)
+    gap = ~fr_sp & (fr_db > -120)
+    return float(np.percentile(fr_db[gap], 25)) - rms_db(voice[speak]) if gap.sum() > 20 else -99.0

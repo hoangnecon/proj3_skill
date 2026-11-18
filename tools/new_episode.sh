@@ -43,6 +43,7 @@ else
 fi
 cd "$DEST"
 node scripts/times.mjs
+"$(dirname "$0")/doctor.sh" "$DEST" || echo "WARNING: fix the doctor MISS lines before starting the helpers"
 echo
 echo "episode project ready: $DEST$([ $DEMO = 1 ] && echo '  (with the demo)')"
 echo "next: read skills/sv-00-pipeline; see the bar: node scripts/design.mjs --exemplar"

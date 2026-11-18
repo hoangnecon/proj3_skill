@@ -1,10 +1,16 @@
 """Phase gates G1-G7. A gate passes only when its machine checks pass AND its review file proves someone looked
 at every piece of evidence after that evidence was made. Passing appends to gates/log.jsonl with input hashes;
-a later change to any input makes the gate (and every gate after it) STALE.
+a later change to any input makes the gate (and every gate that depends on it) STALE.
+
+Gates depend on what they read, not on a fixed order (v3.7): design (G4) needs only the brief, so it can pass
+while the voice (G3) is still being made; shots (G5) need voice timing AND design.
+  G1 <- -    G2 <- G1    G3 <- G2    G4 <- G1    G5 <- G3, G4    G6 <- G3, G5    G7 <- G5, G6
 
   python3 scripts/sv_gate.py status          # table of all gates: pass / stale / open
+  python3 scripts/sv_gate.py status --brief  # one line per gate + the next command (also writes qa/state.json)
   python3 scripts/sv_gate.py check G4        # run G4's checks, print what is missing (no logging)
   python3 scripts/sv_gate.py pass G4         # check + log the pass (only if everything is green)
+  python3 scripts/sv_gate.py watch [--stall 10]  # STALLED if nothing in the episode moved for N minutes
 
 Review files live in gates/G<n>.review.md (templates are there). Rules every review must satisfy:
   * `verdict: pass` and no TODO / <placeholder> left
@@ -14,6 +20,7 @@ Review files live in gates/G<n>.review.md (templates are there). Rules every rev
     if the user delegated ("cứ làm đi"), `approval: delegated` with that quote.
 """
 import hashlib
+import importlib.util
 import json
 import re
 import subprocess
@@ -28,6 +35,8 @@ ORDER = ["G1", "G2", "G3", "G4", "G5", "G6", "G7"]
 NAMES = {"G1": "premise & brief", "G2": "script & beats", "G3": "voice & timing", "G4": "design: cast + sets",
          "G5": "shots, camera, motion", "G6": "audio mix", "G7": "render & delivery"}
 USER_GATES = {"G1", "G2", "G4"}
+DEPS = {"G1": [], "G2": ["G1"], "G3": ["G2"], "G4": ["G1"], "G5": ["G3", "G4"], "G6": ["G3", "G5"], "G7": ["G5", "G6"]}
+COOLDOWN_S = 60   # between any two passes: gates are reviewed one at a time, not in a batch
 
 
 def sha(p):
@@ -207,6 +216,15 @@ def checks(g):
     return bad
 
 
+def _load_carry():
+    p = Path(__file__).resolve().parent / "carry.py"
+    spec = importlib.util.spec_from_file_location("carry", p)
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+CARRY = _load_carry()
 REVIEW_CHECKS = ["acting", "contact", "overlap", "set", "text", "caption", "beat"]
 
 
@@ -223,7 +241,14 @@ def shot_reviews(st):
         if not r:
             miss.append(i)
             continue
-        if r.get("hash") != h:
+        carried = False
+        if r.get("hash") == h and r.get("carried"):
+            # carried across a change that left the picture the same: re-verify from the card snapshots
+            if not CARRY.chain_ok(r, h):
+                old.append(i)
+                continue
+            carried = True
+        elif r.get("hash") != h:
             old.append(i)
             continue
         if not r.get("reviewer") or r.get("reviewer") == r.get("builder", "builder"):
@@ -233,13 +258,14 @@ def shot_reviews(st):
             notok.append(i)
         if len(re.findall(r"\w+", str(r.get("note", "")))) < 6:
             thin.append(i)
-        if i in hot and ("crops" not in (r.get("looked") or []) or not crops_ok.get(i)):
+        if i in hot and ("crops" not in (r.get("looked") or []) or (not crops_ok.get(i) and not carried)):
             nocrop.append(i)
     fmt = lambda xs: f"{xs[:15]}{'...' if len(xs) > 15 else ''}"  # noqa: E731
     if miss:
         bad.append(f"no review for shots {fmt(miss)} — node scripts/qa.mjs cards changed, then a reviewer writes qa/review/NN.json")
     if old:
-        bad.append(f"review is for an older version of shots {fmt(old)} (hash changed) — re-review those cards")
+        bad.append(f"review is for an older version of shots {fmt(old)} (hash changed) — node scripts/qa.mjs cards changed, "
+                   f"python3 scripts/carry.py (keeps reviews whose picture did not change), then re-review the rest")
     if notok:
         bad.append(f"shots {fmt(notok)} are not ok in review (verdict/checks) — fix them (sv-22 fix loop), re-review")
     if thin:
@@ -255,7 +281,11 @@ def review_problems(g):
         return [f"gates/{g}.review.md missing (copy the template)"]
     txt = p.read_text()
     bad = []
-    if re.search(r"TODO|<[^>\n]{2,40}>", txt):
+    # a placeholder is <words like this> from a template; inline code and known tags (<en>, <br>) are not
+    bare = re.sub(r"`[^`\n]*`", "", txt)
+    bare = re.sub(r"</?(en|br|b|i|em|strong|sub|sup)>", "", bare)
+    # "<what you saw>" is a placeholder; "x < 5 and y > 3" is not (a placeholder hugs its brackets)
+    if re.search(r"TODO|<[^\s<>=][^<>\n]{0,38}[^\s<>=]>", bare):
         bad.append(f"{g}.review.md still has TODO or <placeholder>")
     if not re.search(r"^verdict:\s*pass\s*$", txt, re.M):
         bad.append(f"{g}.review.md: no line 'verdict: pass'")
@@ -285,7 +315,7 @@ def log_entries():
     return [json.loads(l) for l in LOG.read_text().splitlines() if l.strip()]
 
 
-def state(g):
+def raw_state(g):
     last = next((e for e in reversed(log_entries()) if e["gate"] == g), None)
     if not last:
         return "open", None
@@ -294,15 +324,105 @@ def state(g):
     return ("stale", changed) if changed else ("pass", last["at"])
 
 
-def status():
-    prev_ok = True
+def state(g, _memo=None):
+    """pass only if its own inputs are unchanged AND every gate it depends on passes (transitively)"""
+    memo = {} if _memo is None else _memo
+    if g in memo:
+        return memo[g]
+    st, info = raw_state(g)
+    if st == "pass":
+        bad = [d for d in DEPS[g] if state(d, memo)[0] != "pass"]
+        if bad:
+            st, info = "stale", [f"{d} is not passing" for d in bad]
+    memo[g] = (st, info)
+    return memo[g]
+
+
+def next_gates(memo):
+    """gates whose dependencies all pass but which are not passing themselves: the work that can start now"""
+    return [g for g in ORDER if memo[g][0] != "pass" and all(memo[d][0] == "pass" for d in DEPS[g])]
+
+
+def status(brief=False):
+    memo = {}
     for g in ORDER:
-        st, info = state(g)
-        if st == "pass" and not prev_ok:
-            st, info = "stale", ["an earlier gate is not passing"]
-        prev_ok = prev_ok and st == "pass"
+        state(g, memo)
+    rows = []
+    for g in ORDER:
+        st, info = memo[g]
         mark = {"pass": "PASS ", "stale": "STALE", "open": "open "}[st]
-        print(f"{g} {mark} {NAMES[g]:<24} {info if info else ''}")
+        if brief and isinstance(info, list):
+            info = ", ".join(info)[:70]
+        rows.append(f"{g} {mark} {NAMES[g]:<24} {info if info else ''}")
+    nxt = next_gates(memo)
+    print("\n".join(rows))
+    if brief:
+        print("next:", " | ".join(f"{g} ({NAMES[g]}): python3 scripts/sv_gate.py check {g}" for g in nxt) or "all gates pass")
+    (ROOT / "qa").mkdir(exist_ok=True)
+    (ROOT / "qa/state.json").write_text(json.dumps({
+        "at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "gates": {g: {"state": memo[g][0], "info": memo[g][1]} for g in ORDER},
+        "next": nxt, "activity": activity()}, ensure_ascii=False, indent=1))
+
+
+# files whose modification time shows the episode is moving (renders write frames, voice writes takes)
+ACTIVITY_DIRS = ["src", "qa", "gates", "audio", "public", "out"]
+# written by sv_gate itself (times.mjs, status): not a sign that a helper is working
+SELF_WRITTEN = {"state.json", "shots.json", "timing.json", "qa_status.json"}
+
+
+def activity():
+    newest, newest_f = 0.0, None
+    for d in ACTIVITY_DIRS:
+        base = ROOT / d
+        if not base.exists():
+            continue
+        for f in base.rglob("*"):
+            try:
+                if f.is_file() and f.name not in SELF_WRITTEN:
+                    m = f.stat().st_mtime
+                    if m > newest:
+                        newest, newest_f = m, f
+            except OSError:
+                pass
+    for f in ["script.json", "brief.md", "beats.md", "audio.json"]:
+        p = ROOT / f
+        if p.exists() and p.stat().st_mtime > newest:
+            newest, newest_f = p.stat().st_mtime, p
+    lock = ROOT / "qa/.render.lock"
+    running = None
+    if lock.exists():
+        try:
+            pid = int(lock.read_text().split()[0])
+            import os
+            os.kill(pid, 0)
+            running = pid
+        except Exception:
+            running = None
+    return {"last_change_s": round(time.time() - newest, 1) if newest else None,
+            "last_file": str(newest_f.relative_to(ROOT)) if newest_f else None, "render_pid": running}
+
+
+def watch(stall_min):
+    """For the conductor: run on every wake-up. A helper that died (server reload, crash) leaves the episode
+    silent; this says so after `stall_min` minutes instead of letting the episode sit for hours."""
+    memo = {}
+    for g in ORDER:
+        state(g, memo)
+    a = activity()
+    nxt = next_gates(memo)
+    if not nxt:
+        print("DONE all gates pass")
+        return
+    quiet = (a["last_change_s"] or 0) / 60
+    if a["render_pid"]:
+        print(f"RUNNING render pid {a['render_pid']} · next {nxt}")
+    elif quiet >= stall_min:
+        print(f"STALLED {quiet:.0f} min without a file change (last: {a['last_file']}) · open gates {nxt} — "
+              f"check the helper that owns them; if it is gone, start a new one with the same brief")
+        sys.exit(2)
+    else:
+        print(f"OK last change {quiet:.1f} min ago ({a['last_file']}) · next {nxt}")
 
 
 def main():
@@ -310,14 +430,18 @@ def main():
     if (ROOT / "scripts/times.mjs").exists() and (ROOT / "src/episode/shotlist.ts").exists():
         run(["node", "scripts/times.mjs", "--quiet"])
     if len(sys.argv) < 2 or sys.argv[1] == "status":
-        return status()
+        return status(brief="--brief" in sys.argv)
+    if sys.argv[1] == "watch":
+        stall = float(sys.argv[sys.argv.index("--stall") + 1]) if "--stall" in sys.argv else 10.0
+        return watch(stall)
     cmd, g = sys.argv[1], sys.argv[2].upper()
     if g not in ORDER:
         sys.exit(f"unknown gate {g}")
-    for p in ORDER[: ORDER.index(g)]:
-        st, info = state(p)
+    memo = {}
+    for d in DEPS[g]:
+        st, info = state(d, memo)
         if st != "pass":
-            sys.exit(f"{p} ({NAMES[p]}) is {st} {info or ''} — gates go in order")
+            sys.exit(f"{d} ({NAMES[d]}) is {st} {info or ''} — {g} depends on it")
     probs = checks(g) + review_problems(g)
     print(f"{g} {NAMES[g]}")
     print("evidence:", *(evidence(g) or ["(none)"]), sep="\n  ")
@@ -328,15 +452,18 @@ def main():
         sys.exit(1)
     print("all checks green")
     if cmd == "pass":
-        last = next((e for e in reversed(log_entries()) if e["gate"] == ORDER[ORDER.index(g) - 1]), None) if g != "G1" else None
-        if last and time.time() - last["t"] < 60:
-            sys.exit("the previous gate passed less than a minute ago — gates are reviewed one at a time, not in a batch")
+        last = max(log_entries(), key=lambda e: e["t"], default=None)
+        if last and time.time() - last["t"] < COOLDOWN_S:
+            wait = COOLDOWN_S - (time.time() - last["t"])
+            sys.exit(f"{last['gate']} passed {time.time() - last['t']:.0f} s ago — gates are reviewed one at a time, "
+                     f"not in a batch: pass {g} after {time.strftime('%H:%M:%S', time.localtime(time.time() + wait))}")
         G.mkdir(exist_ok=True)
         e = {"gate": g, "at": time.strftime("%Y-%m-%d %H:%M:%S"), "t": time.time(), "inputs": {p: sha(p) for p in INPUTS[g]},
              "evidence": {f: sha(f) for f in evidence(g)}, "review": sha(f"gates/{g}.review.md")}
         with LOG.open("a") as f:
             f.write(json.dumps(e, ensure_ascii=False) + "\n")
         print(f"{g} PASSED and logged")
+        status(brief=True)
 
 
 if __name__ == "__main__":

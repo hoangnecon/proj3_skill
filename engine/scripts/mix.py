@@ -393,47 +393,17 @@ if vsr != SR:
 voice = np.zeros(N)
 place(voice, v, 0.0)
 pv = PR["voice"]
-# voice chain v2 (mix_targets 1.1): clean FIRST so no later gain lifts noise or the codec's reverb tail
-voice = A.hpf(voice, pv["hpf_hz"], 4)
-dn = pv["denoise"]
-voice = A.spectral_denoise(voice, dn["max_reduction_db"], dn["over_subtract"])
-voice = A.biquad(voice, *A.peq(*pv["mud_cut"]))
-voice = A.biquad(voice, *A.peq(*pv["presence"]))
-voice = A.biquad(voice, *A.shelf(*pv["air_shelf"], high=True))
-voice = A.lpf(voice, pv["lpf_hz"], 4)
-voice = A.deess(voice, *pv["deess"]["band"], pv["deess"]["thresh_db"], pv["deess"]["max_cut_db"])
-c = pv["comp"]
-voice, voice_gr = A.compress(voice, c["thresh_db"], c["ratio"], c["attack_ms"], c["release_ms"], knee_db=c.get("knee_db", 6.0))
 segs = sorted(CU["seg_starts"].items(), key=lambda kv: kv[1])
 seg_bounds = [(k, a, segs[i + 1][1] if i + 1 < len(segs) else CU["total"]) for i, (k, a) in enumerate(segs)]
-seg_lufs = {}
-for k, a, b in seg_bounds:
-    chunk = voice[int(a * SR):int(b * SR)]
-    if len(chunk) > SR * 0.5:
-        seg_lufs[k] = A.integrated(chunk)
-med = float(np.median(list(seg_lufs.values()))) if seg_lufs else 0.0
-lv = np.ones(N)
-for k, a, b in seg_bounds:
-    if k in seg_lufs:
-        lv[int(a * SR):int(b * SR)] = 10 ** (np.clip(med - seg_lufs[k], -pv["segment_level_clamp_db"], pv["segment_level_clamp_db"]) / 20)
-voice = voice * lp(lv, 2)
-ex = pv["expander"]   # after compression + levelling: nothing later can lift the tails back up
-voice = A.expander(voice, ex["thresh_below_peak_db"], ex["ratio"], ex["floor_db"], ex["release"])
+# voice chain v2 (mix_targets 1.1) lives in audiolib.voice_chain so voice.py (G3) measures the same thing
+voice, _vc = A.voice_chain(voice, pv, WORDS, seg_bounds)
+voice_gr, voice_pk_gr, seg_lufs, med = _vc["comp_gr"], _vc["pk_gr"], _vc["seg_lufs"], _vc["med"]
 
 # speech mask from word timings (more exact than an energy gate)
-speak = np.zeros(N, bool)
-for w in WORDS:
-    speak[int(w["s"] * SR):int(w["e"] * SR)] = True
+speak = _vc["speak"]
 vs = lp(speak.astype(float), 3)
 on = vs > 0.5
 pauses = ~speak & (T > 0.3) & (T < CU["total"])
-
-# voice peak limit, last stage of the voice chain: plosive/onset spikes ("Ai", "tạch") sit 20+ dB over the speech
-# level after the expander; left in, they make the master limiter clamp 7-8 dB on every one of them
-pk = pv["peak_limit"]
-v_rms = float(np.sqrt(np.mean(voice[speak] ** 2))) if speak.any() else 0.1
-voice, voice_pk_gr = A.true_peak_limit(voice[:, None], 20 * np.log10(v_rms + 1e-12) + pk["crest_db"], pk["lookahead_ms"], pk["release_ms"])
-voice = voice[:, 0]   # mono voice bus; the limiter works on (n, ch)
 
 # ---- music bus: HPF, carve the voice presence band, side-chain duck from the voice
 pm = PR["music"]

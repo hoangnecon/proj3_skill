@@ -377,6 +377,30 @@ else:
             err("SC-25", f"## Segment map needs a Pivot/Handicap beat before 40% (got: {pos})")
 
 first = strip_markup(segs[0]["text"]) if segs else ""
+# SC-28 (warn): sentences the TTS often mangles (flat f0, swallowed or doubled syllables) — the take then fails
+# G3 and the segment is re-made several times. A short tts_text spelling avoids the retries before the voice is made.
+ONO_RE = re.compile(r"^(\w+)([ ,\-]+\1)*$", re.I)   # "cộp cộp", "bùm", "tách, tách"
+# NOTE only, never a warning: re-measured 2026-11-19 on 6 episodes / 452 sentences, flagged sentences were re-taken
+# 8/34 vs 36/418 — but all 8 come from one episode (di-bo: 8/22 vs 13/68); the other 5 episodes 0/12. Not a reliable
+# predictor, so it must not cost a re-write; it is printed as a tip and kept out of qa/script_lint.json warns.
+notes = []
+for s in segs:
+    raw_sents = s.get("sentences") or [x for x in SENT_SPLIT_RE.split(s["text"]) if x.strip()]
+    if "tts_text" in s:
+        continue
+    hits = []
+    for st in raw_sents:
+        if isinstance(st, dict) and "tts_text" in st:
+            continue
+        txt = st if isinstance(st, str) else st.get("text", "")
+        bare = strip_markup(TAG_RE.sub(" ", txt)).strip()
+        words_ = re.findall(r"\w+", bare)
+        if 0 < len(words_) <= 3 or (words_ and ONO_RE.match(" ".join(w.lower() for w in words_))) \
+                or re.match(r"^[\"“'‘«]\s*(…|\.\.\.)", txt.strip()):
+            hits.append(bare[:24])
+    if len(hits) >= 2 or (hits and len(raw_sents) == 1):
+        notes.append(f"SC-28 {s['id']}: {len(hits)} very short / sound-only sentence(s) {hits[:4]} — if a take fails on them, "
+                      f"a tts_text that joins them with commas keeps the on-screen text and saves the retries")
 if len(first.split()) > 20:
     err("SC-14", f"s1 is {len(first.split())} words — the hook must land in the first ~4 s (<= 20 words)")
 
@@ -391,6 +415,8 @@ if not out.exists() or out.read_text() != txt:
 print(f"script: {len(segs)} segments, {len(words)} words, ~{est:.0f} s, sentences {len(lens)} (mean {mean:.1f}, SD {sd:.1f}, {report['sent_min']}-{report['sent_max']})")
 for w in warns:
     print("WARN ", w)
+for n in notes:
+    print("NOTE ", n)
 for e in errors:
     print("ERROR", e)
 print(f"script lint: {len(errors)} errors, {len(warns)} warnings")

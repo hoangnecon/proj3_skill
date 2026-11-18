@@ -52,8 +52,14 @@ for p in sys.argv[1:]:
 `, ...outs], {stdio: 'inherit'});
 const sha = (x) => crypto.createHash('sha1').update(x).digest('hex').slice(0, 12);
 const walk = (d) => fs.readdirSync(d, {withFileTypes: true}).flatMap((e) => e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
-const shared = sha(walk('src').filter((f) => /\.(tsx?|json)$/.test(f) && !/episode[\\/](shotlist|sets)/.test(f) && !/src[\\/]sets[\\/]/.test(f)).sort().map((f) => f + fs.readFileSync(f, 'utf8')).join('\n'));
-const jobKey = ([id, props]) => sha(shared + id + JSON.stringify(props) + (props.id ? String(P.SETS[props.id]?.render) : ''));
+// every source kind the renders read (a .css/.svg/.mjs or a public/ image changed the picture but used to say "unchanged")
+const SRC_RE = /\.(tsx?|jsx?|mjs|json|css|svg)$/;
+const readAll = (fs_) => fs_.sort().map((f) => f + fs.readFileSync(f, 'utf8')).join('\n');
+const shared = sha(readAll(walk('src').filter((f) => SRC_RE.test(f) && !/episode[\\/](shotlist|sets)/.test(f) && !/src[\\/]sets[\\/]/.test(f)))
+  + (fs.existsSync('public') ? walk('public').filter((f) => /\.(png|jpe?g|webp|svg)$/.test(f)).sort().map((f) => f + fs.statSync(f).size + ':' + fs.statSync(f).mtimeMs).join('\n') : ''));
+// a set plate is drawn by its render() AND the helpers beside it: hash the whole set source, not String(render)
+const setSrc = sha(readAll([...(fs.existsSync('src/sets') ? walk('src/sets') : []), ...(fs.existsSync('src/episode') ? walk('src/episode') : []).filter((f) => /episode[\\/]sets/.test(f))].filter((f) => SRC_RE.test(f))));
+const jobKey = ([id, props]) => sha(shared + id + JSON.stringify(props) + (props.id ? setSrc + String(P.SETS[props.id]?.render) : ''));
 const CACHE = 'qa/design/cache.json';
 const cache = (() => { try { return JSON.parse(fs.readFileSync(CACHE, 'utf8')); } catch { return {}; } })();
 
@@ -87,9 +93,28 @@ if (todo.length) { serveUrl = await bundle({entryPoint: path.resolve('src/index.
 let k = 0;
 const N = Math.max(1, +(process.env.SV_QA_WORKERS ?? 4));
 const worker = async () => { while (k < todo.length) { const j = todo[k++]; await still(...j); cache[j[2]] = jobKey(j); } };
+// keep the previous sheet of every job: a re-render with the same picture keeps the old file time, so sv_gate
+// G4 ("X is newer than G4.review.md") asks to look again only at sheets that really changed
+fs.mkdirSync('qa/design/_prev', {recursive: true});
+for (const j of todo) if (fs.existsSync(j[2])) fs.cpSync(j[2], 'qa/design/_prev/' + path.basename(j[2]), {preserveTimestamps: true});
 try { await Promise.all(Array.from({length: Math.min(N, todo.length)}, worker)); }
 finally { fs.writeFileSync(CACHE, JSON.stringify(cache, null, 1)); await browser?.close({silent: true}).catch(() => {}); }
-view(todo.map((j) => j[2]));
+const same = new Set(todo.length ? JSON.parse(execFileSync('python3', ['-c', `
+import sys, os, json
+import numpy as np
+from PIL import Image
+out = []
+for p in sys.argv[1:]:
+    q = os.path.join("qa/design/_prev", os.path.basename(p))
+    if not os.path.exists(q): continue
+    a = np.asarray(Image.open(q).convert("L"), dtype=np.int16); b = np.asarray(Image.open(p).convert("L"), dtype=np.int16)
+    if a.shape == b.shape and int((np.abs(a - b) > 24).sum()) <= 20:
+        st = os.stat(q); os.utime(p, (st.st_atime, st.st_mtime)); out.append(p)
+    os.remove(q)
+print(json.dumps(out))
+`, ...todo.map((j) => j[2])]).toString()) : []);
+if (same.size) console.log(`design: ${same.size} sheet(s) re-rendered with the same picture — time kept`);
+view(todo.map((j) => j[2]).filter((o) => !same.has(o) || !fs.existsSync(o.slice(0, -4) + '_v.jpg')));
 console.log(`design: ${todo.length} rendered, ${jobs.length - todo.length} unchanged`);
 // visible-detail measure of every clean plate (lint SE-13 reads qa/design/plate_stats.json)
 const plates = jobs.filter(([id, props]) => id === 'SetPlate' && !props.grid && !P.SETS[props.id]?.insert).map(([, , out]) => out);

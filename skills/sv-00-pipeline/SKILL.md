@@ -1,6 +1,6 @@
 ---
 name: sv-00-pipeline
-description: Entry point and conductor for making a Vietnamese 2D story-video episode (vertical 1080×1920, 2–3 min, narrated by Hải Đăng, riso-ink illustration, Remotion) — scaffold the project, run the seven gated phases G1 brief → G2 script → G3 voice → G4 design → G5 shots → G6 audio → G7 delivery in order, with machine checks, evidence files and user approvals, and send the final video. Use at the start of any new episode or video idea, when resuming an episode ("làm tiếp tập…"), when asked what the status of an episode is, or whenever you are unsure which story-video skill to use next.
+description: Entry point and conductor for making a Vietnamese 2D story-video episode (vertical 1080×1920, 2–3 min, narrated by Hải Đăng, riso-ink illustration, Remotion) — scaffold the project, run the seven gated phases G1 brief → G2 script → G3 voice ∥ G4 design → G5 shots → G6 audio → G7 delivery (each after the gates it depends on), with machine checks, evidence files and user approvals, and send the final video. Use at the start of any new episode or video idea, when resuming an episode ("làm tiếp tập…"), when asked what the status of an episode is, or whenever you are unsure which story-video skill to use next.
 ---
 
 # sv-00 · Pipeline (start here)
@@ -42,16 +42,24 @@ feature is used, make a separate sandbox with `--demo` (a 4-shot demo on the exe
 `node scripts/qa.mjs contact`). Never build an episode on top of the demo: lint SH-04, SH-07 and SC-01 fail on it.
 
 ## Gate mechanics (scripts/sv_gate.py)
-- `status` — every gate: PASS / STALE (inputs changed since it passed) / OPEN.
+- `status` — every gate: PASS / STALE (inputs changed since it passed) / OPEN. `status --brief` adds the
+  next command(s) and writes `qa/state.json` (gates, next, last file change, live render pid) for helpers.
+- Gates follow what they read, not a fixed line: G1 → G2 → G3; G1 → G4; G5 needs G3 + G4; G6 needs G3 + G5;
+  G7 needs G5 + G6. So design (G4) passes while the voice is still being made — run them at the same time.
+- `watch [--stall 10]` — for the conductor on every wake-up: `STALLED` (exit 2) when no file in the episode
+  changed for 10 min and no render is running. A helper that died (server reload, crash) is found in minutes,
+  not hours: start a new helper with the same brief and the state file.
 - `check G#` — runs the machine checks, lists what is missing; changes nothing.
 - `pass G#` — runs checks, verifies the review file, appends to `gates/log.jsonl` with hashes of the gate's
-  inputs. Refuses when: a previous gate is not PASS; the review still has TODO; an evidence file is not
+  inputs. Refuses when: a gate it depends on is not PASS; the review still has TODO; an evidence file is not
   named in the review or is named with < 4 words of remark; evidence is newer than the review; approval
-  is missing for G1/G2/G4; less than 60 s since the previous pass.
+  is missing for G1/G2/G4; less than 60 s since the previous pass (it prints the time to retry).
 - Freshness is by content hash, not file time: `qa.mjs status` / `design.mjs --status` say exactly which
   shots or sheets no longer match the source, and only those are re-rendered (`contact`, `design.mjs --changed`).
   G6 depends on `qa/timing.json` (cut times, keys, reaches), so a visual-only fix does not force a remix.
-- Editing an input of a passed gate makes it and every later gate STALE. Re-do from the earliest stale gate.
+- Editing an input of a passed gate makes it and every gate that depends on it STALE. Re-do from the earliest
+  stale gate. Metadata (title, description, tags) lives outside script.json words: editing it must not touch
+  `src/data/words.json`, or every shot goes stale.
 
 ## Project layout
 Three zones (also in the episode's `README.md`):
@@ -76,6 +84,7 @@ GENERATED — tools only
 ## Team (when you can run sub-agents) — `references/roles.md`
 Three roles, each with a one-page brief in `references/roles.md` so a helper does not read the whole suite:
 - **Conductor** (you): gates, approvals, the user. Never idles waiting — while one helper renders, brief the next.
+  On every wake-up run `python3 scripts/sv_gate.py watch`; on `STALLED` replace the silent helper at once.
 - **Builders**: write cast/sets (one set per builder, in parallel) and shots (one segment range per builder).
 - **Reviewers**: open cards + crops and write `qa/review/NN.json`; never review shots they built.
 Run renders through the scripts only (one render per episode at a time: `qa/.render.lock`).
