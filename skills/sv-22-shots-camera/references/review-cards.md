@@ -33,7 +33,8 @@ a shot ("look at #23") reliably finds these faults.
     "set":     "ok — price board readable, mirror and chair present",
     "text":    "ok — no typo, sign readable at this zoom",
     "caption": "ok — faces above the band",
-    "beat":    "ok — the cut lands on 'giũa', the shot shows the horn"
+    "beat":    "ok — the cut lands on 'giũa', the shot shows the horn",
+    "model":   "ok — Nhím and the barber match cast_episode_p1 (hair, glasses, apron), drawn by the rig"
   },
   "note": "horn filing reads in two frames; barber reach lands, mirror reflects"
 }
@@ -44,7 +45,7 @@ a shot ("look at #23") reliably finds these faults.
 - `note` is at least 6 words about what you actually saw. Do not write "looks good".
 - `looked` must include `"crops"` for a HOT shot, and the crops must be current (`qa.mjs status`).
 
-## The 7 checks
+## The 8 checks
 | check | question |
 |---|---|
 | acting | Does the pose and expression say the beat? Does someone react? Is it the right person? |
@@ -54,6 +55,7 @@ a shot ("look at #23") reliably finds these faults.
 | text | Is every sign or overlay spelled right and readable at this zoom? Is no text cut off? |
 | caption | Are faces, hands and the hero object clear of the caption band (y ≈ 1570–1710)? |
 | beat | Does the picture show what the words say at that moment? Does the cut land on the word? |
+| model | Open the cast sheet (`qa/design/cast_episode_p*_v.jpg`) next to the card. Is every character the cast rig, on model — same face, hair, outfit, proportions? A person drawn as a prop (own head, own face, stiff body, wrong hair) is a `fix`, even for a fade / ghost / sleep effect: those are `<Person>` with opacity, clipPath or a pose. |
 
 ## Geometry rules (lint, from the shot table, no render)
 | rule | measures | typical fix |

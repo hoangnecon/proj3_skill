@@ -39,7 +39,7 @@ is why it holds attention. An agent that puts one wide frame per sentence has fa
 6. **Per-shot review (cards)** — `references/review-cards.md`. `node scripts/qa.mjs cards changed` (or `all`
    the first time) → one card per shot. A REVIEWER who did not build the shots opens each card, and for every
    HOT shot also `node scripts/qa.mjs crops <i>` (full-resolution head / hands / feet / overlap crops), then
-   writes `qa/review/NN.json` answering the 7 checks. Reviewers run in parallel batches of ~10 shots.
+   writes `qa/review/NN.json` answering the 8 checks. Reviewers run in parallel batches of ~10 shots.
    **After any later change** (a fix, a helper edit, a re-made voice): `node scripts/qa.mjs cards changed`,
    then `python3 scripts/carry.py` BEFORE briefing reviewers. It keeps the reviews of shots whose picture did
    not change (≤ 20 pixels differ on each card frame) and of shots that were only retimed (same definition,
@@ -88,4 +88,4 @@ is why it holds attention. An agent that puts one wide frame per sentence has fa
 | Contact sheet reads but the story does not | you missed a beat: re-read beats.md, add the insert/reaction shot |
 
 ## Read next
-`references/review-cards.md` — cards, crops, the review file and its 7 checks, GE rules, the cross-check.
+`references/review-cards.md` — cards, crops, the review file and its 8 checks, GE rules, the cross-check.

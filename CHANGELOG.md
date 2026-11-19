@@ -1,5 +1,15 @@
 # Changelog
 
+## `v3.7.0` — 2026-11-19 · dependency-scoped review carry + character-model guard (docs/perf-plan-2026-11-19.md)
+- **Dependency-scoped shot hash (`deps.mjs`):** each shot's hash covers only what it draws (its set helpers, looks, props, reach coordinates, words). This closes v3.6 holes where a `sets.tsx` helper edit or a reach change never staled a shot. `test_deps.mjs` (in `engine/scripts/`, run inside a copy of an episode) injects changes and fails on any miss.
+- **Review carry (`carry.py`):** a review is kept when the shot's picture did not change (card frames + probes every ~0.2 s) or it was only retimed; G5 re-verifies every carry. Measured: a prop edit leaves 10 of 66 shots to review instead of 66; a voice remake 5–17 instead of 57–66.
+- **`qa.mjs adopt`:** move an episode reviewed under v3.6 to v3.7 without re-reviewing. The contact sheet marks ● the shots with no current review. `tile.py` / `design.mjs` keep the old file time when a re-render is the same picture; SE-13 uses the plate measure time.
+- **Gates:** G3 measures `between_words_db` through the mix voice chain; gate dependency graph, 60 s pass cooldown, `watch --stall`; `tools/doctor.sh`; SC-28 is a NOTE only.
+- **CH-10 — no character drawn by hand outside `<Person>`** (lint design): v3.6 dropped the per-shot "same look as the design sheets?" question, and three v3.6 episodes drew characters as props (a fading Bình with its own head, riders, a long arm). Any episode `.tsx` declaration that draws a head (skin + hair shapes) or a face with a body is an error. Effects are `<Person>` with opacity / clipPath / pose or a look variant. Only an animal, a food-bodied citizen or a printed photo may be waived (`// lint-ok: CH-10 <reason>`), and G4 then requires a `G4.review.md` line naming it and saying it was compared with the cast sheet. Checked on 11 episodes: 0 hits on the 8 made before v3.6; all 3 v3.6 episodes caught.
+- **8th review check `model`:** every character is drawn by the cast rig and matches `qa/design/cast_episode_p*_v.jpg`. A review without it is listed by G5 with what to add (light migration, no re-render).
+- `tools/trace_agy.py` measures where an agy run spent its time and tokens.
+- **Not done yet:** a check against copying a line verbatim from the source translation.
+
 ## `v3.6.1` — 2026-11-18 · opt-in long episode (SC-27)
 - **SC-27:** `script.json` `"length": "long"` switches the length budget to `episode_long` in `standards/pacing.json` (170–240 s voice, 860–1150 words, 34–52 segments) for an adapted story the user wants kept longer than 2–3 min. `script_lint.py` requires `brief.md ## Length override` with `user_quote: "…"` (the user's own words); `voice.py` reads the same band. Shot pacing is unchanged. Never edit `pacing.json` per episode.
 

@@ -31,7 +31,7 @@ time reading, not working.
 - For each card:
   - Open it.
   - For a HOT shot, run `node scripts/qa.mjs crops <i>` and open `qa/crops/NN.jpg`.
-  - Answer the 7 checks and write `qa/review/NN.json` with the hash from the card title.
+  - Answer the 8 checks and write `qa/review/NN.json` with the hash from the card title.
 - Say exactly what is wrong and where ("Bảo's right hand 40 px left of the bell at 18.2 s"). The builder fixes
   from your words alone.
 - Open only light images (`*.jpg`). Do not open the PNG masters.

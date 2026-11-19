@@ -4,12 +4,14 @@
 // fix the work. If a rule is genuinely wrong for a shot, add `// lint-ok: <rule> <reason>` on that shot's
 // line in shotlist.ts — the reviewer must accept each waiver in the gate review.
 import fs from 'node:fs';
+import path from 'node:path';
 import {loadProject} from './load.mjs';
 import {actorBoxes, inter, area, CAPTION, W, H} from './geom.mjs';
 
 const phase = process.argv[2] ?? 'all';
 const P = await loadProject();
 const errors = [], warns = [];
+const report = {};
 const err = (rule, msg) => errors.push(`[${rule}] ${msg}`);
 const warn = (rule, msg) => warns.push(`[${rule}] ${msg}`);
 const src = (f) => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '');
@@ -98,6 +100,49 @@ if (phase !== 'shots') {
       if (hex && !/token-ok/.test(ln)) err('TK-02', `${f}:${i + 1} raw colour ${hex[0].slice(1)} — use a PAL token (add one to kit.tsx if truly missing)`);
       if (/fontFamily=\{?['"]/.test(ln)) err('TK-03', `${f}:${i + 1} literal fontFamily — use <Txt> or FONT`);
     });
+  }
+
+  // CH-10: a character drawn by hand outside the <Person> rig (v3.6 hole: a "fading Bình" prop with its own head,
+  // hair and face was never on a G4 sheet, so nobody compared it with the cast). A component that draws a face
+  // (or calls a face helper) AND a body / skin / hair / talking expression is a character. Draw it with
+  // <Person look={CAST.x}> (opacity, clipPath, pose do the effects) or add a look variant in cast.ts (variantOf).
+  // When it truly cannot be a Person (an animal, a food-bodied citizen, a printed photo) waive it on its
+  // declaration line: `// lint-ok: CH-10 <reason>` — G4 then requires the reviewer to name it in G4.review.md.
+  {
+    const walkT = (d) => fs.existsSync(d) ? fs.readdirSync(d, {withFileTypes: true}).flatMap((e) => e.isDirectory() ? walkT(path.join(d, e.name)) : [path.join(d, e.name)]) : [];
+    // every episode .tsx (a new file is no way around it); the engine rig files and the exemplar are not episode code
+    const ENGINE = /^src[\\/](chars|kit|side|Film|Root|overlays)\.tsx$|^src[\\/](design|exemplar)[\\/]/;
+    const files = walkT('src').filter((f) => /\.tsx$/.test(f) && !ENGINE.test(f));
+    const DECL = /^(?:export\s+)?(?:const|let|function|type|interface|class)\s+([A-Za-z_$][\w$]*)/;
+    const FACE = /\b\w*(eye|pupil|blink|iris|lash|brow|mouth|face|cheek|blush)\w*/i;
+    const units = {}; const decl = {};
+    for (const f of files) {
+      let cur = null; const ls = fs.readFileSync(f, 'utf8').split('\n');
+      ls.forEach((l, i) => {
+        const m = DECL.exec(l);
+        if (m) { cur = m[1]; units[cur] = l.replace(/\/\/.*$/, '') + '\n'; decl[cur] = {f, line: i + 1, text: l + '\n' + (ls[i - 1] ?? ''), type: /^(?:export\s+)?(?:type|interface)\b/.test(l)}; return; }
+        if (cur) units[cur] += l.replace(/\/\/.*$/, '') + '\n';
+      });
+    }
+    // drop comments and the <Person …> / <PersonSide …> elements themselves (their expr / look props are the rig, not a drawing)
+    for (const k in units) units[k] = units[k].replace(/\/\*[\s\S]*?\*\//g, '').replace(/<Person(Side)?\b[^>]*?\/>/gs, '<Person />');
+    const direct = new Set(Object.keys(units).filter((k) => FACE.test(units[k])));
+    report.rigs = [];
+    for (const [k, code] of Object.entries(units)) {
+      if (decl[k].type) continue; // every component AND helper (a camelCase `binhHead()` is no way around it)
+      const face = direct.has(k) || [...direct].some((d) => d !== k && new RegExp(`<${d}\\b|\\b${d}\\(`).test(code));
+      const body = /['"]skin\w*['"]|PAL\.skin|['"]hair\w*['"]|PAL\.hair|\bexpr\b|\btalk\b/.test(code);
+      // a head drawn with raw shapes: a head-sized skin shape (not E(...) with rx < 30 — a portrait in a frame,
+      // a hand) within 4 lines of a hair shape
+      const ls = code.split('\n');
+      const SKIN = /['"]skin\w*['"]|PAL\.skin/, HAIR = /['"]hair\w*['"]|PAL\.hair/;
+      const head = ls.some((l, i) => SKIN.test(l) && !/\bE\(\s*[-\w.]+\s*,\s*[-\w.]+\s*,\s*([12]?\d(\.\d+)?)\s*,/.test(l)
+        && !/\b(hand|finger|palm|arm|leg|foot|feet|ear|nose|neck|toe)\w*/i.test(l) && ls.slice(Math.max(0, i - 4), i + 5).some((m) => HAIR.test(m)));
+      if (!head && !(face && body)) continue;
+      const w = /lint-ok:\s*CH-10\s+(.{4,})/.exec(decl[k].text);
+      if (w) report.rigs.push({name: k, file: `${decl[k].f}:${decl[k].line}`, reason: w[1].trim()});
+      else err('CH-10', `${decl[k].f}:${decl[k].line} ${k} draws a character by hand (a head: skin + hair, or a face + body) outside <Person> — it is on no G4 sheet. Use <Person look={CAST.x}> (opacity / clipPath / pose for effects) or a cast.ts look variant; only an animal, food-bodied citizen or printed photo may waive: // lint-ok: CH-10 <reason>`);
+    }
   }
 }
 
@@ -326,7 +371,7 @@ if (phase !== 'design') {
   fs.writeFileSync('qa/strips_needed.json', JSON.stringify(strips, null, 1));
 }
 
-const report = {phase, at: new Date().toISOString(), errors, warns, sets: setReport, strips: strips.length};
+Object.assign(report, {phase, at: new Date().toISOString(), errors, warns, sets: setReport, strips: strips.length});
 fs.mkdirSync('qa', {recursive: true});
 fs.writeFileSync('qa/lint.json', JSON.stringify(report, null, 1));
 for (const s of setReport) console.log(`set ${s.id}: ${s.shapes} shapes · ${s.colours} colours · ${s.texts} texts · halftone ${s.halftone} · glow ${s.glow} · mid ${s.midItems} · ${s.moves ? "moves" : "STATIC"}`);

@@ -1,5 +1,5 @@
 // Regression test for the per-shot dependency hash (engine/scripts/deps.mjs). Run INSIDE A COPY of an episode
-// (it edits src/ and puts every file back):  cd <copy> && node <suite>/tools/test_deps.mjs
+// (it edits src/ and puts every file back):  cd <copy> && node scripts/test_deps.mjs (copied from engine/scripts)
 // Each case injects a change and checks which shots go stale. A miss (a change that should make a shot stale
 // but does not) fails the test: missing a change means a shot nobody re-reviewed.
 import fs from 'node:fs';

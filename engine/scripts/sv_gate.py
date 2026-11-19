@@ -151,6 +151,14 @@ def checks(g):
             bad.append(f"design sheets out of date: {stale[:6]}{'...' if len(stale) > 6 else ''} — node scripts/design.mjs --changed")
         if not any("set_" in f and "_grid" in f for f in evidence("G4")):
             bad.append("no episode set plates rendered")
+        # CH-10 waivers (a character that cannot be a <Person>: animal, food-bodied citizen, printed photo) are on no
+        # design sheet: the G4 review must name each and say it was compared with the cast sheet (>= 6 words)
+        rv = (ROOT / "gates/G4.review.md").read_text() if (ROOT / "gates/G4.review.md").exists() else ""
+        for rig in (jload("qa/lint.json") or {}).get("rigs", []):
+            line = next((l for l in rv.splitlines() if rig["name"] in l and re.search(r"cast", l, re.I) and "CH-10" in l), None)
+            if line is None or len(re.findall(r"\w+", line.split(rig["name"], 1)[1])) < 6:
+                bad.append(f"{rig['name']} ({rig['file']}) is drawn outside <Person> (waived CH-10: {rig['reason']}) — open a frame "
+                           f"that shows it next to the cast sheet and add a line to gates/G4.review.md: `<name> CH-10: compared with cast_episode_pN … <what you saw>` (>= 6 words)")
     elif g == "G5":
         code, out = run(["node", "scripts/lint.mjs", "shots"])
         if code:
@@ -225,14 +233,16 @@ def _load_carry():
 
 
 CARRY = _load_carry()
-REVIEW_CHECKS = ["acting", "contact", "overlap", "set", "text", "caption", "beat"]
+# "model" (v3.7): every character comes from the cast rig and matches its cast sheet — v3.6 dropped the
+# "same look as the design sheets?" question and a hand-drawn Bình passed 66 reviews
+REVIEW_CHECKS = ["acting", "contact", "overlap", "set", "text", "caption", "beat", "model"]
 
 
 def shot_reviews(st):
     """Per-shot review files qa/review/NN.json (sv-22 "review cards"). Each must match the shot's CURRENT hash,
     come from a reviewer who is not the builder, answer every check, and — for a HOT shot (geometry lint,
     reach, key event) — say it opened the measurement crops, which must be current."""
-    bad, miss, old, notok, thin, nocrop = [], [], [], [], [], []
+    bad, miss, old, notok, thin, nocrop, nomodel = [], [], [], [], [], [], []
     hashes = {int(k): v for k, v in st.get("hashes", {}).items()}
     crops_ok = {int(k): v for k, v in st.get("crops_ok", {}).items()}
     hot = {int(k): v for k, v in (jload("qa/hot.json") or {}).items()}
@@ -254,7 +264,9 @@ def shot_reviews(st):
         if not r.get("reviewer") or r.get("reviewer") == r.get("builder", "builder"):
             bad.append(f"qa/review/{i:02d}.json: reviewer must be named and must not be the builder")
         checks = r.get("checks") or {}
-        if r.get("verdict") != "ok" or any(not str(checks.get(c, "")).startswith("ok") for c in REVIEW_CHECKS):
+        if "model" not in checks and r.get("verdict") == "ok":
+            nomodel.append(i)
+        elif r.get("verdict") != "ok" or any(not str(checks.get(c, "")).startswith("ok") for c in REVIEW_CHECKS):
             notok.append(i)
         if len(re.findall(r"\w+", str(r.get("note", "")))) < 6:
             thin.append(i)
@@ -266,6 +278,10 @@ def shot_reviews(st):
     if old:
         bad.append(f"review is for an older version of shots {fmt(old)} (hash changed) — node scripts/qa.mjs cards changed, "
                    f"python3 scripts/carry.py (keeps reviews whose picture did not change), then re-review the rest")
+    if nomodel:
+        bad.append(f"shots {fmt(nomodel)} were reviewed without the model check (added v3.7) — a reviewer opens each card next "
+                   f"to qa/design/cast_episode_p*_v.jpg and adds checks.model to qa/review/NN.json: every character drawn by the "
+                   f"cast rig, same face / hair / outfit / proportions as its sheet (a character drawn as a prop is a fix)")
     if notok:
         bad.append(f"shots {fmt(notok)} are not ok in review (verdict/checks) — fix them (sv-22 fix loop), re-review")
     if thin:

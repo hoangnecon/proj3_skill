@@ -98,6 +98,12 @@ Hard (lint, `node scripts/lint.mjs design`):
   chain, vest, lips, belly > 0.05, |w−1| > 0.04, |h−1| > 0.04, |head−1| > 0.03, non-default `hairC`, `topC2`.
 - CH-07 principals and supports have unique `hair/top/topC` silhouettes · CH-08 no two identical looks ·
   CH-09 at least one principal (warning above 4).
+- CH-10 no character drawn by hand outside `<Person>`: a component in `props.tsx` / `src/episode` / `src/sets` that
+  draws a head (skin + hair shapes) or a face (eyes / mouth / face helper) with a body is an error — it is on no
+  G4 sheet, so nobody compares it with the cast. Fades, ghosts, sleeping, riders, long arms: `<Person
+  look={CAST.x}>` with opacity / clipPath / pose, or a look variant (`variantOf`). Only an animal, a
+  food-bodied citizen or a printed photo may be waived on its declaration line (`// lint-ok: CH-10 <reason>`),
+  and G4 then requires `G4.review.md` to name it and say it was compared with the cast sheet.
 
 Soft (G4 review — the reviewer must answer each):
 - Can you tell every principal apart in the 25 % cast-sheet thumbnails without reading names?
