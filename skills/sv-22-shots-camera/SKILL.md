@@ -27,32 +27,14 @@ is why it holds attention. An agent that puts one wide frame per sentence has fa
    Target count: narration seconds ÷ 2.2.
 2. **Write shots** segment by segment. Size from the grammar table, cam numbers from the set's grid plate
    (`qa/design/set_<id>_grid.png`), actors from sv-21 recipes, keys on words.
-3. **Lint**: `node scripts/lint.mjs shots` until 0 errors. Read every warning; fix it or waive it with a
-   reason (`// lint-ok: RULE reason`). The geometry rules (GE-01 overlap, GE-04 head cut / face in the
-   caption band, GE-07 size jump) measure the frame from the shot table and mark shots HOT in `qa/hot.json`
-   (reaches and set keys are HOT too).
-4. **Contact sheets**: `node scripts/qa.mjs contact` → open EVERY `qa/contact_p*.jpg` (light JPEGs, ~300 KB).
-   Only shots whose hash changed are re-rendered; they carry a ● and are listed in `qa/changed.json`.
-   Look at the whole film once: rhythm, continuity, look against the design sheets.
-5. **Strips**: `node scripts/qa.mjs strips` → open every `qa/strips/*.jpg` (full frames, 2 rows) and apply
-   the sv-21 checklist.
-6. **Per-shot review (cards)** — `references/review-cards.md`. `node scripts/qa.mjs cards changed` (or `all`
-   the first time) → one card per shot. A REVIEWER who did not build the shots opens each card, and for every
-   HOT shot also `node scripts/qa.mjs crops <i>` (full-resolution head / hands / feet / overlap crops), then
-   writes `qa/review/NN.json` answering the 8 checks. Reviewers run in parallel batches of ~10 shots.
-   **After any later change** (a fix, a helper edit, a re-made voice): `node scripts/qa.mjs cards changed`,
-   then `python3 scripts/carry.py` BEFORE briefing reviewers. It keeps the reviews of shots whose picture did
-   not change (≤ 20 pixels differ on each card frame) and of shots that were only retimed (same definition,
-   same words, start ±0.3 s, length ±10 %; HOT shots also need the same picture at their reach / key moments —
-   run `crops <i>` when it asks). Only `qa/carry.json` → `review` goes back to reviewers. The shot hash
-   (`scripts/deps.mjs`) covers only what the shot draws, so an edit to one prop or set stales only its shots.
-   **Episode reviewed under v3.6** (every hash changes once on upgrade): FIRST `node scripts/qa.mjs adopt`
-   (snapshots the card frames each review saw — only for shots unchanged since their review), THEN
-   `cards all` and `carry.py`: reviews whose card frames are the same picture are kept (`adopt`).
-7. **Fix loop** (only the shots marked `fix`): change → `node scripts/lint.mjs shots` → `node scripts/qa.mjs
-   shot <i>` (and `crops <i>` if HOT) → look → the reviewer re-reviews that card. At most 3 tries per shot,
-   then escalate (re-stage the shot or ask the user). Re-run `contact` (incremental) at the end; a full
-   `--all` contact pass at most twice per episode.
+3. **Pre-Flight Zero-Bounce Gate (BEFORE any render!):** run `node scripts/lint.mjs shots` until **0 errors** (including `MO-10` turnaround squash). Then resolve every geometry/motion warning — `GE-10` (sign edge-clip), `GE-11` (actor/overlay/prop over sign), `GE-15` (prop edge-clip), `MO-11` (reach behind facing / `arms:'raise'` walk), `GE-01`, `GE-04`, `GE-07` — using `node scripts/qa.mjs where <i>` (1 s, zero browser!) to inspect exact `1080×1920` boxes for BOTH set signs AND `WORLD_PROP` internal signs (e.g. `"CỨU HỎA"`, `"KEM TƯƠI"`), `CAPTION` head/hand/hero-prop clearance, and `--free WxH` open regions before rendering a single frame.
+   - **Staging pitfall checklist:** verify `flip: true` points `pointL`/`pointR` toward the subject (not off-screen); never reach behind `face` or walk with `arms: 'raise'` (`MO-11`); animate vehicle `x` (or set `keys`) whenever narration says a vehicle moves/rolls out.
+4. **Single-Bundle QA Pass (`qa.mjs pass`):** run `node scripts/qa.mjs pass changed` (or `node scripts/qa.mjs pass all` only if forcing a full re-render). Under ONE Remotion bundle and ONE browser session, it renders incremental `contact_p*.jpg`, stale `strips/*.jpg`, `cards/*.jpg`, and `crops/*.jpg` for every HOT shot with `crops_ok === false`, then runs `carry.py` and prints the exact `qa/carry.json` review list.
+5. **Inspect Contact & Strips:** open EVERY `qa/contact_p*.jpg` (light JPEGs, ~300 KB; changed shots carry a ●) and every `qa/strips/*.jpg` (full frames, 2 rows, sv-21 checklist). Look at rhythm, continuity, human-scale proportions, and design sheets.
+6. **Per-shot review (cards + batch write)** — `references/review-cards.md`. A REVIEWER who did not build the shots opens each card in `qa/carry.json` → `review` (plus `qa/crops/NN.jpg` for every HOT shot, already rendered by `qa.mjs pass`), checks all 8 items (including Human-Scale & Staging), and writes all reviews in parallel batches via `node scripts/qa.mjs review --batch <batch.jsonl>`.
+   **After any later change** (a fix, a helper edit, a re-made voice): run `node scripts/qa.mjs pass changed` BEFORE briefing reviewers. It re-bundles once, updates only changed cards/crops/strips, runs `scripts/carry.py` (keeping pixel-identical and valid retimed reviews), and prints the exact `qa/carry.json` re-review list.
+   **Episode reviewed under v3.6** (every hash changes once on upgrade): FIRST `node scripts/qa.mjs adopt`, THEN `node scripts/qa.mjs pass all`.
+7. **Fix loop** (only the shots marked `fix`): change → `node scripts/lint.mjs shots` + `node scripts/qa.mjs where <i>` → `node scripts/qa.mjs pass changed` (or `qa.mjs shot <i>` for a quick 1-shot check, then `pass changed` before handing to reviewers). At most 3 tries per shot, then escalate (re-stage the shot or ask the user). A full `pass all` at most twice per episode.
 8. **Review file** `gates/G5.review.md`: a line per contact page and per strip (≥ 4 words of what you saw),
    waivers justified, plus the cross-check: the conductor re-opens ≥ 10 % of the cards at random (all HOT
    ones included) and names them.

@@ -32,18 +32,20 @@ pin `standards/` by hash.
 | Prefix | Area | Where |
 |---|---|---|
 | SC-01..26 | script, words budget, voice text rules, 5-Knot spine & Act-1/Plant/Button/Pivot checks | `scripts/script_lint.py` |
-| CH-01..09 | characters | `scripts/lint.mjs design` |
+| CH-01..10 | characters (and no hand-drawn characters outside `<Person>`) | `scripts/lint.mjs design` |
 | TK-01..03 | tokens (no raw colours, one font) | `lint.mjs design` |
-| SE-01..13 | sets: density, text, halftone, glow, bounds, life, rendered-plate emptiness | `lint.mjs design` |
+| SE-01..14 | sets: density, text, halftone, glow, bounds, life, plate emptiness, plate sign clipping | `lint.mjs design` |
+| PR-01..02 | props: human-scale proportions & origin, internal text collision | `lint.mjs design` |
 | SH-01..15 | shot table | `lint.mjs shots` |
 | AN-01..02 | anchors | `lint.mjs shots` |
 | OV-01..04 | overlays | `lint.mjs shots` |
 | CA-01..05 | camera | `lint.mjs shots` |
 | SZ-01..02 | on-screen size and framing | `lint.mjs shots` |
-| MO-01..09 | motion | `lint.mjs shots` |
+| MO-01..11 | motion (turnaround-squash & reach-across-face / raised-arms walk guards) | `lint.mjs shots` |
 | KY-01 | animated set keys | `lint.mjs shots` |
 | CO-01..03 | coverage | `lint.mjs shots` |
 | PC-01..03 | shot pacing (`standards/pacing.json`) | `lint.mjs shots` |
+| GE-01, GE-04, GE-07, GE-10, GE-11, GE-15 | screen geometry: overlap, head/caption, size jump, sign clip/occlusion, prop clip | `lint.mjs shots` |
 
 A rule documented in a skill must name its lint ID when one exists. A waiver is
 `// lint-ok: <ID> <reason>` on the shot's line, and it must be justified in the G5 review.

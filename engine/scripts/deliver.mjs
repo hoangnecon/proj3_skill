@@ -61,7 +61,7 @@ const report = {
 };
 fs.writeFileSync('qa/deliver_report.json', JSON.stringify(report, null, 1));
 // audio inside the delivered files: loudness drift after AAC, true peak, A/V length, sync (sv-42-mix-master)
-const PY = process.env.SV_PY || '/Users/Shared/Tools/VieNeu-TTS/.venv/bin/python';
+const PY = process.env.SV_PYTHON || process.env.SV_PY || (fs.existsSync('/Users/Shared/Tools/VieNeu-TTS/.venv/bin/python') ? '/Users/Shared/Tools/VieNeu-TTS/.venv/bin/python' : 'python3');
 if (fs.existsSync('qa/video_audio.json')) fs.unlinkSync('qa/video_audio.json');
 for (const f of [final]) {
   try { execFileSync(PY, ['scripts/audio_qa.py', '--video', f], {stdio: 'inherit'}); }
@@ -76,5 +76,5 @@ for (let i = 0; i < 12; i++) {
   cells.push({img: f, label: t.toFixed(1) + 's', sub: ''});
 }
 fs.writeFileSync('qa/_f/tile.json', JSON.stringify({out: 'qa/final_check.jpg', cols: 6, w: 300, fmt: 'jpg', title: `FINAL · ${report.duration}s · ${report.width}x${report.height} · ${report.fps} fps`, cells}));
-execFileSync('python3', ['scripts/tile.py', 'qa/_f/tile.json'], {stdio: 'inherit'});
+execFileSync(PY, ['scripts/tile.py', 'qa/_f/tile.json'], {stdio: 'inherit'});
 console.log(JSON.stringify(report));

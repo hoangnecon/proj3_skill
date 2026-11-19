@@ -10,8 +10,11 @@ Run from the episode directory. Remotion renders use `--gl=angle` (set in the sc
 | `node scripts/times.mjs` | qa/shots.json (shot table with absolute times) | 3 s | any |
 | `node scripts/lint.mjs design` | qa/lint.json | 3 s | G4 |
 | `node scripts/lint.mjs shots` | qa/lint.json, qa/strips_needed.json, qa/hot.json (GE geometry + reach/key shots) | 3 s | G5 |
-| `node scripts/design.mjs [--exemplar] [--changed] [--only look:<key>\|set:<id>]` | qa/design/cast_*_p*.png, expr_*.png, set_<id>.png, set_<id>_grid.png + `_v.jpg` views, set_<id>_zoom.jpg | 10–30 s (4 workers; `--changed` only what changed) | G4 |
+| `node scripts/design.mjs [--exemplar] [--changed] [--only look:<key>\|set:<id>]` | qa/design/cast_*_p*.png, expr_*.png, props_episode_p*.png, set_<id>.png, set_<id>_grid.png + `_v.jpg` views, set_<id>_zoom.jpg | 10–30 s (4 workers; `--changed` only what changed) | G4 |
 | `node scripts/design.mjs --status` | prints the sheets that no longer match the source (no render) | 2 s | G4 |
+| `node scripts/qa.mjs where <i> [t] [--free WxH]` | terminal layout table of `1080×1920` actor/sign/prop/caption boxes + open regions (no browser) | 1 s | G5 |
+| `node scripts/qa.mjs pass [changed\|all]` | ONE bundle + browser: `contact` + stale `strips` + `cards` + unrendered HOT `crops`, then `carry.py` -> `qa/carry.json` | 15–45 s | G5 |
+| `node scripts/qa.mjs review --batch <file.jsonl>` | validates every review (hash, `reviewer != builder`, 8 checks, `note >= 6` words, HOT `"crops"`) & writes `qa/review/NN.json` | 1 s | G5 |
 | `node scripts/qa.mjs contact [--all]` | qa/contact_p*.jpg (2 frames/shot, 12 shots/page), qa/changed.json | ~35 s full, 5 s when nothing changed | G5 |
 | `node scripts/qa.mjs strips [names] [--all]` | qa/strips/<name>.jpg (full frames, 2 rows) | ~1.5 s each | G5 |
 | `node scripts/qa.mjs cards [changed\|hot\|all\|3,7]` | qa/cards/NN.jpg (3 frames + words + flags per shot) | ~1 s per shot | G5 |

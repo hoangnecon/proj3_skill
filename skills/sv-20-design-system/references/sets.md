@@ -124,6 +124,27 @@ Export every touch point with its floor line: `export const TICKET_BTN = {x: 101
 and draw the fixture from the same numbers (`height = fy - y + …`). Floor objects stand ON `fy` with a contact
 shadow `<Sh d={E(x, fy, w/2, 12)} o={0.3}/>`.
 
+### Human-Scale Vehicle & Large-Object Table (anchored to `adult = 575 px`, `child = 435 px`)
+Never draw toy-sized vehicles or miniature rooms behind full-sized characters. Size every vehicle, large prop, and architectural bay against `adult = 575 px` and `child = 435 px`:
+
+| Object / architectural feature | Target `H × W` (or height above `fy`) | Staging / notes |
+|---|---|---|
+| School bus | `660 × 1360` | Roof rack surface sits above adult eye line (`busY - 635`) |
+| Fire truck | `640 × 1180` | Towers over children (`435 px`) and rivals/tops adults (`575 px`) |
+| Vehicle interior cab | `760 × 1100` | Foreground dash/windshield `WORLD_PROP` (`y > actor.y`) so actors sit inside |
+| Pushcart w/ umbrella | `700 × 480` | Cart counter ~240–270, canopy/umbrella tops at ~700 |
+| Utility cart | `430 × 520` | Waist/chest push bar at ~280–340 |
+| Go-kart | `245 × 480` | Low racing chassis; driver sits at `seatH: 104`, `y < prop.y` |
+| Parade float deck | `480` | Deck floor surface ~480 above street `fy` |
+| Banquet cake table | `220 + 135 = 355` | Table height `220` + tiered cake `135` (`355` total) |
+| Single bed | `740 × 470` | `740` wide × `470` headboard height; separate `o.sleeping` blankets in `mid` layer |
+| Workbench | `260 × 460` | Waist-high work surface (`260` tall) so tools/props sit at reach height |
+| Double garage bay | `760 × 760` | Wide enough for full-scale trucks/cars to burst or roll through |
+| 2nd-floor sill | `960` | Second-storey window sill height above street `fy` |
+| Crib | `300 × 440` | Keep `topRailY` below seated baby's eyes or raise baby's `y` so face is visible |
+
+Lint `SE-14` checks that no diegetic `<text>` sign (`fontSize >= 18`) clips across the edge of `plateCam`.
+
 ## 4. Choosing the view
 
 | View | When | Geometry |
@@ -222,4 +243,5 @@ For each `set_<id>.png` and `set_<id>_grid.png`, write one line in `gates/G4.rev
   3. furniture and floor objects stand on the floor with a contact shadow (bottom edge at y ≥ the
      wall/floor line), wall objects hang on the wall (not overlapping the dado line halfway);
   4. no two fixtures intersect unless one is clearly in front (mid layer / overlap by design);
-  5. the plate's visible middle has no bare wall (SE-13 ≤ 8 empty cells, aim ≤ 3).
+  5. the plate's visible middle has no bare wall (SE-13 ≤ 8 empty cells, aim ≤ 3);
+  6. no diegetic sign clips across the plate frame edge (`SE-14`), and all vehicles/large props match `qa/design/props_episode_p*_v.jpg` human-scale proportions.

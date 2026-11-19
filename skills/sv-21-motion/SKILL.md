@@ -40,10 +40,20 @@ mechanics (anticipation → contact → the world reacting). This skill is how t
   too short for the walk, start the walk earlier (previous shot) or cut to the arrival.
 - Talkers are big enough to read (≥ 480 px tall on screen, lint SZ-01). Listeners react on the punch word.
 - Every shot changes something (lint MO-08 warns on frozen shots).
+- **Never reverse `path` `dx` when `face` is locked (`MO-10`)**: `Film.tsx` triggers horizontal turnaround squash (`sx = 0.12`) whenever `dx` flips sign. Use monotonic `dx` (all steps `>= 0` or all `<= 0`) or a pure vertical slip (`dx = 0`) instead of `x` back-and-forth jitter.
+- **First-pass motion pitfalls**:
+  - `flip: true` mirrors `pointL` / `pointR` — verify pointing direction points TOWARD the subject, never off-screen.
+  - Never reach across the opposite side of `face` (`MO-11`: `(rc.x - x) * dir < -15`, arm slices across own face) or walk in `side` view with `arms: 'raise'` (`MO-11`: arm crosses helmet/face — use `arms: 'swing'` or `arms: 'hold'`).
+  - When narration describes a vehicle moving/rolling out, animate the prop's `x` or use a set `keys` motion — never leave a vehicle stationary on a motion beat.
 - Never close G5 on strips you did not open. The gate checks that every strip in
   `qa/strips_needed.json` exists, matches the current shot (content hash), and is named in the review with a remark.
 - For hands, feet and contact, open the measurement crops (`node scripts/qa.mjs crops <i>`): the strip shows the
   move, the crops show whether the hand is really ON the target and the foot really ON the floor.
+
+## First-pass staging recipes (vehicles, beds, roofs)
+- **Seating inside vehicles (`goKart`, `fireTruckCab`):** place the vehicle `WORLD_PROP` in `extras` with `prop.y > actor.y` so its foreground cowl/dashboard renders in front of the driver's legs (e.g. `goKart` at `{x, y: KART_Y}` and driver at `{x: KART_X - 16, y: KART_Y - 2, view: 'side', legs: 'sit', seatH: 104, arms: 'hold', lean: 8}`; `fireTruckCab` at `{x: 640, y: 1660}` and front-view seated crew at `{y: 1515, p: 'sit'}`).
+- **Sleeping tucked under bed blankets (`o.sleeping`):** split the blanket into a separate `mid` layer item at `y = bedBot + 45` when `o.sleeping` is true, keep the bed frame at `y = bedBot - 20`, and place the sleeping actor between them (`y ≈ bedBot`, `view: 'side'`, `legs: 'sit'`, `seatH` matched to mattress). Never walk actors through the bed or leave shoes hovering over the rail.
+- **Riding on a bus roof rack:** place `schoolBus` at `y = busY` and seat the rider on top with `y = busY + roofRackSurfaceY` (e.g. `busY - 635`), `p: 'sit'`, centered over the rack rails.
 
 ## Fixes for common defects
 | Defect in the strip | Fix |
@@ -56,5 +66,6 @@ mechanics (anticipation → contact → the world reacting). This skill is how t
 | Button at knee height, arm points down | the fixture is not at human scale: fix the set (sets.md §3b), not the actor |
 | Arm swings up mid-step | reach while walking (MO-06): arrive earlier |
 | Sitting in mid-air | seat x/y does not match the hip (x − 10, seatH); place the stool under it |
+| Character squashes thin (`sx = 0.12`) mid-path | `path` `dx` reversed while `face` is locked (`MO-10`): make `dx` monotonic or `0` |
 | Character pops between views | key `view` with ≥ 0.25 s before the move starts |
 | Expression changes off-beat | anchor `e` keys to the word, not to seconds |

@@ -60,7 +60,7 @@ function splitRegistry(name, text, units) {
 }
 
 export function buildDeps() {
-  const files = walk('src').filter((f) => SRC_RE.test(f) && !/src[\\/]data[\\/]/.test(f) && !/shotlist/.test(f)).sort();
+  const files = walk('src').filter((f) => SRC_RE.test(f) && !/src[\\/]data[\\/]/.test(f) && !/src[\\/]design[\\/]/.test(f) && !/shotlist/.test(f)).sort();
   const units = new Map(); const preamble = []; const engine = [];
   for (const f of files) {
     const text = fs.readFileSync(f, 'utf8');

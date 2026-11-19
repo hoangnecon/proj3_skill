@@ -8,6 +8,7 @@ import {Defs, FONT, PAL, Txt, S, Rr, L} from '../kit';
 import {Person, POSES, Expr, Look} from '../chars';
 import {PersonSide} from '../side';
 import {SETS} from '../sets';
+import {WORLD_PROPS} from '../props';
 import {CAST, CAST_ROLES} from '../episode/cast';
 import {EX_LOOKS} from '../exemplar/looks';
 import {LayerG} from '../Film';
@@ -155,5 +156,92 @@ export const SetPlate: React.FC<{id: string; grid?: boolean}> = ({id, grid}) => 
         <text x={540} y={1876} textAnchor="middle" fontFamily={FONT} fontWeight={900} fontSize={44} fill={PAL.yellow}>{id} · {def.title}</text>
       </svg>
     </AbsoluteFill>
+  );
+};
+
+export const BUILTIN_WORLD_PROPS = new Set(['stool', 'cone', 'lamp', 'gladiolus', 'cat', 'chicken', 'xoi', 'lobster', 'wagyu', 'tofu']);
+export const propKeys = () => Object.keys(WORLD_PROPS).filter((k) => !BUILTIN_WORLD_PROPS.has(k));
+export const PROPS_PER_PAGE = 6;
+export type PropSize = {w: number; h: number; minX: number; minY: number; maxX: number; maxY: number};
+
+/** Translucent 575 px adult + 435 px child reference silhouettes standing on y = 0 */
+const ScaleSilhouettes: React.FC = () => (
+  <g opacity={0.26} fill={PAL.shade}>
+    {/* 575 px adult at x = 0 */}
+    <rect x={-32} y={-178} width={24} height={178} rx={10} />
+    <rect x={8} y={-178} width={24} height={178} rx={10} />
+    <rect x={-56} y={-374} width={112} height={204} rx={24} />
+    <rect x={-16} y={-392} width={32} height={24} />
+    <circle cx={0} cy={-482} r={93} />
+    {/* 435 px child at x = 148 */}
+    <g transform="translate(148 0)">
+      <rect x={-24} y={-124} width={18} height={124} rx={8} />
+      <rect x={6} y={-124} width={18} height={124} rx={8} />
+      <rect x={-42} y={-265} width={84} height={146} rx={18} />
+      <rect x={-12} y={-280} width={24} height={20} />
+      <circle cx={0} cy={-356} r={79} />
+    </g>
+  </g>
+);
+
+export const PropSheet: React.FC<{page: number; sizes?: Record<string, PropSize>}> = ({page, sizes = {}}) => {
+  const keys = propKeys().slice(page * PROPS_PER_PAGE, (page + 1) * PROPS_PER_PAGE);
+  const W = 2400, H = 2600, cw = 1140, ch = 780;
+  return (
+    <Paper w={W} h={H}>
+      <Txt x={60} y={102} s={56} c="ink" w={900} a="start">BẢNG ĐẠO CỤ · TẬP NÀY · trang {page + 1}</Txt>
+      <Txt x={2340} y={100} s={26} c="concreteDark" w={800} a="end">chuẩn: người lớn 575 px · trẻ em 435 px · vạch 100 px</Txt>
+      {keys.length === 0 && <Txt x={W / 2} y={H / 2} s={56} c="concreteDark" w={900}>KHÔNG CÓ WORLD_PROP RIÊNG NGOÀI 5 PROP MẪU</Txt>}
+      {keys.map((k, i) => {
+        const cx0 = 60 + (i % 2) * 1160;
+        const top = 165 + Math.floor(i / 2) * 800;
+        const sz = sizes[k];
+        const baseSc = 0.56;
+        const sc = sz
+          ? Math.min(baseSc, 800 / Math.max(800, sz.w), 500 / Math.max(500, -sz.minY + 40))
+          : baseSc;
+        const baseY = top + ch - 72;
+        const rulerX = cx0 + 145;
+        const propCenterX = cx0 + 360 + (cw - 380) / 2;
+        const propX = sz ? propCenterX - ((sz.minX + sz.maxX) / 2) * sc : propCenterX;
+        const fn = WORLD_PROPS[k];
+        return (
+          <g key={k}>
+            <S d={Rr(cx0, top, cw, ch, 24)} f="white" sw={4} />
+            <Txt x={cx0 + cw / 2} y={top + 48} s={34} c="ink" w={900}>{k}</Txt>
+            <Txt x={cx0 + cw / 2} y={top + 88} s={24} c={sz && Math.abs(sz.maxY) > 60 ? 'red' : 'blue'} w={800}>
+              {sz ? `${Math.round(sz.w)} × ${Math.round(sz.h)} px · y=[${Math.round(sz.minY)}..${Math.round(sz.maxY)}]${sc < baseSc ? ` · scale ${sc.toFixed(2)}` : ''}` : 'WORLD_PROP'}
+            </Txt>
+            <clipPath id={`prop-cell-${k}`}><rect x={cx0 + 6} y={top + 106} width={cw - 12} height={ch - 114} rx={18} /></clipPath>
+            <g clipPath={`url(#prop-cell-${k})`}>
+              {/* 100 px grid ticks */}
+              {[0, 100, 200, 300, 400, 500, 600, 700, 800].map((tick) => {
+                const gy = baseY - tick * sc;
+                if (gy < top + 114) return null;
+                return (
+                  <g key={tick}>
+                    <line x1={cx0 + 64} y1={gy} x2={cx0 + cw - 20} y2={gy} stroke={tick === 0 ? PAL.ink : PAL.concreteDark} strokeWidth={tick === 0 ? 4 : 1.5} strokeDasharray={tick === 0 ? undefined : '6 6'} opacity={tick === 0 ? 0.9 : 0.45} />
+                    <text x={cx0 + 18} y={gy + 6} fontSize={18} fontFamily={FONT} fontWeight={700} fill={PAL.concreteDark}>{tick}</text>
+                  </g>
+                );
+              })}
+              {/* 435 px child & 575 px adult height markers */}
+              <line x1={cx0 + 64} y1={baseY - 435 * sc} x2={cx0 + 365} y2={baseY - 435 * sc} stroke={PAL.blue} strokeWidth={2} strokeDasharray="4 4" opacity={0.65} />
+              <text x={cx0 + 292} y={baseY - 435 * sc - 6} fontSize={17} fontFamily={FONT} fontWeight={800} fill={PAL.blue}>435</text>
+              <line x1={cx0 + 64} y1={baseY - 575 * sc} x2={cx0 + 250} y2={baseY - 575 * sc} stroke={PAL.red} strokeWidth={2} strokeDasharray="4 4" opacity={0.65} />
+              <text x={cx0 + 145} y={baseY - 575 * sc - 6} fontSize={17} fontFamily={FONT} fontWeight={800} fill={PAL.red}>575</text>
+              <g transform={`translate(${rulerX} ${baseY}) scale(${sc})`}>
+                <ScaleSilhouettes />
+              </g>
+              {fn && (
+                <g transform={`translate(${propX} ${baseY}) scale(${sc})`}>
+                  {fn(undefined, 0.5)}
+                </g>
+              )}
+            </g>
+          </g>
+        );
+      })}
+    </Paper>
   );
 };

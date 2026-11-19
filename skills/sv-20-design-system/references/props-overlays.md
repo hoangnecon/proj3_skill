@@ -15,11 +15,18 @@ view switches.
 
 ### Adding a prop
 1. Draw it as a component in props.tsx at rig scale: origin = where the hand grips (hand props) or the
-   floor contact point (world props). A phone is ~40 × 70, a book ~120 × 90, a stool ~110 tall.
+   floor contact point `y = 0` (world props). A phone is ~40 × 70, a book ~120 × 90, a stool ~110 tall;
+   vehicles and large props must match the Human-Scale Vehicle & Large-Object Table in `sets.md` §3b
+   (anchored to `adult = 575 px`, `child = 435 px`).
 2. Style: 3–10 shapes, ink outline (`S` default 5, small parts 3–4), one token fill + one detail colour,
    a highlight line (`white` 0.6) or halftone shade on the dark side, Vietnamese label if it has text.
+   Keep opaque wheels/shapes painted after text clear of `<text>` bounding boxes (`PR-02`).
 3. Register it in the right registry. Time-based props take `t` (wrench wiggle, incense smoke).
-4. Check it at the size it will be seen: render the shot frame (`node scripts/qa.mjs shot <i>`).
+4. **Mandatory G4 scale check (`PR-01`, `PR-02`)**: run `node scripts/design.mjs` and inspect
+   `qa/design/props_episode_p*_v.jpg`! Every custom `WORLD_PROP` is rendered on the `y = 0` baseline
+   next to the `575 px` adult and `435 px` child reference ruler (`PR-01` errors on undersized
+   vehicles/carts/cars or floating `maxY`; `PR-02` errors on prop shapes covering prop text).
+5. Check it in context in a shot frame (`node scripts/qa.mjs shot <i>`).
 
 ## 2. Overlays (src/overlays.tsx)
 

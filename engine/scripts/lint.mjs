@@ -6,7 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {loadProject} from './load.mjs';
-import {actorBoxes, inter, area, CAPTION, W, H} from './geom.mjs';
+import {actorBoxes, inter, area, CAPTION, W, H, measurePropBox, setTextsAt, projectBox, shotGeometry, actorStateAt, scalarKeyAt} from './geom.mjs';
 
 const phase = process.argv[2] ?? 'all';
 const P = await loadProject();
@@ -16,7 +16,25 @@ const err = (rule, msg) => errors.push(`[${rule}] ${msg}`);
 const warn = (rule, msg) => warns.push(`[${rule}] ${msg}`);
 const src = (f) => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '');
 const shotSrc = src('src/episode/shotlist.ts');
+const propsSrc = src('src/props.tsx');
+const setsSrc = src('src/episode/sets.tsx');
 const waived = (rule, name) => new RegExp(`lint-ok:\\s*${rule}\\b`).test(shotSrc.split('\n').find((l) => l.includes(`'${name}'`)) ?? '');
+const lineWaived = (fileSrc, rule, key) => {
+  const ls = fileSrc.split('\n');
+  const re = new RegExp(`lint-ok:\\s*${rule}\\b`);
+  for (let i = 0; i < ls.length; i++) {
+    if (new RegExp(`(?:^|\\s)['"]?${key}['"]?\\s*:`).test(ls[i]) || new RegExp(`\\b(?:const|function)\\s+${key}\\b`).test(ls[i])) {
+      if (re.test(ls[i]) || re.test(ls[i - 1] ?? '')) return true;
+    }
+  }
+  return false;
+};
+const propWaived = (rule, key) => {
+  if (lineWaived(propsSrc, rule, key)) return true;
+  const entry = propsSrc.split('\n').find((l) => new RegExp(`^\\s*['"]?${key}['"]?\\s*:`).test(l)) ?? '';
+  const comp = /<([A-Z]\w*)\b/.exec(entry)?.[1];
+  return comp ? lineWaived(propsSrc, rule, comp) : false;
+};
 
 const PALKEYS = new Set(Object.keys(P.PAL));
 const ROLES = new Set(['principal', 'support', 'extra']);
@@ -89,6 +107,67 @@ if (phase !== 'shots') {
       else if (pl.empty_mid > 5) warn('SE-13', `${id}: ${pl.empty_mid} empty cells in the middle of the plate (rows ${pl.rows}) — look for bare wall`);
       if (!st.moves) warn('SE-12', `${id}: nothing in the set changes over time — add life driven by o.t (LED pulse, fan, smoke, leaves, clock; sets.md §7)`);
       if (st.glow < TH.glow) err('SE-10', `${id}: no light source glow (url(#glowY)) — every location has a visible light source`);
+      // SE-14: diegetic sign clipped on set plate camera
+      if (!lineWaived(setsSrc, 'SE-14', id)) {
+        const cam = d.plateCam ?? [540, 1150, 1];
+        const txs = setTextsAt(id, {t: 1, ...(d.plateOpts ?? {})}, P).filter((s) => s.fontSize >= 18);
+        for (const tx of txs) {
+          const sb = projectBox({x0: tx.x0, y0: tx.y0, x1: tx.x1, y1: tx.y1}, cam, tx.d);
+          const on = sb.x1 > 0 && sb.x0 < W && sb.y1 > 0 && sb.y0 < H;
+          if (!on) continue;
+          const cw = (Math.max(0, -sb.x0) + Math.max(0, sb.x1 - W)) / Math.max(1, sb.x1 - sb.x0);
+          const ch = (Math.max(0, -sb.y0) + Math.max(0, sb.y1 - H)) / Math.max(1, sb.y1 - sb.y0);
+          const mc = Math.max(cw, ch);
+          if (mc > 0.03 && mc < 0.95) {
+            if (cw > 0.12 || ch > 0.12) err('SE-14', `${id}: plateCam [${cam.join(', ')}] clips sign '${tx.text}' by ${Math.round(mc * 100)}% (> 12%) — adjust plateCam`);
+            else warn('SE-14', `${id}: plateCam [${cam.join(', ')}] clips sign '${tx.text}' by ${Math.round(mc * 100)}%`);
+          }
+        }
+      }
+    }
+  }
+  // PR-01 & PR-02: human-scale guard & internal text collision on custom episode WORLD_PROPS
+  {
+    const BUILTIN_PROPS = new Set(['stool', 'cone', 'lamp', 'gladiolus', 'cat', 'chicken', 'xoi', 'lobster', 'wagyu', 'tofu']);
+    const BIG_VEH = /bus|truck|van|train|ambulance|fire.?truck/i;
+    const SMALL_VEH = /kart|cart|car|taxi|moto|bike/i;
+    const GROUND_PROP = /bus|truck|van|train|ambulance|fire.?truck|kart|cart|car|taxi|moto|bike|table|desk|bench|crib|chair|stool|fence|stand|rack|float|podium|counter|shelf|crate|box|barrel|pot|plant/i;
+    for (const k of Object.keys(P.WORLD_PROPS ?? {})) {
+      if (BUILTIN_PROPS.has(k)) continue;
+      let b;
+      try { b = measurePropBox(k, P); } catch (e) { err('PR-01', `${k}: WORLD_PROP render threw ${e.message}`); continue; }
+      if (!propWaived('PR-01', k)) {
+        if (BIG_VEH.test(k) && b.height < 480) {
+          err('PR-01', `${k}: vehicle height ${Math.round(b.height)} px < 480 px (must tower over 435 px child & rival 575 px adult)`);
+        } else if (SMALL_VEH.test(k) && b.height < 180) {
+          err('PR-01', `${k}: cart/kart/car height ${Math.round(b.height)} px < 180 px`);
+        }
+        if (GROUND_PROP.test(k)) {
+          if (b.minY > 30 || b.maxY < -100) {
+            err('PR-01', `${k}: origin off floor y=0 (y=[${Math.round(b.minY)}..${Math.round(b.maxY)}])`);
+          } else if (Math.abs(b.maxY) > 60) {
+            err('PR-01', `${k}: bottom maxY=${Math.round(b.maxY)} px not resting near origin y=0 (|maxY| > 60)`);
+          }
+        }
+      }
+      if (!propWaived('PR-02', k)) {
+        for (const tx of b.texts) {
+          const y1 = tx.baselineY + tx.fontSize * 0.08;
+          for (const c of b.circles) {
+            if (c.order <= tx.order) continue;
+            let hits = 0;
+            for (let gx = 0; gx < 5; gx++) for (let gy = 0; gy < 5; gy++) {
+              const px = tx.x0 + ((gx + 0.5) / 5) * (tx.x1 - tx.x0);
+              const py = tx.y0 + ((gy + 0.5) / 5) * Math.max(1, y1 - tx.y0);
+              if ((px - c.cx) * (px - c.cx) + (py - c.cy) * (py - c.cy) <= c.r * c.r) hits++;
+            }
+            if (hits >= 4) {
+              err('PR-02', `${k}: opaque circle/wheel (cx=${Math.round(c.cx)}, cy=${Math.round(c.cy)}, r=${Math.round(c.r)}) painted after '${tx.text}' covers ${Math.round((hits / 25) * 100)}% of text`);
+              break;
+            }
+          }
+        }
+      }
     }
   }
   // token discipline in episode code
@@ -252,16 +331,34 @@ if (phase !== 'design') {
       // walking: must be side view while moving; speed sane
       if (A.path && A.path.length > 1) {
         const P0 = a.path;
+        let lastDxDir = 0, warnedRaise = false;
         for (let q = 1; q < P0.length; q++) {
           const [x0, y0, t0] = P0[q - 1], [x1, y1, t1] = P0[q];
           const d = Math.hypot(x1 - x0, y1 - y0), dt = t1 - t0;
           if (dt <= 0) { err('MO-01', `${tag}: ${a.id} path waypoint ${q} arrives before the previous one`); continue; }
+          const dx = x1 - x0;
+          if (A.face !== undefined && P0.length >= 3 && Math.abs(dx) > 2) {
+            const sd = Math.sign(dx);
+            if (lastDxDir !== 0 && sd !== lastDxDir && !waived('MO-10', r.name)) {
+              err('MO-10', `${tag}: ${a.id} has locked face=${JSON.stringify(A.face)} and path reverses horizontal direction (${lastDxDir > 0 ? '+' : '-'} -> ${sd > 0 ? '+' : '-'} at waypoint ${q}) — Film.tsx triggers horizontal turnaround squash (sx = 0.12); keep path dx monotonic or 0`);
+            }
+            lastDxDir = sd;
+          }
           const v = d / dt / a.s;
           if (d > 30 && v > 560) warn('MO-02', `${tag}: ${a.id} moves ${Math.round(v)} px/s (scaled) — that is running; nominal walk is 230`);
           if (d > 30 && v < 60) warn('MO-03', `${tag}: ${a.id} creeps ${Math.round(v)} px/s — hold still instead or shorten the time`);
           const views = Array.isArray(A.view) ? A.view : A.view ? [[A.view, 0]] : [];
           const frontWhile = views.some(([vv, tt]) => vv === 'front' && (typeof tt === 'number' ? r.t0 + tt : P.tAt(tt)) < t1 - 0.25 && (typeof tt === 'number' ? r.t0 + tt : P.tAt(tt)) >= t0 && d > 30);
           if ((A.view === 'front') || frontWhile) err('MO-04', `${tag}: ${a.id} travels ${Math.round(d)} px in front view — walking is always profile (side)`);
+          if (d > 30 && !warnedRaise) {
+            const segMid = (t0 + t1) / 2;
+            const segView = scalarKeyAt(A.view, 'front', r, P, segMid);
+            const segArms = scalarKeyAt(A.arms, 'swing', r, P, segMid);
+            if (segView === 'side' && segArms === 'raise' && !waived('MO-11', r.name)) {
+              warnedRaise = true;
+              warn('MO-11', `${tag}: ${a.id} walks in side view with arms='raise' — arm crosses face/helmet; use 'swing' or 'hold'`);
+            }
+          }
         }
         const a0 = Math.max(r.t0, P0[0][2] - 0.2), a1 = Math.min(r.t1, P0[P0.length - 1][2] + 0.4);
         if (a1 - a0 > 0.3) strips.push({name: `s${String(i).padStart(2, '0')}_${a.id}_walk`, t0: +a0.toFixed(2), t1: +a1.toFixed(2), n: 10, why: 'walk'});
@@ -269,14 +366,14 @@ if (phase !== 'design') {
       // reach: target must be within arm range of where the actor stands at that moment
       for (const rc of A.reach ?? []) {
         const t = typeof rc.at === 'number' ? r.t0 + rc.at : P.tAt(rc.at);
-        let x = A.x, y = A.y;
-        if (a.path) {
-          const pp = a.path; x = pp[pp.length - 1][0]; y = pp[pp.length - 1][1];
-          for (let q = 1; q < pp.length; q++) if (t <= pp[q][2]) { const u = Math.max(0, Math.min(1, (t - pp[q - 1][2]) / Math.max(0.01, pp[q][2] - pp[q - 1][2]))); x = pp[q - 1][0] + (pp[q][0] - pp[q - 1][0]) * u; y = pp[q - 1][1] + (pp[q][1] - pp[q - 1][1]) * u; break; }
-        }
+        const st = actorStateAt(a, A, t, r, P);
+        const x = st.x, y = st.y;
         if (a.path) {
           const arrive = a.path[a.path.length - 1][2];
           if (t > a.path[0][2] && t < arrive + 0.3) err('MO-06', `${tag}: ${a.id} reaches at ${t.toFixed(2)} s while still walking (arrives ${arrive.toFixed(2)} s) — arrive ≥ 0.3 s before the reach: settle, then reach`);
+        }
+        if (st.view === 'side' && (rc.x - x) * st.dir < -15 && !waived('MO-11', r.name)) {
+          warn('MO-11', `${tag}: ${a.id} reaches to x=${Math.round(rc.x)} behind facing dir=${st.dir > 0 ? '+1' : '-1'} (actor x=${Math.round(x)}) — arm slices across own face`);
         }
         const sh = [x, y - 410 * H * a.s];
         const dist = Math.hypot(rc.x - sh[0], rc.y - sh[1]);
@@ -331,16 +428,18 @@ if (phase !== 'design') {
   const looks = {...(P.EX_LOOKS ?? {}), ...P.CAST};
   const hot = {};
   const seen = new Set();
-  const flag = (r, rule, msg, who = '') => {
+  const flag = (r, rule, msg, who = '', makeHot = rule !== 'GE-10') => {
     if (waived(rule, r.name) || seen.has(`${r.i}|${rule}|${who}`)) return; // one warning per shot, rule and actor
     seen.add(`${r.i}|${rule}|${who}`);
-    warn(rule, `#${r.i} '${r.name}': ${msg}`); (hot[r.i] ??= []).push(rule);
+    warn(rule, `#${r.i} '${r.name}': ${msg}`);
+    if (makeHot) (hot[r.i] ??= []).push(rule);
   };
   const lastH = {};
   for (const r of rows) {
     for (const u of [0.15, 0.5, 0.85]) {
       const t = r.t0 + (r.t1 - r.t0) * u;
-      const B = actorBoxes(r, t, looks);
+      const g = shotGeometry(r, t, P, rows);
+      const B = g.actors;
       for (let a = 0; a < B.length; a++) for (let b = a + 1; b < B.length; b++) {
         const o = inter(B[a].body, B[b].body) / Math.max(1, Math.min(area(B[a].body), area(B[b].body)));
         if (o > 0.25 && !r.actors[a].ride && !r.actors[b].ride) { flag(r, 'GE-01', `${B[a].id} and ${B[b].id} bodies overlap ${(o * 100).toFixed(0)} % at ${t.toFixed(2)} s — check who is in front and that nothing reads as one blob`, B[a].id + B[b].id); break; }
@@ -351,6 +450,20 @@ if (phase !== 'design') {
         const cut = hy - hr < -0.25 * hr || hx - hr < -0.25 * hr || hx + hr > W + 0.25 * hr; // > ~¼ of the head outside
         if (onScreen && cut && x.h < H * 1.1) flag(r, 'GE-04', `${x.id}'s head is cut by the frame edge at ${t.toFixed(2)} s`, x.id + 'cut');
         if (onScreen && hy + hr * 0.5 > CAPTION[0] && hy - hr * 0.5 < CAPTION[1]) flag(r, 'GE-04', `${x.id}'s face sits in the caption band at ${t.toFixed(2)} s`, x.id + 'cap');
+      }
+      for (const sg of g.signs) {
+        if (sg.edgeClipped) {
+          const clipPct = Math.round(Math.max(sg.clippedW, sg.clippedH) * 100);
+          flag(r, 'GE-10', `${sg.source !== 'set' ? `[${sg.source}] ` : ''}sign '${sg.text}' clipped ${clipPct}% by frame edge at ${t.toFixed(2)} s — ${sg.camHint}`, `sign:${sg.source}:${sg.text}`);
+        }
+        for (const occ of sg.occludedBy) {
+          flag(r, 'GE-11', `${occ.kind} ${occ.id} covers ${Math.round(occ.frac * 100)}% of sign '${sg.text}'${sg.source !== 'set' ? ` (${sg.source})` : ''} at ${t.toFixed(2)} s`, `occ:${sg.source}:${sg.text}:${occ.id}`, occ.kind !== 'prop');
+        }
+      }
+      for (const pr of g.props) {
+        if (pr.edgeClipped) {
+          flag(r, 'GE-15', `prop '${pr.k}' clipped ${Math.round(pr.clippedFrac * 100)}% off frame edge at ${t.toFixed(2)} s — ${pr.dxHint}`, `prop:${pr.k}`);
+        }
       }
       if (u === 0.5) {
         for (const x of B) {

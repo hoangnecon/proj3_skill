@@ -1,37 +1,21 @@
 # Role briefs (for sub-agents)
 
-Give each helper only its own brief, plus the files it needs. A helper that reads the whole suite spends its
-time reading, not working.
+Give each helper only its own brief, plus the files it needs. Never read the whole suite — read only the skill listed for your role.
 
-## Conductor (the main session)
-- Owns the gates, the user and the order of work. Runs `sv_gate.py`, writes the gate reviews, and asks the
-  user for G1, G2 and G4.
-- Keeps helpers busy: while one renders, brief the next. Never waits idle on a single helper.
-- Parallel where safe:
-  - G4: one builder per set, in its own file section, while another builder does the cast.
-  - G5: builders on separate segment ranges of `shotlist.ts`; reviewers on card batches.
-- Renders go through the scripts, one at a time per episode (`qa/.render.lock`). Two helpers never render at
-  once.
-- Batches approvals: shows the user the cast and every set together at G4, not one by one.
+## Conductor (main session)
+- Owns gates (`sv_gate.py`), user approvals (G1, G2, G4; batch G4 cast + sets + `props_episode_p*_v.jpg` together), and render lock (`qa/.render.lock`, one render at a time).
+- Keeps helpers busy in parallel: G4 (one builder per set + one for cast/props), G5 (builders per segment range; reviewers on card batches).
+- Before G5 review, run `node scripts/qa.mjs pass changed` (renders contact, strips, cards, HOT crops + runs `carry.py`) and hand only `qa/carry.json` → `review` to reviewers.
 
 ## Builder
-- Input: the brief/beats for your range, the design sheets (`qa/design/*_v.jpg`, `set_<id>_grid_v.jpg`) and
-  the skill for your part:
-  - sv-20 (cast, sets — v1 density, text in sets is fine)
-  - sv-21 (motion)
-  - sv-22 (shots)
-- Edit only your own section or file. Run `node scripts/lint.mjs <design|shots>` until it shows 0 errors.
-- Check your own work with `node scripts/qa.mjs shot <i>` (3 s), never with a full contact.
-- When a reviewer marks a shot `fix`, change only that shot, then run `qa.mjs shot <i>`, and `crops <i>` if
-  it is HOT. Give up after 3 tries and report back.
-- Never write review files for your own shots.
+- Read only your inputs (`brief.md`/`beats.md`, `qa/design/*_v.jpg`, `props_episode_p*_v.jpg`, `set_<id>_grid_v.jpg`) and your role skill (`sv-20` cast/sets/props, `sv-21` motion, `sv-22` shots).
+- Edit only your assigned file or segment range.
+- **Pre-flight zero-bounce gate:** run `node scripts/lint.mjs <design|shots>` until 0 errors, then clear `GE-10`/`GE-11`/`GE-15` warnings with `node scripts/qa.mjs where <i> [--free WxH]` (1 s, no browser).
+- Spot-check edits with `node scripts/qa.mjs shot <i>` (3 s); run `qa.mjs pass changed` once ready for review.
+- On `fix` items, edit only those shots (max 3 tries, then escalate). Never review your own shots.
 
 ## Reviewer
-- Input: `qa/cards/NN.jpg` for your batch, `qa/hot.json`, and sv-22 `references/review-cards.md`.
-- For each card:
-  - Open it.
-  - For a HOT shot, run `node scripts/qa.mjs crops <i>` and open `qa/crops/NN.jpg`.
-  - Answer the 8 checks and write `qa/review/NN.json` with the hash from the card title.
-- Say exactly what is wrong and where ("Bảo's right hand 40 px left of the bell at 18.2 s"). The builder fixes
-  from your words alone.
-- Open only light images (`*.jpg`). Do not open the PNG masters.
+- Read only `qa/cards/NN.jpg` for your batch, `qa/crops/NN.jpg` for HOT shots (`qa/hot.json`), `qa/design/cast_episode_p*_v.jpg`, `qa/design/props_episode_p*_v.jpg`, and `sv-22/references/review-cards.md`.
+- Open only light JPEGs (`*.jpg`), never PNG masters.
+- Write a JSONL batch file and submit with `node scripts/qa.mjs review --batch <batch.jsonl>` (validates hash, `reviewer != builder`, all 8 checks `ok — ...`/`fix — ...`, `note >= 6` words, HOT `"crops"`).
+- On `fix`, state exact defect, location, and change (`"Tin's head covers KHÓA CHẶT at 71.2 s; shift Tin +90 px right"`).

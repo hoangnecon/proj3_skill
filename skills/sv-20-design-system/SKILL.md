@@ -33,13 +33,13 @@ belongs in the same series and carry the same density of detail. Agents that ski
 3. **Sets.** For each location: location card → object list (≥ 15, sets.md §9) → blocking sketch with
    touch points in `geo.ts` → six passes, rendering `node scripts/design.mjs --only set:<id>` after each
    pass → compare with the exemplar plate of the same kind → `bounds` → register.
-4. **Lint.** `node scripts/lint.mjs design` must print 0 errors. It prints the density line per set
+4. **Lint.** `node scripts/lint.mjs design` must print 0 errors (checks `CH-*`, `SE-01..14`, `PR-01..02`, `TK-*`). It prints the density line per set
    (`set kitchen: 118 shapes · 14 colours · 6 texts · halftone 4 · glow 3 · mid 2`). Do not weaken a
    threshold; add detail.
 5. **Render all evidence.** `node scripts/design.mjs` (writes cast pages, expression sheets for every
-   principal and support, set plates + grids).
-6. **Review.** Fill `gates/G4.review.md`: one line per evidence image with what you actually saw (≥ 4
-   words), the rubric answers (characters.md §8, sets.md §11).
+   principal and support, `props_episode_p*.png` + `_v.jpg` human-scale prop sheets, and set plates + grids).
+6. **Review.** Fill `gates/G4.review.md`: one line per evidence image — including `props_episode_p*_v.jpg` (mandatory check that vehicles/furniture match the `575 px` adult / `435 px` child ruler and zero text is occluded) and every `set_<id>_v.jpg` / `_grid_v.jpg` — with what you actually saw (≥ 4
+   words) and the rubric answers (characters.md §8, sets.md §11).
 7. **Show the user** the cast sheet and the set plates (send the PNGs) and get their OK. Put their words
    in `user_quote`. If they asked you to carry on without checking, use `approval: delegated` and quote that.
 8. **Gate.** `python3 scripts/sv_gate.py pass G4`.
@@ -63,3 +63,5 @@ belongs in the same series and carry the same density of detail. Agents that ski
 | Text unreadable | ≥ 22 px world for any text that matters, frame it at zoom ≥ 1.2 when narrated |
 | Floor looks like a flat rectangle | perspective lines + seams + contact shadows (sets.md pass 6) |
 | Lint SE-06 shapes too low | you are missing passes 4–5; compare object list with sets.md §9 |
+| Lint SE-14 sign clipped on plate | widen `plateCam` / shift `plateCam` `cx` or move the sign inside the plate frame |
+| Lint PR-01 / PR-02 prop scale or text overlap | scale vehicle/cart to human-scale table (sets.md §3b), move opaque wheel/shape clear of `<text>`, verify in `props_episode_p*_v.jpg` |

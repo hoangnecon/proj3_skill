@@ -1,5 +1,6 @@
 // Render the design evidence for gate G4 into qa/design/:
 //   cast_episode_p<N>.png      every look in src/episode/cast.ts (front + side, role, description)
+//   props_episode_p<N>.png     every custom episode WORLD_PROP next to 575 px adult + 435 px child ruler
 //   expr_<look>.png            per principal/support: 12 expressions, 6 poses, walk cycle, sitting
 //   set_<id>.png / _grid.png   every episode set (clean plate + world-coordinate grid)
 //   every sheet also gets a light <name>_v.jpg to LOOK at (≤ 1600 px, JPEG); every set plate a set_<id>_zoom.jpg
@@ -13,8 +14,10 @@ import path from 'node:path';
 import fs from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {loadProject} from './load.mjs';
+import {measurePropBox} from './geom.mjs';
 
 const args = process.argv.slice(2);
+const PY = process.env.SV_PYTHON || (fs.existsSync('/Users/Shared/Tools/VieNeu-TTS/.venv/bin/python') ? '/Users/Shared/Tools/VieNeu-TTS/.venv/bin/python' : 'python3');
 const withEx = args.includes('--exemplar');
 const only = args.includes('--only') ? args[args.indexOf('--only') + 1] : null;
 // --changed: render only sheets whose inputs changed since the last run (qa/design/cache.json); default renders all
@@ -22,6 +25,8 @@ const CHANGED = args.includes('--changed');
 const P = await loadProject();
 const castKeys = Object.keys(P.CAST);
 const setIds = Object.keys(P.EPISODE_SETS);
+const BUILTIN_PROPS = new Set(['stool', 'cone', 'lamp', 'gladiolus', 'cat', 'chicken', 'xoi', 'lobster', 'wagyu', 'tofu']);
+const propKeys = Object.keys(P.WORLD_PROPS ?? {}).filter((k) => !BUILTIN_PROPS.has(k));
 fs.mkdirSync('qa/design', {recursive: true});
 
 let serveUrl, browser; // opened only when something has to be rendered
@@ -33,7 +38,7 @@ const still = async (id, props, out) => {
 };
 // a light view copy next to every sheet (<name>_v.jpg, long side ≤ 1600, ≈100–400 KB): open THAT one to review;
 // the PNG stays the master for plate_check.py and for zoomed crops
-const view = (outs) => outs.length && execFileSync('python3', ['-c', `
+const view = (outs) => outs.length && execFileSync(PY, ['-c', `
 import sys
 from PIL import Image
 for p in sys.argv[1:]:
@@ -68,6 +73,20 @@ if (!only) {
   const pages = Math.max(1, Math.ceil(castKeys.length / 10));
   for (let p = 0; p < pages; p++) jobs.push(['CastSheet', {which: 'episode', page: p}, `qa/design/cast_episode_p${p + 1}.png`]);
 }
+if ((!only || only === 'props') && propKeys.length) {
+  const sizes = {};
+  for (const k of propKeys) {
+    try {
+      const b = measurePropBox(k, P);
+      sizes[k] = {w: Math.round(b.width), h: Math.round(b.height), minX: Math.round(b.minX), minY: Math.round(b.minY), maxX: Math.round(b.maxX), maxY: Math.round(b.maxY)};
+    } catch {}
+  }
+  const pPages = Math.ceil(propKeys.length / 6);
+  for (let p = 0; p < pPages; p++) {
+    const pageSizes = Object.fromEntries(propKeys.slice(p * 6, (p + 1) * 6).map((k) => [k, sizes[k]]).filter(([, v]) => v));
+    jobs.push(['PropSheet', {page: p, sizes: pageSizes}, `qa/design/props_episode_p${p + 1}.png`]);
+  }
+}
 for (const k of castKeys) {
   const role = P.CAST_ROLES[k]?.role;
   if ((!only && role !== 'extra') || only === 'look:' + k) jobs.push(['ExprSheet', {look: k}, `qa/design/expr_${k}.png`]);
@@ -99,7 +118,7 @@ fs.mkdirSync('qa/design/_prev', {recursive: true});
 for (const j of todo) if (fs.existsSync(j[2])) fs.cpSync(j[2], 'qa/design/_prev/' + path.basename(j[2]), {preserveTimestamps: true});
 try { await Promise.all(Array.from({length: Math.min(N, todo.length)}, worker)); }
 finally { fs.writeFileSync(CACHE, JSON.stringify(cache, null, 1)); await browser?.close({silent: true}).catch(() => {}); }
-const same = new Set(todo.length ? JSON.parse(execFileSync('python3', ['-c', `
+const same = new Set(todo.length ? JSON.parse(execFileSync(PY, ['-c', `
 import sys, os, json
 import numpy as np
 from PIL import Image
@@ -118,5 +137,5 @@ view(todo.map((j) => j[2]).filter((o) => !same.has(o) || !fs.existsSync(o.slice(
 console.log(`design: ${todo.length} rendered, ${jobs.length - todo.length} unchanged`);
 // visible-detail measure of every clean plate (lint SE-13 reads qa/design/plate_stats.json)
 const plates = jobs.filter(([id, props]) => id === 'SetPlate' && !props.grid && !P.SETS[props.id]?.insert).map(([, , out]) => out);
-if (plates.length) execFileSync('python3', ['scripts/plate_check.py', ...plates], {stdio: 'inherit'});
+if (plates.length) execFileSync(PY, ['scripts/plate_check.py', ...plates], {stdio: 'inherit'});
 if (!jobs.length) console.log('nothing to render (cast and sets are empty)');

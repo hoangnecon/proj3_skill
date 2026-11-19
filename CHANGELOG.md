@@ -1,5 +1,28 @@
 # Changelog
 
+## `v3.8.0` — 2026-11-20 · human-scale PropSheet, geometry/motion lint & single-bundle QA (docs/rsi-loop-2026-11-20.md)
+- **RSI Evaluation & Forensic Benchmarks (`tools/rsi_eval.py`, `tools/trace_agy.py`):**
+  - Generalized `trace_agy.py` (`--main`, `--prefix`, `--ids`, `--gates-log`) across the 23-worker `hh-*` + `hh2-*` run (`606.1m` wall / `328.3m` active, `128.13M` tokens, `894` media reads, `219` review writes).
+  - Reproducible `rsi_eval.py` benchmark improved across 2 RSI cycles (Iter 0 `v3.7.0` -> Iter 1 -> Iter 2):
+    - Historical Defect Catch (`D01..D10`): **1/10 (10%) -> 10/10 (100%)**.
+    - Clean-episode FP: `sieu-nang-luc` **0 errors, 0 warnings** (`hot=8` unchanged); `huy-hieu` v2 **0 errors, 36 warnings** (`GE-10: 24`, `GE-11: 12`, down from `65` in Iter 1) and **`hot=16`** (down from `40` in Iter 1, `-60%` HOT bloat).
+    - 3-shot fix QA cycle (`#28, #35, #43`): **`57.95s` (Iter 0) / `51.69s` (Iter 2 legacy) -> `29.15s` (`qa.mjs pass changed`)** (`-43.6%` vs legacy, `-49.7%` vs Iter 0).
+    - Live cold-start stress test (`8` dense multi-vehicle shots): first-pass independent OK jumped **3× (`1/8` -> `3/8`)**, with `0` human-scale vehicle/door bugs and `0` standing-shoe caption false rejections.
+- **Human-Scale PropSheet (`engine/src/design/Sheets.tsx`, `engine/src/Root.tsx`, `engine/scripts/design.mjs`):**
+  - Renders every custom `WORLD_PROP` at `y = 0` beside `575 px` adult and `435 px` child scale silhouettes on a `100 px` grid with `W × H px · y=[minY..maxY]` labels (`qa/design/props_episode_p*.png` + `_v.jpg`; supports `--only props`).
+- **Design, Geometry & Motion Lint Guards (`engine/scripts/geom.mjs`, `engine/scripts/lint.mjs`, `CONVENTIONS.md`):**
+  - `PR-01`: Human-scale height guard for vehicles (`>= 480 px`), carts/karts/cars (`>= 180 px`), and floor-origin alignment (`|maxY| <= 60` on ground props).
+  - `PR-02`: Prop internal text collision guard (opaque wheel/circle painted over `<text>`).
+  - `SE-14`: Set `plateCam` diegetic sign edge-clipping guard.
+  - `GE-10`, `GE-11`, `GE-15`: Shared `geom.mjs` world->screen geometry (`shotGeometry`) catching set & `WORLD_PROP` sign edge-clipping (`>= 45%` in-frame, `len >= 6`, `screenFontSize >= 17`), actor/overlay/prop occlusion over readable signs, and foreground `WORLD_PROP` frame-edge clipping.
+  - `MO-10`, `MO-11`: Locked-`face` `path` x-reversal turnaround-squash guard (`ERROR`) and `side`-view reach-behind-facing / `arms:'raise'` walking guards (`WARN`).
+- **Single-Bundle QA & Batch Review (`engine/scripts/qa.mjs`, `skills/**`):**
+  - `qa.mjs where <i> [t] [--free WxH]`: zero-browser `1080×1920` layout & occlusion pre-flight table.
+  - `qa.mjs pass [changed|all]`: single Remotion `bundle()` + `openBrowser()` running `contact -> strips -> cards -> crops -> carry.py`.
+  - `qa.mjs review --batch <file.jsonl>`: strict schema-validated atomic batch review writer (`~4.4m` for 8 shots).
+  - Auto-Python `.venv` resolution in `design.mjs`, `qa.mjs`, `deliver.mjs`; `deps.mjs` excludes `src/design/` from `engineHash` (`0/66` false stales on `Sheets.tsx` edits).
+  - Updated `sv-00`, `sv-12` (`between_words_db <= -51.5 dB` G3 target), `sv-20` (Human-Scale table + `PropSheet`), `sv-21` (`MO-10..11`, vehicle/bed staging), and `sv-22` (Pre-Flight Zero-Bounce gate + standing-shoe caption clarification).
+
 ## `v3.7.0` — 2026-11-19 · dependency-scoped review carry + character-model guard (docs/perf-plan-2026-11-19.md)
 - **Dependency-scoped shot hash (`deps.mjs`):** each shot's hash covers only what it draws (its set helpers, looks, props, reach coordinates, words). This closes v3.6 holes where a `sets.tsx` helper edit or a reach change never staled a shot. `test_deps.mjs` (in `engine/scripts/`, run inside a copy of an episode) injects changes and fails on any miss.
 - **Review carry (`carry.py`):** a review is kept when the shot's picture did not change (card frames + probes every ~0.2 s) or it was only retimed; G5 re-verifies every carry. Measured: a prop edit leaves 10 of 66 shots to review instead of 66; a voice remake 5–17 instead of 57–66.

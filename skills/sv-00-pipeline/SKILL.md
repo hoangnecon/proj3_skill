@@ -21,7 +21,7 @@ checks), `mix_targets.json` (voice chain, music 15–18 dB under, −14 LUFS), `
 | G1 | Brief | sv-10 (+ sv-01) | Archetype, Blocker, 5-Knot Spine filled | brief.md | **user** |
 | G2 | Script + beats | sv-10 | `script_lint.py` (`SC-01..26`) | qa/script_lint.json | **user** |
 | G3 | Voice | sv-12 | one take/line vs voice_standard.json + pacing.json | qa/voice_report.json + listening | — |
-| G4 | Cast + sets | sv-20 | `lint.mjs design` (CH/TK/SE) | qa/design/*.png (look at the `_v.jpg` / `_zoom.jpg` views) | **user** |
+| G4 | Cast + sets | sv-20 | `lint.mjs design` (CH/TK/SE/PR) | qa/design/*.png (look at `*_v.jpg`, `props_episode_p*_v.jpg`, `*_zoom.jpg`) | **user** |
 | G5 | Shots + motion | sv-22, sv-21 | `lint.mjs shots` (SH/AN/OV/CA/SZ/MO/KY/CO/PC/GE) | qa/contact_p*.jpg, qa/strips/*.jpg, qa/review/NN.json per shot | — |
 | G6 | Audio | sv-40 (sounds) + sv-42 (mix & master) | 21 measured checks vs mix_targets.json | qa/mix_report.json, qa/mix/overview.png, qa/mix/segments.png + listening | — |
 | G7 | Delivery | sv-41 (+ sv-42 audio-in-video) | deliver report + video audio checks | qa/deliver_report.json, qa/final_check.jpg, qa/video_audio.json, full watch | — |
@@ -55,7 +55,7 @@ feature is used, make a separate sandbox with `--demo` (a 4-shot demo on the exe
   named in the review or is named with < 4 words of remark; evidence is newer than the review; approval
   is missing for G1/G2/G4; less than 60 s since the previous pass (it prints the time to retry).
 - Freshness is by content hash, not file time: `qa.mjs status` / `design.mjs --status` say exactly which
-  shots or sheets no longer match the source, and only those are re-rendered (`contact`, `design.mjs --changed`).
+  shots or sheets no longer match the source, and only those are re-rendered (`qa.mjs pass changed`, `design.mjs --changed`).
   G6 depends on `qa/timing.json` (cut times, keys, reaches), so a visual-only fix does not force a remix.
 - Editing an input of a passed gate makes it and every gate that depends on it STALE. Re-do from the earliest
   stale gate. Metadata (title, description, tags) lives outside script.json words: editing it must not touch
@@ -86,7 +86,7 @@ Three roles, each with a one-page brief in `references/roles.md` so a helper doe
 - **Conductor** (you): gates, approvals, the user. Never idles waiting — while one helper renders, brief the next.
   On every wake-up run `python3 scripts/sv_gate.py watch`; on `STALLED` replace the silent helper at once.
 - **Builders**: write cast/sets (one set per builder, in parallel) and shots (one segment range per builder).
-- **Reviewers**: open cards + crops and write `qa/review/NN.json`; never review shots they built.
+- **Reviewers**: open cards + crops and write batches with `qa.mjs review --batch`; never review shots they built.
 Run renders through the scripts only (one render per episode at a time: `qa/.render.lock`).
 
 ## House rules (from the user, non-negotiable)
