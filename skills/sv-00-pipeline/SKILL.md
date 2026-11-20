@@ -89,6 +89,14 @@ Three roles, each with a one-page brief in `references/roles.md` so a helper doe
 - **Reviewers**: open cards + crops and write batches with `qa.mjs review --batch`; never review shots they built.
 Run renders through the scripts only (one render per episode at a time: `qa/.render.lock`).
 
+## 30–45 min parallel execution blueprint (v3.9)
+Run independent phases and splits concurrently instead of waiting on a single serial chain:
+1. **G1 (Brief)** → user approval.
+2. **Parallel G2/G3 + 2-way split G4**: once G1 passes, write script/beats (**G2**) and generate voice (**G3**) while splitting **G4** across two builders in parallel (`cast + props` builder ∥ `sets` builder). Run `node scripts/design.mjs` (auto-generates `qa/design/visual_spec.json`) + `node scripts/lint.mjs design`, get user approval, and pass G4.
+3. **G5 (Shots + pre-render CI lint) ∥ G6 (Mix)**: write `shotlist.ts`, run `node scripts/lint.mjs shots` (zero-render pre-flight CI) + `node scripts/qa.mjs where <i>` until clean, then run `node scripts/qa.mjs pass changed` (which also runs `scripts/blind_pack.mjs` to write `qa/blind_review/slice_1..3.json`). Once `qa/timing.json` is stable, run **G6** (`scripts/mix.py` + `scripts/audio_qa.py`) in parallel with G5 QA/fixes.
+4. **3-way Blind Reviewers**: dispatch 3 parallel reviewers on `qa/blind_review/slice_1.json`, `slice_2.json`, and `slice_3.json` (each outputting `blind_sha`-verified JSONL via `node scripts/qa.mjs review --batch`), then pass G5 and G6.
+5. **G7 (`scripts/deliver.mjs`)**: render `out/final.mp4`, verify `qa/deliver_report.json` + `qa/final_check.jpg` + `qa/video_audio.json`, and pass G7.
+
 ## House rules (from the user, non-negotiable)
 - Voice Hải Đăng, northern wording. Never switch voices without the user asking.
 - Music: the one series theme (scripts/theme.py, 118 BPM, kỳ bí nhẹ, tò mò), 15–18 dB under the voice.

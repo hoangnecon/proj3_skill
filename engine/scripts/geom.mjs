@@ -392,6 +392,23 @@ export const measurePropBox = (propKey, P = cachedP, c = undefined, t = 0.5) => 
   return res;
 };
 
+const handPropCache = new Map();
+
+/** Render a HAND_PROP key at grip origin (0, 0) to static SVG and return bbox + gripDist. */
+export const measureHandPropBox = (k, P = cachedP) => {
+  if (P) cachedP = P;
+  if (typeof k === 'string' && handPropCache.has(k)) return handPropCache.get(k);
+  const fn = typeof k === 'function' ? k : P?.HAND_PROPS?.[k];
+  if (!fn) throw new Error(`measureHandPropBox: unknown hand prop '${k}'`);
+  const svg = renderToStaticMarkup(React.createElement('svg', null, fn({l: [0, 0], r: [0, 0]}, 0.5)));
+  const p = parseSvgBoxes(svg);
+  const {minX, minY, maxX, maxY, width, height} = p.bounds;
+  const gripDist = Math.hypot(Math.max(minX, 0, -maxX), Math.max(minY, 0, -maxY));
+  const res = {minX, minY, maxX, maxY, width, height, gripDist, texts: p.texts, circles: p.circles};
+  if (typeof k === 'string') handPropCache.set(k, res);
+  return res;
+};
+
 /** Project a world box through camera [cx, cy, k] at LayerG depth d into 1080×1920 screen px. */
 export const projectBox = (b, cam, d = 1) => {
   const [cx, cy, k] = cam;
@@ -444,6 +461,22 @@ export const overlayBox = (o, cam, row, P, t) => {
     return {k: o.k, text: o.text ?? '', world: true, ...projectBox(wb, cam, 1)};
   }
   return {k: o.k, text: o.text ?? '', world: false, ...box(o.x + b.x0 * sc, o.y + b.y0 * sc, o.x + b.x1 * sc, o.y + b.y1 * sc)};
+};
+
+const OVERLAY_BOX_KINDS = new Set(['bubble', 'label', 'stamp', 'tag', 'card', 'title']);
+
+/** Return screen-space boxes [{k, text, box: {x0, y0, x1, y1}}] for active overlays at time t. */
+export const overlayBoxesAt = (row, t, P) => {
+  const def = P?.SHOTS?.[row.i] ?? row;
+  const cam = camAt(row, t);
+  const out = [];
+  for (const o of def?.over ?? []) {
+    if (!OVERLAY_BOX_KINDS.has(o.k)) continue;
+    const ob = overlayBox(o, cam, row, P, t);
+    if (!ob) continue;
+    out.push({k: ob.k, text: ob.text, box: {x0: ob.x0, y0: ob.y0, x1: ob.x1, y1: ob.y1}});
+  }
+  return out;
 };
 
 const keyedOptsAt = (def, row, P, t) => {

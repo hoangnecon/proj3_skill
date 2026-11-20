@@ -1,7 +1,7 @@
 // Final render + delivery report (gate G7).
 //   node scripts/deliver.mjs            -> out/final.mp4, qa/deliver_report.json, qa/final_check.jpg (no phone copy: the user does not want one)
 // Refuses to run when the mix is stale (shots or voice changed after scripts/mix.py ran).
-import {bundle} from '@remotion/bundler';
+import {cachedBundle} from './bundle_cache.mjs';
 import {renderMedia, selectComposition} from '@remotion/renderer';
 import {execFileSync} from 'node:child_process';
 import crypto from 'node:crypto';
@@ -9,11 +9,14 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import {loadProject, writeTables} from './load.mjs';
+import {makeShotHash} from './deps.mjs';
 
 const P = await loadProject();
 const sha = (f) => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex').slice(0, 16);
+const sha1 = (s) => crypto.createHash('sha1').update(s).digest('hex');
 const die = (m) => { console.error('ERROR', m); process.exit(1); };
-writeTables(fs, P.shotTable());
+const rows = P.shotTable();
+writeTables(fs, rows);
 if (!fs.existsSync('public/mix.wav') || !fs.existsSync('qa/mix_report.json')) die('no mix — run scripts/mix.py first');
 const mr = JSON.parse(fs.readFileSync('qa/mix_report.json', 'utf8'));
 // only TIMING matters for the mix: a visual-only fix (pose, prop, set, camera) does not force a remix
@@ -34,12 +37,86 @@ const fresh = fs.existsSync(raw) && ['src/episode/shotlist.ts', 'src/episode/set
 if (process.env.SV_SKIP_RENDER && fresh) {
   console.log('reuse', raw);
 } else {
-  const serveUrl = await bundle({entryPoint: path.resolve('src/index.ts')});
-  const comp = await selectComposition({serveUrl, id: 'Film', chromiumOptions: {gl: 'angle'}});
-  let last = 0;
-  await renderMedia({serveUrl, composition: comp, codec: 'h264', crf: 18, outputLocation: raw, chromiumOptions: {gl: 'angle'}, concurrency: Math.max(4, Math.min(8, Math.floor(os.cpus().length / 2))),
-    onProgress: ({progress}) => { if (progress - last > 0.1) { last = progress; process.stdout.write(`\rrender ${(progress * 100).toFixed(0)}%`); } }});
-  console.log('\nok', raw);
+  const DEPS = makeShotHash(rows, P.SHOTS);
+  const hashes = rows.map((r) => DEPS.hashOf(r));
+  const globalFiles = [
+    'src/Film.tsx', 'src/Root.tsx', 'src/kit.tsx', 'src/chars.tsx',
+    'src/side.tsx', 'src/overlays.tsx', 'src/data/words.json',
+    'src/data/cues.json', 'src/episode/cast.ts', 'src/props.tsx',
+  ];
+  const gh = crypto.createHash('sha1');
+  for (const gf of globalFiles) {
+    if (fs.existsSync(gf)) {
+      gh.update(gf + '\n');
+      gh.update(fs.readFileSync(gf));
+      gh.update('\n');
+    }
+  }
+  const srcGlobalHash = gh.digest('hex').slice(0, 14);
+  const globalKey = `crf18|1080x1920|30fps|${srcGlobalHash}`;
+  const FPS = 30;
+  const totalFrames = Math.max(1, Math.round(P.DURATION * FPS));
+  const frameRanges = rows.map((r, idx) => {
+    const f0 = idx === 0 ? 0 : Math.max(0, Math.min(totalFrames - 1, Math.round(r.t0 * FPS)));
+    return [f0, totalFrames - 1];
+  });
+  for (let i = 1; i < frameRanges.length; i++) {
+    if (frameRanges[i][0] <= frameRanges[i - 1][0]) {
+      frameRanges[i][0] = Math.min(totalFrames - 1, frameRanges[i - 1][0] + 1);
+    }
+    frameRanges[i - 1][1] = frameRanges[i][0] - 1;
+  }
+  const chunkKeys = rows.map((_, i) =>
+    sha1(`${globalKey}|${hashes[i]}|${frameRanges[i][0]}:${frameRanges[i][1]}`).slice(0, 14)
+  );
+  const chunkDir = 'out/_chunks';
+  fs.mkdirSync(chunkDir, {recursive: true});
+  const chunkPath = (i) => path.join(chunkDir, `${chunkKeys[i]}.mp4`);
+  const isCached = (i) => {
+    const p = chunkPath(i);
+    return fs.existsSync(p) && fs.statSync(p).size > 0;
+  };
+  const cachedCount = rows.filter((_, i) => isCached(i)).length;
+  const useChunks = rows.length > 0 && (process.env.SV_CHUNK_RENDER === '1' || cachedCount >= Math.ceil(rows.length * 0.5));
+  const concurrency = Math.max(4, Math.min(10, os.cpus().length - 2));
+
+  if (useChunks) {
+    const missing = rows.map((_, i) => i).filter((i) => !isCached(i));
+    console.log(`chunks: ${cachedCount}/${rows.length} cached, rendering ${missing.length} shot(s)`);
+    if (missing.length > 0) {
+      const serveUrl = await cachedBundle('src/index.ts');
+      const comp = await selectComposition({serveUrl, id: 'Film', chromiumOptions: {gl: 'angle'}});
+      for (let idx = 0; idx < missing.length; idx++) {
+        const i = missing[idx];
+        const out = chunkPath(i);
+        const tmp = `${out}.tmp.${process.pid}.mp4`;
+        await renderMedia({
+          serveUrl,
+          composition: comp,
+          codec: 'h264',
+          crf: 18,
+          muted: true,
+          frameRange: frameRanges[i],
+          outputLocation: tmp,
+          chromiumOptions: {gl: 'angle'},
+          concurrency,
+        });
+        fs.renameSync(tmp, out);
+        console.log(`chunk ${idx + 1}/${missing.length}: shot #${rows[i].i} [${frameRanges[i][0]}..${frameRanges[i][1]}] -> ${out}`);
+      }
+    }
+    const concatFile = path.join(chunkDir, 'concat.txt');
+    fs.writeFileSync(concatFile, chunkKeys.map((k) => `file '${k}.mp4'`).join('\n') + '\n');
+    execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', concatFile, '-c:v', 'copy', '-an', raw]);
+    console.log('ok (chunk concat)', raw);
+  } else {
+    const serveUrl = await cachedBundle('src/index.ts');
+    const comp = await selectComposition({serveUrl, id: 'Film', chromiumOptions: {gl: 'angle'}});
+    let last = 0;
+    await renderMedia({serveUrl, composition: comp, codec: 'h264', crf: 18, outputLocation: raw, chromiumOptions: {gl: 'angle'}, concurrency,
+      onProgress: ({progress}) => { if (progress - last > 0.1) { last = progress; process.stdout.write(`\rrender ${(progress * 100).toFixed(0)}%`); } }});
+    console.log('\nok', raw);
+  }
 }
 // Remotion's AAC keeps the 2048-sample encoder priming without an edit list -> sound plays ~43 ms late.
 // Take the picture from the render and the sound straight from public/mix.wav; ffmpeg's AAC writes a proper edit list.

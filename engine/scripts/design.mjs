@@ -7,14 +7,15 @@
 //   (3×3 full-resolution ninths); `--changed` re-renders only changed sheets; `--status` lists stale sheets (G4)
 //   --exemplar                 also render the exemplar cast + ex-* plates for side-by-side comparison
 // Usage: node scripts/design.mjs [--exemplar] [--only set:<id>|look:<key>]
-import {bundle} from '@remotion/bundler';
+import {cachedBundle} from './bundle_cache.mjs';
 import {renderStill, selectComposition, openBrowser} from '@remotion/renderer';
 import crypto from 'node:crypto';
+import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {loadProject} from './load.mjs';
-import {measurePropBox} from './geom.mjs';
+import {measurePropBox, measureHandPropBox} from './geom.mjs';
 
 const args = process.argv.slice(2);
 const PY = process.env.SV_PYTHON || (fs.existsSync('/Users/Shared/Tools/VieNeu-TTS/.venv/bin/python') ? '/Users/Shared/Tools/VieNeu-TTS/.venv/bin/python' : 'python3');
@@ -60,7 +61,7 @@ const walk = (d) => fs.readdirSync(d, {withFileTypes: true}).flatMap((e) => e.is
 // every source kind the renders read (a .css/.svg/.mjs or a public/ image changed the picture but used to say "unchanged")
 const SRC_RE = /\.(tsx?|jsx?|mjs|json|css|svg)$/;
 const readAll = (fs_) => fs_.sort().map((f) => f + fs.readFileSync(f, 'utf8')).join('\n');
-const shared = sha(readAll(walk('src').filter((f) => SRC_RE.test(f) && !/episode[\\/](shotlist|sets)/.test(f) && !/src[\\/]sets[\\/]/.test(f)))
+const shared = sha(readAll(walk('src').filter((f) => SRC_RE.test(f) && !/episode[\\/](shotlist|sets)/.test(f) && !/src[\\/](sets|data)[\\/]/.test(f)))
   + (fs.existsSync('public') ? walk('public').filter((f) => /\.(png|jpe?g|webp|svg)$/.test(f)).sort().map((f) => f + fs.statSync(f).size + ':' + fs.statSync(f).mtimeMs).join('\n') : ''));
 // a set plate is drawn by its render() AND the helpers beside it: hash the whole set source, not String(render)
 const setSrc = sha(readAll([...(fs.existsSync('src/sets') ? walk('src/sets') : []), ...(fs.existsSync('src/episode') ? walk('src/episode') : []).filter((f) => /episode[\\/]sets/.test(f))].filter((f) => SRC_RE.test(f))));
@@ -108,9 +109,39 @@ if (args.includes('--status')) { // no browser: which sheets no longer match the
   console.log(JSON.stringify({stale}));
   process.exit(0);
 }
-if (todo.length) { serveUrl = await bundle({entryPoint: path.resolve('src/index.ts')}); browser = await openBrowser('chrome', {chromiumOptions: {gl: 'angle'}}); }
+{
+  const traitsOf = (l) => [l.glasses, l.hat && l.hat !== 'none', l.mustache, l.beard, l.pattern, l.earrings, l.chain, l.vest, l.lips,
+    (l.belly ?? 0) > 0.05, Math.abs((l.w ?? 1) - 1) > 0.04, Math.abs((l.h ?? 1) - 1) > 0.04, Math.abs((l.head ?? 1) - 1) > 0.03,
+    l.hairC && l.hairC !== 'hair', l.topC2].filter(Boolean).length;
+  const BUILTIN_HAND_PROPS = new Set(['clip', 'phone', 'book', 'money', 'env', 'trash', 'noodle', 'wrench', 'incense', 'seeds', 'paper', 'pen', 'coin', 'card', 'cup', 'bag', 'box', 'key', 'cane']);
+  const castSpec = Object.fromEntries(castKeys.map((k) => {
+    const l = P.CAST[k];
+    return [k, {role: P.CAST_ROLES[k]?.role ?? null, h: l.h ?? 1, w: l.w ?? 1, head: l.head ?? 1, traits: traitsOf(l)}];
+  }));
+  const setsSpec = Object.fromEntries(setIds.map((id) => {
+    const d = P.EPISODE_SETS[id];
+    return [id, {title: d.title ?? null, bed: d.bed ?? null, bounds: d.bounds ?? null, plateCam: d.plateCam ?? [540, 1150, 1]}];
+  }));
+  const worldPropsSpec = {};
+  for (const k of propKeys) {
+    try {
+      const b = measurePropBox(k, P);
+      worldPropsSpec[k] = {w: Math.round(b.width), h: Math.round(b.height), minX: Math.round(b.minX), minY: Math.round(b.minY), maxX: Math.round(b.maxX), maxY: Math.round(b.maxY)};
+    } catch {}
+  }
+  const handPropsSpec = {};
+  for (const k of Object.keys(P.HAND_PROPS ?? {})) {
+    if (BUILTIN_HAND_PROPS.has(k)) continue;
+    try {
+      const b = measureHandPropBox(k, P);
+      handPropsSpec[k] = {w: Math.round(b.width), h: Math.round(b.height), minX: Math.round(b.minX), minY: Math.round(b.minY), maxX: Math.round(b.maxX), maxY: Math.round(b.maxY), gripDist: Math.round(b.gripDist)};
+    } catch {}
+  }
+  fs.writeFileSync('qa/design/visual_spec.json', JSON.stringify({cast: castSpec, sets: setsSpec, world_props: worldPropsSpec, hand_props: handPropsSpec}, null, 2));
+}
+if (todo.length) { serveUrl = await cachedBundle('src/index.ts'); browser = await openBrowser('chrome', {chromiumOptions: {gl: 'angle'}}); }
 let k = 0;
-const N = Math.max(1, +(process.env.SV_QA_WORKERS ?? 4));
+const N = Math.max(1, +(process.env.SV_QA_WORKERS ?? Math.min(6, Math.max(4, Math.floor(os.cpus().length / 2)))));
 const worker = async () => { while (k < todo.length) { const j = todo[k++]; await still(...j); cache[j[2]] = jobKey(j); } };
 // keep the previous sheet of every job: a re-render with the same picture keeps the old file time, so sv_gate
 // G4 ("X is newer than G4.review.md") asks to look again only at sheets that really changed

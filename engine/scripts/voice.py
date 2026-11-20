@@ -603,8 +603,20 @@ def main():
             raw_path = sents_dir / f"{sid}_{j:02d}_raw.wav"
             styled_path = sents_dir / f"{sid}_{j:02d}.wav"
             sp_hash = hashlib.sha1(json.dumps(sp, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:10]
+            prev_s = prev_sents.get(j, {})
+            prev_tries = prev_s.get("tries", []) if isinstance(prev_s, dict) else []
+            prev_passed = bool(prev_tries) and not prev_tries[-1].get("fails")
+            unchanged_cached = (
+                only_map is None
+                and not getattr(args, "force", False)
+                and raw_path.exists()
+                and styled_path.exists()
+                and prev_s.get("sp_hash") == sp_hash
+                and prev_passed
+            )
             regen_this = (
                 not args.reuse
+                and not unchanged_cached
                 and need_seg
                 and (only_sents is None or j in only_sents or not raw_path.exists())
             )

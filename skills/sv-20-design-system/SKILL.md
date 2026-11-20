@@ -33,11 +33,11 @@ belongs in the same series and carry the same density of detail. Agents that ski
 3. **Sets.** For each location: location card → object list (≥ 15, sets.md §9) → blocking sketch with
    touch points in `geo.ts` → six passes, rendering `node scripts/design.mjs --only set:<id>` after each
    pass → compare with the exemplar plate of the same kind → `bounds` → register.
-4. **Lint.** `node scripts/lint.mjs design` must print 0 errors (checks `CH-*`, `SE-01..14`, `PR-01..02`, `TK-*`). It prints the density line per set
+4. **Lint.** `node scripts/lint.mjs design` must print 0 errors (checks `CH-*`, `SE-01..14`, `PR-01..04`, `TK-*`). It prints the density line per set
    (`set kitchen: 118 shapes · 14 colours · 6 texts · halftone 4 · glow 3 · mid 2`). Do not weaken a
    threshold; add detail.
 5. **Render all evidence.** `node scripts/design.mjs` (writes cast pages, expression sheets for every
-   principal and support, `props_episode_p*.png` + `_v.jpg` human-scale prop sheets, and set plates + grids).
+   principal and support, `props_episode_p*.png` + `_v.jpg` human-scale prop sheets, set plates + grids, and auto-generates `qa/design/visual_spec.json` with `cast`, `sets`, `world_props`, and `hand_props` specs).
 6. **Review.** Fill `gates/G4.review.md`: one line per evidence image — including `props_episode_p*_v.jpg` (mandatory check that vehicles/furniture match the `575 px` adult / `435 px` child ruler and zero text is occluded) and every `set_<id>_v.jpg` / `_grid_v.jpg` — with what you actually saw (≥ 4
    words) and the rubric answers (characters.md §8, sets.md §11).
 7. **Show the user** the cast sheet and the set plates (send the PNGs) and get their OK. Put their words
@@ -65,3 +65,5 @@ belongs in the same series and carry the same density of detail. Agents that ski
 | Lint SE-06 shapes too low | you are missing passes 4–5; compare object list with sets.md §9 |
 | Lint SE-14 sign clipped on plate | widen `plateCam` / shift `plateCam` `cx` or move the sign inside the plate frame |
 | Lint PR-01 / PR-02 prop scale or text overlap | scale vehicle/cart to human-scale table (sets.md §3b), move opaque wheel/shape clear of `<text>`, verify in `props_episode_p*_v.jpg` |
+| Lint PR-03 disembodied `*Head` prop | a `*Head` prop exists alongside its full-body `WORLD_PROPS` entry — remove the disembodied head and use full-body multi-pose props instead |
+| Lint PR-04 `HAND_PROPS` grip or size | keep grip origin `(0,0)` within `<= 120 px` of the prop (`gripDist <= 120`) and max dimension `<= 380 px` |

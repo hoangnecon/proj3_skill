@@ -44,6 +44,7 @@ mechanics (anticipation → contact → the world reacting). This skill is how t
 - **First-pass motion pitfalls**:
   - `flip: true` mirrors `pointL` / `pointR` — verify pointing direction points TOWARD the subject, never off-screen.
   - Never reach across the opposite side of `face` (`MO-11`: `(rc.x - x) * dir < -15`, arm slices across own face) or walk in `side` view with `arms: 'raise'` (`MO-11`: arm crosses helmet/face — use `arms: 'swing'` or `arms: 'hold'`).
+  - Never leave a floating sit (`MO-12`): keep `seatH <= 180` everywhere, and avoid `seatH > 40` on `outdoor`/`street`/`rain` sets unless `extras` includes a `bench`, `stool`, `chair`, or `desk` prop.
   - When narration describes a vehicle moving/rolling out, animate the prop's `x` or use a set `keys` motion — never leave a vehicle stationary on a motion beat.
 - Never close G5 on strips you did not open. The gate checks that every strip in
   `qa/strips_needed.json` exists, matches the current shot (content hash), and is named in the review with a remark.
@@ -65,7 +66,7 @@ mechanics (anticipation → contact → the world reacting). This skill is how t
 | Hand touches air in front of the wall | actor `y` far from the fixture's `fy` (MO-09 depth): walk to the wall line |
 | Button at knee height, arm points down | the fixture is not at human scale: fix the set (sets.md §3b), not the actor |
 | Arm swings up mid-step | reach while walking (MO-06): arrive earlier |
-| Sitting in mid-air | seat x/y does not match the hip (x − 10, seatH); place the stool under it |
+| Sitting in mid-air (`MO-12`) | seat x/y does not match the hip (x − 10, seatH); keep `seatH <= 180` and on `outdoor`/`street`/`rain` sets with `seatH > 40`, place a `bench`/`stool`/`chair`/`desk` prop in `extras` |
 | Character squashes thin (`sx = 0.12`) mid-path | `path` `dx` reversed while `face` is locked (`MO-10`): make `dx` monotonic or `0` |
 | Character pops between views | key `view` with ≥ 0.25 s before the move starts |
 | Expression changes off-beat | anchor `e` keys to the word, not to seconds |

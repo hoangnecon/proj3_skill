@@ -6,7 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {loadProject} from './load.mjs';
-import {actorBoxes, inter, area, CAPTION, W, H, measurePropBox, setTextsAt, projectBox, shotGeometry, actorStateAt, scalarKeyAt} from './geom.mjs';
+import {actorBoxes, inter, area, CAPTION, W, H, measurePropBox, measureHandPropBox, overlayBoxesAt, setTextsAt, projectBox, shotGeometry, actorStateAt, scalarKeyAt} from './geom.mjs';
 
 const phase = process.argv[2] ?? 'all';
 const P = await loadProject();
@@ -126,14 +126,19 @@ if (phase !== 'shots') {
       }
     }
   }
-  // PR-01 & PR-02: human-scale guard & internal text collision on custom episode WORLD_PROPS
+  // PR-01, PR-02 & PR-03: human-scale guard, internal text collision & disembodied head check on custom episode WORLD_PROPS
   {
     const BUILTIN_PROPS = new Set(['stool', 'cone', 'lamp', 'gladiolus', 'cat', 'chicken', 'xoi', 'lobster', 'wagyu', 'tofu']);
     const BIG_VEH = /bus|truck|van|train|ambulance|fire.?truck/i;
     const SMALL_VEH = /kart|cart|car|taxi|moto|bike/i;
     const GROUND_PROP = /bus|truck|van|train|ambulance|fire.?truck|kart|cart|car|taxi|moto|bike|table|desk|bench|crib|chair|stool|fence|stand|rack|float|podium|counter|shelf|crate|box|barrel|pot|plant/i;
-    for (const k of Object.keys(P.WORLD_PROPS ?? {})) {
+    const worldPropKeys = Object.keys(P.WORLD_PROPS ?? {});
+    const worldPropSet = new Set(worldPropKeys);
+    for (const k of worldPropKeys) {
       if (BUILTIN_PROPS.has(k)) continue;
+      if (k.endsWith('Head') && k.length > 4 && worldPropSet.has(k.slice(0, -4)) && !propWaived('PR-03', k)) {
+        err('PR-03', `${k}: disembodied head prop matching '${k.slice(0, -4)}'; use full-body multi-pose props instead`);
+      }
       let b;
       try { b = measurePropBox(k, P); } catch (e) { err('PR-01', `${k}: WORLD_PROP render threw ${e.message}`); continue; }
       if (!propWaived('PR-01', k)) {
@@ -167,6 +172,16 @@ if (phase !== 'shots') {
             }
           }
         }
+      }
+    }
+    // PR-04: hand grip origin (0,0) distance & size check on custom HAND_PROPS
+    const BUILTIN_HAND_PROPS = new Set(['clip', 'phone', 'book', 'money', 'env', 'trash', 'noodle', 'wrench', 'incense', 'seeds', 'paper', 'pen', 'coin', 'card', 'cup', 'bag', 'box', 'key', 'cane']);
+    for (const k of Object.keys(P.HAND_PROPS ?? {})) {
+      if (BUILTIN_HAND_PROPS.has(k)) continue;
+      let hb;
+      try { hb = measureHandPropBox(k, P); } catch (e) { err('PR-04', `${k}: HAND_PROP render threw ${e.message}`); continue; }
+      if (!propWaived('PR-04', k) && (hb.gripDist > 120 || Math.max(hb.width, hb.height) > 380)) {
+        err('PR-04', `${k}: hand grip origin (0,0) too far from prop or oversized (gripDist=${Math.round(hb.gripDist)} px, size=${Math.round(hb.width)}x${Math.round(hb.height)} px; max gripDist 120, max dim 380)`);
       }
     }
   }
@@ -394,6 +409,23 @@ if (phase !== 'design') {
         for (const t of tt) strips.push({name: `s${String(i).padStart(2, '0')}_${a.id}_legs`, t0: +Math.max(r.t0, t - 0.5).toFixed(2), t1: +Math.min(r.t1, t + 0.9).toFixed(2), n: 8, why: 'sit/stand'});
       }
       if (A.ride) strips.push({name: `s${String(i).padStart(2, '0')}_${a.id}_ride`, t0: r.t0, t1: +Math.min(r.t1, r.t0 + 2.5).toFixed(2), n: 8, why: 'piggyback'});
+      if (A.seatH !== undefined && !waived('MO-12', r.name)) {
+        const bed = P.SETS[r.set]?.bed;
+        const hasSeatProp = (s.extras ?? []).some((e) => /bench|stool|chair|desk/i.test(e.k));
+        if (A.seatH > 180) {
+          warn('MO-12', `${tag}: ${a.id} has seatH=${A.seatH} (> 180) — floating sit`);
+        } else if (A.seatH > 40 && (bed === 'outdoor' || bed === 'street' || bed === 'rain') && !hasSeatProp) {
+          warn('MO-12', `${tag}: ${a.id} has seatH=${A.seatH} (> 40) on ${bed} set '${r.set}' without a bench/stool/chair/desk in extras — floating sit`);
+        }
+      }
+    }
+    if (i > 0 && i < rows.length - 1
+      && r.cam[2] <= 1.15 && (r.cam2 ? r.cam2[2] <= 1.15 : true)
+      && r.actors.length === 0
+      && rows[i - 1].set === r.set && rows[i + 1].set === r.set && r.tr === 'cut'
+      && rows[i - 1].actors.length > 0 && rows[i + 1].actors.length > 0
+      && !waived('GE-18', r.name)) {
+      warn('GE-18', `${tag}: cast continuity drop in wide shot (0 actors between #${i - 1} and #${i + 1} in '${r.set}')`);
     }
   });
   // coverage: every look in CAST is used, every episode set is used
@@ -463,6 +495,43 @@ if (phase !== 'design') {
       for (const pr of g.props) {
         if (pr.edgeClipped) {
           flag(r, 'GE-15', `prop '${pr.k}' clipped ${Math.round(pr.clippedFrac * 100)}% off frame edge at ${t.toFixed(2)} s — ${pr.dxHint}`, `prop:${pr.k}`);
+        }
+        if (pr.onScreen) {
+          for (const x of B) {
+            const {x: hx, y: hy, r: hr} = x.hc;
+            const onScreen = hx + hr > 0 && hx - hr < W && hy + hr > 0 && hy - hr < H;
+            if (!onScreen || pr.y < x.worldY - 5) continue;
+            const frac = inter(pr.screenBox, x.head) / Math.max(1, area(x.head));
+            if (frac > 0.35) {
+              flag(r, 'GE-17', `prop '${pr.k}' (y=${Math.round(pr.y)}) covers ${Math.round(frac * 100)}% of ${x.id}'s head (y=${Math.round(x.worldY)}) at ${t.toFixed(2)} s`, `${pr.k}:${x.id}`);
+            }
+          }
+        }
+      }
+      const GE16_KINDS = new Set(['bubble', 'label', 'stamp', 'tag']);
+      for (const ov of overlayBoxesAt(r, t, P)) {
+        if (!GE16_KINDS.has(ov.k)) continue;
+        for (const x of B) {
+          const {x: hx, y: hy, r: hr} = x.hc;
+          const onScreen = hx + hr > 0 && hx - hr < W && hy + hr > 0 && hy - hr < H;
+          if (!onScreen) continue;
+          const frac = inter(ov.box, x.head) / Math.max(1, area(x.head));
+          if (frac > 0.55) {
+            if (!waived('GE-16', r.name) && !seen.has(`${r.i}|GE-16-ERR|${ov.k}:${x.id}`)) {
+              seen.add(`${r.i}|GE-16-ERR|${ov.k}:${x.id}`);
+              err('GE-16', `#${r.i} '${r.name}': ${ov.k} '${ov.text}' covers ${Math.round(frac * 100)}% of ${x.id}'s head at ${t.toFixed(2)} s (> 55%)`);
+              (hot[r.i] ??= []).push('GE-16');
+            }
+          } else if (frac > 0.20) {
+            flag(r, 'GE-16', `${ov.k} '${ov.text}' covers ${Math.round(frac * 100)}% of ${x.id}'s head at ${t.toFixed(2)} s`, `${ov.k}:${x.id}`);
+          }
+        }
+        for (const sg of g.signs) {
+          if (!sg.screenBox) continue;
+          const sfrac = inter(ov.box, sg.screenBox) / Math.max(1, area(sg.screenBox));
+          if (sfrac > 0.15) {
+            flag(r, 'GE-16', `${ov.k} '${ov.text}' covers ${Math.round(sfrac * 100)}% of sign '${sg.text}' at ${t.toFixed(2)} s`, `${ov.k}:sign:${sg.text}`);
+          }
         }
       }
       if (u === 0.5) {

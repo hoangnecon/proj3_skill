@@ -242,10 +242,18 @@ def shot_reviews(st):
     """Per-shot review files qa/review/NN.json (sv-22 "review cards"). Each must match the shot's CURRENT hash,
     come from a reviewer who is not the builder, answer every check, and — for a HOT shot (geometry lint,
     reach, key event) — say it opened the measurement crops, which must be current."""
-    bad, miss, old, notok, thin, nocrop, nomodel = [], [], [], [], [], [], []
+    bad, miss, old, notok, thin, nocrop, nomodel, noblind = [], [], [], [], [], [], [], []
     hashes = {int(k): v for k, v in st.get("hashes", {}).items()}
     crops_ok = {int(k): v for k, v in st.get("crops_ok", {}).items()}
     hot = {int(k): v for k, v in (jload("qa/hot.json") or {}).items()}
+    manifest = jload("qa/blind_review/manifest.json")
+    manifest_shots = {}
+    if isinstance(manifest, dict):
+        raw_shots = manifest.get("shots")
+        if isinstance(raw_shots, list):
+            manifest_shots = {int(s["shot"]): s for s in raw_shots if isinstance(s, dict) and "shot" in s}
+        elif isinstance(raw_shots, dict):
+            manifest_shots = {int(k): v for k, v in raw_shots.items() if isinstance(v, dict)}
     for i, h in sorted(hashes.items()):
         r = jload(f"qa/review/{i:02d}.json")
         if not r:
@@ -261,6 +269,10 @@ def shot_reviews(st):
         elif r.get("hash") != h:
             old.append(i)
             continue
+        if manifest and not carried:
+            expected_blind = manifest_shots.get(i, {}).get("blind_sha")
+            if not expected_blind or r.get("blind_sha") != expected_blind:
+                noblind.append(i)
         if not r.get("reviewer") or r.get("reviewer") == r.get("builder", "builder"):
             bad.append(f"qa/review/{i:02d}.json: reviewer must be named and must not be the builder")
         checks = r.get("checks") or {}
@@ -288,6 +300,8 @@ def shot_reviews(st):
         bad.append(f"review note too thin for shots {fmt(thin)} (say what you saw, >= 6 words)")
     if nocrop:
         bad.append(f"HOT shots {fmt(nocrop)} need current crops opened — node scripts/qa.mjs crops <i>, add \"crops\" to looked")
+    if noblind:
+        bad.append(f"shots {fmt(noblind)} missing or mismatched blind_sha from qa/blind_review/manifest.json — re-review using qa/blind_review/slice_*.json")
     return bad
 
 

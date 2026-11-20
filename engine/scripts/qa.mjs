@@ -14,10 +14,11 @@
 // Speed: ONE shared browser, a pool of parallel workers (SV_QA_WORKERS, default 4), QA frames at half size.
 // Only one render at a time per episode (qa/.render.lock).
 // Run `node scripts/lint.mjs` first (it writes qa/strips_needed.json; qa/shots.json is refreshed here).
-import {bundle} from '@remotion/bundler';
+import {cachedBundle} from './bundle_cache.mjs';
 import {renderStill, selectComposition, openBrowser} from '@remotion/renderer';
 import {execFileSync} from 'node:child_process';
 import crypto from 'node:crypto';
+import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
 import {loadProject, writeTables} from './load.mjs';
@@ -40,7 +41,7 @@ for (let i = 0; i < rawArgs.length; i++) {
   else if (!a.startsWith('--')) { posArgs.push(a); }
 }
 const [mode = 'contact', arg, arg2] = posArgs;
-const WORKERS = Math.max(1, +(process.env.SV_QA_WORKERS ?? 4));
+const WORKERS = Math.max(1, +(process.env.SV_QA_WORKERS ?? Math.min(6, Math.max(4, Math.floor(os.cpus().length / 2)))));
 const SCALE = +(process.env.SV_QA_SCALE ?? 0.5);
 const PYTHON = process.env.SV_PYTHON || (fs.existsSync('/Users/Shared/Tools/VieNeu-TTS/.venv/bin/python') ? '/Users/Shared/Tools/VieNeu-TTS/.venv/bin/python' : 'python3');
 
@@ -145,6 +146,19 @@ if (mode === 'review') {
   const st = computeStatus();
   fs.writeFileSync('qa/qa_status.json', JSON.stringify(st, null, 1));
   const hot = readJson('qa/hot.json', {});
+  const blindManifest = readJson('qa/blind_review/manifest.json', null);
+  const blindByShot = new Map();
+  if (blindManifest?.shots) {
+    if (Array.isArray(blindManifest.shots)) {
+      for (const s of blindManifest.shots) {
+        if (s && Number.isInteger(s.shot)) blindByShot.set(s.shot, s);
+      }
+    } else if (typeof blindManifest.shots === 'object') {
+      for (const [k, s] of Object.entries(blindManifest.shots)) {
+        if (s && typeof s === 'object') blindByShot.set(Number(k), s);
+      }
+    }
+  }
   const CHECK_KEYS = ['acting', 'contact', 'overlap', 'set', 'text', 'caption', 'beat', 'model'];
   const CHECK_RE = /^(ok|fix)\s*(?:—|–|-)\s*\S+/u;
   const errs = [];
@@ -167,6 +181,16 @@ if (mode === 'review') {
     const expectedHash = st.hashes[i];
     if (typeof item.hash !== 'string' || item.hash !== expectedHash) {
       errs.push(`${tag}: hash ${JSON.stringify(item.hash)} != current qa_status.json hash '${expectedHash}'`);
+    }
+    if (blindManifest) {
+      const mShot = blindByShot.get(i);
+      if (item.blind_sha !== undefined && item.blind_sha !== null) {
+        if (!mShot || typeof item.blind_sha !== 'string' || item.blind_sha !== mShot.blind_sha) {
+          errs.push(`${tag}: blind_sha ${JSON.stringify(item.blind_sha)} != manifest blind_sha ${JSON.stringify(mShot?.blind_sha ?? null)}`);
+        }
+      } else if (mShot) {
+        errs.push(`${tag}: missing blind_sha from qa/blind_review/slice_*.json — reviewer must use blind review pack`);
+      }
     }
     const rev = typeof item.reviewer === 'string' ? item.reviewer.trim() : '';
     const bld = typeof item.builder === 'string' ? item.builder.trim() : 'builder';
@@ -203,8 +227,8 @@ if (mode === 'review') {
       errs.push(`${tag}: note must have >= 6 words (got ${words.length})`);
     }
     const looked = Array.isArray(item.looked) ? item.looked : null;
-    if (!looked || !looked.includes('card')) {
-      errs.push(`${tag}: looked must be an array including 'card'`);
+    if (!looked || (!looked.includes('card') && !looked.includes('contact') && !looked.includes('contact_page'))) {
+      errs.push(`${tag}: looked must be an array including 'contact' or 'card'`);
     }
     if (Array.isArray(hot[i]) && hot[i].length > 0) {
       if (!looked || !looked.includes('crops')) {
@@ -227,7 +251,8 @@ if (mode === 'review') {
   for (const {item} of entries) {
     const outPath = `qa/review/${pad(item.shot)}.json`;
     const tmpPath = `${outPath}.tmp.${process.pid}`;
-    fs.writeFileSync(tmpPath, JSON.stringify(item, null, 2) + '\n');
+    const outItem = blindManifest && blindByShot.has(item.shot) ? {...item, blind_verified: true} : item;
+    fs.writeFileSync(tmpPath, JSON.stringify(outItem, null, 2) + '\n');
     fs.renameSync(tmpPath, outPath);
     if (item.verdict === 'ok') okN++;
     else fixShots.push(item.shot);
@@ -348,7 +373,7 @@ process.on('SIGINT', () => process.exit(130));
 
 // ---- one browser, N workers
 const t00 = Date.now();
-const serveUrl = await bundle({entryPoint: path.resolve('src/index.ts')});
+const serveUrl = await cachedBundle('src/index.ts');
 const browser = await openBrowser('chrome', {chromiumOptions: {gl: 'angle'}});
 const comp = await selectComposition({serveUrl, id: 'Film', puppeteerInstance: browser, chromiumOptions: {gl: 'angle'}, timeoutInMilliseconds: 120000});
 const clampF = (t) => Math.max(0, Math.min(comp.durationInFrames - 1, Math.round(t * 30)));
@@ -512,4 +537,6 @@ if (mode === 'pass') {
   const revShots = (carry.review ?? []).map((x) => x.shot);
   console.log(`pass review list (${revShots.length}): ${JSON.stringify(revShots)}`);
   for (const x of carry.review ?? []) console.log(`  #${x.shot}: ${x.why}`);
+  fs.writeFileSync('qa/qa_status.json', JSON.stringify(computeStatus(), null, 1));
+  execFileSync(process.execPath, ['scripts/blind_pack.mjs'], {stdio: 'inherit'});
 }
