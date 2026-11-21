@@ -1,5 +1,27 @@
 # Changelog
 
+## `v3.9.0` — 2026-11-21 · Stage-1 visual_spec, PR-03/04, GE-16..18, MO-12, hash/cache & anti-bypass blind review (docs/rsi-loop-v3.9-2026-11-21.md)
+- **Stage-1 Front-Loaded Visual Manifest & Design CI (`engine/scripts/design.mjs`, `engine/scripts/geom.mjs`, `engine/scripts/lint.mjs`):**
+  - Auto-writes `qa/design/visual_spec.json` measuring cast, sets (`bounds`, `plateCam`), `WORLD_PROPS`, and `HAND_PROPS` (`gripDist`).
+  - `PR-03` (ERROR): bans disembodied `*Head` creature props when a full-body prop with the same prefix exists.
+  - `PR-04` (ERROR): verifies `HAND_PROPS` grip origin `(0, 0)` within `120 px` of prop bbox and max dim `<= 380 px`.
+  - Fixed `design.mjs` `shared` hash to exclude `src/data/` so parallel `voice.py` runs never falsely invalidate G4 sheets.
+- **Pre-Render Spatial, Occlusion & Continuity CI (`engine/scripts/geom.mjs`, `engine/scripts/lint.mjs`):**
+  - `GE-16`: active overlay (`bubble`/`label`/`stamp`/`tag`) overlapping an on-screen actor's head (`> 20%` WARN+HOT, `> 55%` ERROR) OR overlapping a set sign (`> 15%` WARN+HOT).
+  - `GE-17`: foreground `WORLD_PROP` covering `> 35%` of an on-screen actor's head (WARN+HOT).
+  - `GE-18`: consecutive wide-shot cast continuity drop in the same set (WARN).
+  - `MO-12`: floating `seatH > 40` on outdoor/street/rain sets without furniture prop or `seatH > 180` (WARN).
+  - `validate_skills.py`: **`10 skills, 114 lint rules implemented, 0 errors, 0 warnings`**.
+- **Hash & Cache Layer (`engine/scripts/bundle_cache.mjs`, `deliver.mjs`, `qa.mjs`, `voice.py`):**
+  - `bundle_cache.mjs`: content-addressed Webpack bundle cache (`qa/.bundle_cache/<srcHash>/`, `< 0.1 s` cache hit, prunes to latest 2).
+  - `deliver.mjs`: per-shot content-addressed chunk cache (`out/_chunks/<chunkKey>.mp4` + `ffmpeg concat -c:v copy`) and `concurrency = max(4, min(10, cpus - 2))` with `CRF 18, 1080×1920 @ 30fps, 48kHz AAC 256k` unchanged.
+  - `voice.py`: auto-skips unchanged passing sentences by `sp_hash` on re-runs.
+- **Anti-Bypass Blind Review & Lean Swarm (`engine/scripts/blind_pack.mjs`, `qa.mjs`, `sv_gate.py`, `skills/sv-00-pipeline`):**
+  - `blind_pack.mjs` builds `qa/blind_review/{manifest.json, slice_1..3.json, RUBRIC.md}` grouped by contact page + HOT crops (`-70%` vision tokens, zero `shotlist.ts` code) with cryptographic `blind_sha` enforced by `qa.mjs review --batch` and `sv_gate.py check G5`.
+- **Verified Live End-to-End Benchmarks (`Hydrogen Medium`, 0 bypass, full quality):**
+  - First-pass blind-review OK rate jumped **`68.7%` (`v3.8.0`) → `90.0%` (Loop 1) → `96.7%` (`58/60`, Loop 2)**.
+  - Full cold `G1 → out/final.mp4` wall time dropped **`86m 36s` (+`52m` V2) → `45m 24s`** (`bench-v39-loop2`, `141.43 s`, `60` shots, `0` lint err/warn, `4/4` video-audio ok).
+
 ## `v3.8.0` — 2026-11-20 · human-scale PropSheet, geometry/motion lint & single-bundle QA (docs/rsi-loop-2026-11-20.md)
 - **RSI Evaluation & Forensic Benchmarks (`tools/rsi_eval.py`, `tools/trace_agy.py`):**
   - Generalized `trace_agy.py` (`--main`, `--prefix`, `--ids`, `--gates-log`) across the 23-worker `hh-*` + `hh2-*` run (`606.1m` wall / `328.3m` active, `128.13M` tokens, `894` media reads, `219` review writes).
