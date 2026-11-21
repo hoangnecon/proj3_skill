@@ -53,7 +53,7 @@ if (process.env.SV_SKIP_RENDER && fresh) {
     }
   }
   const srcGlobalHash = gh.digest('hex').slice(0, 14);
-  const globalKey = `crf18|1080x1920|30fps|${srcGlobalHash}`;
+  const globalKey = `crf21|1080x1920|30fps|${srcGlobalHash}`;
   const FPS = 30;
   const totalFrames = Math.max(1, Math.round(P.DURATION * FPS));
   const frameRanges = rows.map((r, idx) => {
@@ -94,7 +94,7 @@ if (process.env.SV_SKIP_RENDER && fresh) {
           serveUrl,
           composition: comp,
           codec: 'h264',
-          crf: 18,
+          crf: 21,
           muted: true,
           frameRange: frameRanges[i],
           outputLocation: tmp,
@@ -113,7 +113,7 @@ if (process.env.SV_SKIP_RENDER && fresh) {
     const serveUrl = await cachedBundle('src/index.ts');
     const comp = await selectComposition({serveUrl, id: 'Film', chromiumOptions: {gl: 'angle'}});
     let last = 0;
-    await renderMedia({serveUrl, composition: comp, codec: 'h264', crf: 18, outputLocation: raw, chromiumOptions: {gl: 'angle'}, concurrency,
+    await renderMedia({serveUrl, composition: comp, codec: 'h264', crf: 21, outputLocation: raw, chromiumOptions: {gl: 'angle'}, concurrency,
       onProgress: ({progress}) => { if (progress - last > 0.1) { last = progress; process.stdout.write(`\rrender ${(progress * 100).toFixed(0)}%`); } }});
     console.log('\nok', raw);
   }
