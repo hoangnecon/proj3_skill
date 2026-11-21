@@ -23,4 +23,5 @@ export type SetDef = {
   bounds?: [number, number, number, number]; // world rect the back layer fully paints [x0, y0, x1, y1] — REQUIRED for episode sets; lint keeps every camera inside it
   plateCam?: [number, number, number]; // camera for the design plate (default [540, 1150, 1])
   plateOpts?: Record<string, unknown>; // options for the design plate (e.g. door open, lights on)
+  angle?: 'wide' | 'low' | 'high' | 'ots' | 'reverse' | 'closeup' | 'pov'; // optional camera angle grammar for set framing
 };

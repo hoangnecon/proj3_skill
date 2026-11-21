@@ -159,7 +159,8 @@ if (mode === 'review') {
       }
     }
   }
-  const CHECK_KEYS = ['acting', 'contact', 'overlap', 'set', 'text', 'caption', 'beat', 'model'];
+  const BASE_CHECK_KEYS = ['acting', 'contact', 'overlap', 'set', 'text', 'caption', 'beat', 'model'];
+  const CHECK_KEYS = geom.FORMAT === '16:9' ? [...BASE_CHECK_KEYS, 'framing', 'variety'] : BASE_CHECK_KEYS;
   const CHECK_RE = /^(ok|fix)\s*(?:—|–|-)\s*\S+/u;
   const errs = [];
   const seenShots = new Set();
@@ -342,8 +343,8 @@ if (mode === 'where') {
         ...(g.overlays ?? []),
       ];
       const candidates = [];
-      for (let y = 40; y + freeReq.h <= 1880; y += 60) {
-        for (let x = 40; x + freeReq.w <= 1040; x += 60) {
+      for (let y = 40; y + freeReq.h <= geom.H - 40; y += 60) {
+        for (let x = 40; x + freeReq.w <= geom.W - 40; x += 60) {
           const cand = {x0: x, y0: y, x1: x + freeReq.w, y1: y + freeReq.h};
           if (blocked.every((b) => inter(cand, b) === 0)) candidates.push(cand);
         }
@@ -398,6 +399,7 @@ const tile = (spec) => {
 const fmt = (t) => t.toFixed(2) + 's';
 
 // ---- shared render pipelines
+const is16x9 = geom.FORMAT === '16:9';
 const runContact = async (forceAll) => {
   const changed = rows.filter((r) => cache.contact?.[r.i] !== hashes[r.i]).map((r) => r.i);
   const jobs = rows.flatMap((r) => [0.25, 0.75].map((u) => ({r, u, t: r.t0 + (r.t1 - r.t0) * u, out: `qa/_f/c${r.i}_${u}.jpg`})));
@@ -405,8 +407,10 @@ const runContact = async (forceAll) => {
   const unreviewed = new Set(rows.filter((r) => { try { const v = JSON.parse(fs.readFileSync(`qa/review/${pad(r.i)}.json`, 'utf8')); return v.verdict !== 'ok' || v.hash !== hashes[r.i]; } catch { return true; } }).map((r) => r.i));
   const cells = jobs.map(({r, u, t, out}) => ({img: out, label: `#${r.i} ${u === 0.25 ? 'a' : 'b'} · ${fmt(t)}${unreviewed.has(r.i) ? ' ●' : ''}`, sub: u === 0.25 ? r.name : `${r.set} · ${fmt(r.t1 - r.t0)}`}));
   const per = 24;
+  const contactCols = is16x9 ? 4 : 6;
+  const contactW = is16x9 ? 380 : 300;
   for (const f of fs.readdirSync('qa')) { const m = /^contact_p(\d+)\.(png|jpg)$/.exec(f); if (m && (m[2] === 'png' || +m[1] > Math.ceil(cells.length / per))) fs.unlinkSync(path.join('qa', f)); }
-  for (let p = 0; p * per < cells.length; p++) tile({out: `qa/contact_p${p + 1}.jpg`, cols: 6, w: 300, title: `CONTACT · trang ${p + 1} · ${rows.length} shot · ${fmt(P.DURATION)} · ● = chưa review ở bản này`, cells: cells.slice(p * per, (p + 1) * per)});
+  for (let p = 0; p * per < cells.length; p++) tile({out: `qa/contact_p${p + 1}.jpg`, cols: contactCols, w: contactW, title: `CONTACT · trang ${p + 1} · ${rows.length} shot · ${fmt(P.DURATION)} · ● = chưa review ở bản này`, cells: cells.slice(p * per, (p + 1) * per)});
   cache.contact = {...hashes};
   fs.writeFileSync('qa/changed.json', JSON.stringify({at: new Date().toISOString(), shots: changed, all: rows.length}, null, 1));
   console.log(`contact: ${Math.ceil(cells.length / per)} page(s) · ${st.rendered} rendered, ${st.reused} reused · changed shots: ${changed.join(',') || 'none'} · ${((Date.now() - t00) / 1000).toFixed(0)} s`);
@@ -422,8 +426,9 @@ const runStrips = async (onlyNames, forceAll, staleOnly = false) => {
   const st = await renderAll(jobs, (j) => !forceAll && isFresh(j.s));
   for (const s of sel) {
     const cells = jobs.filter((j) => j.s === s).map((j) => ({img: j.out, label: fmt(j.t), sub: j.i === 0 ? s.why : ''}));
-    const cols = s.n <= 4 ? s.n : Math.ceil(s.n / 2);
-    tile({out: `qa/strips/${s.name}.jpg`, cols, w: 270, title: `${s.name} · ${s.why} · ${fmt(s.t0)}–${fmt(s.t1)}`, cells});
+    const cols = is16x9 ? Math.min(4, Math.max(1, s.n)) : (s.n <= 4 ? s.n : Math.ceil(s.n / 2));
+    const stripW = is16x9 ? 380 : 270;
+    tile({out: `qa/strips/${s.name}.jpg`, cols, w: stripW, title: `${s.name} · ${s.why} · ${fmt(s.t0)}–${fmt(s.t1)}`, cells});
     try { fs.unlinkSync(`qa/strips/${s.name}.png`); } catch {}
     cache.strips[s.name] = stripKey(s);
   }
@@ -483,7 +488,7 @@ const runCrops = async (shotIdx) => {
     return {frame: j.out, label: `${fmt(j.t)}${x.reaches.some((c) => Math.abs(c - j.t) < 0.02) ? ' · reach' : ''}`, boxes};
   });
   const sp = 'qa/_f/crops.json';
-  fs.writeFileSync(sp, JSON.stringify({out: `qa/crops/${pad(x.i)}.jpg`, title: `#${x.i} ${x.name} · crops · hash ${hashes[x.i]}`, rows: rowsOut}));
+  fs.writeFileSync(sp, JSON.stringify({out: `qa/crops/${pad(x.i)}.jpg`, title: `#${x.i} ${x.name} · crops · hash ${hashes[x.i]}`, frame_size: [geom.W, geom.H], rows: rowsOut}));
   execFileSync(PYTHON, [path.resolve('scripts/crops.py'), sp], {stdio: 'inherit'});
   cache.crops ??= {};
   cache.crops[x.i] = hashes[x.i];

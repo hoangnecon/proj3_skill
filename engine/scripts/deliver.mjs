@@ -41,7 +41,7 @@ if (process.env.SV_SKIP_RENDER && fresh) {
   const hashes = rows.map((r) => DEPS.hashOf(r));
   const globalFiles = [
     'src/Film.tsx', 'src/Root.tsx', 'src/format.ts', 'src/kit.tsx', 'src/chars.tsx',
-    'src/side.tsx', 'src/overlays.tsx', 'src/data/words.json',
+    'src/side.tsx', 'src/back.tsx', 'src/threeq.tsx', 'src/overlays.tsx', 'src/data/words.json',
     'src/data/cues.json', 'src/episode/cast.ts', 'src/props.tsx',
   ];
   const gh = crypto.createHash('sha1');
@@ -158,6 +158,6 @@ for (let i = 0; i < 12; i++) {
   execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-ss', t.toFixed(2), '-i', final, '-frames:v', '1', '-q:v', '3', f]);
   cells.push({img: f, label: t.toFixed(1) + 's', sub: ''});
 }
-fs.writeFileSync('qa/_f/tile.json', JSON.stringify({out: 'qa/final_check.jpg', cols: 6, w: 300, fmt: 'jpg', title: `FINAL · ${report.duration}s · ${report.width}x${report.height} · ${report.fps} fps`, cells}));
+fs.writeFileSync('qa/_f/tile.json', JSON.stringify({out: 'qa/final_check.jpg', cols: report.width > report.height ? 4 : 6, w: report.width > report.height ? 380 : 300, fmt: 'jpg', title: `FINAL · ${report.duration}s · ${report.width}x${report.height} · ${report.fps} fps`, cells}));
 execFileSync(PY, ['scripts/tile.py', 'qa/_f/tile.json'], {stdio: 'inherit'});
 console.log(JSON.stringify(report));

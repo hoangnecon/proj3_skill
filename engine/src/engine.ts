@@ -57,8 +57,9 @@ export type Actor = {
   z?: number; // depth-sort nudge
   // ---- detailed motion (see sv-21-motion) ----
   path?: [number, number, TT][]; // waypoints (x, y, arrival time). Walks with planted feet, trapezoid speed.
-  view?: Keys<'front' | 'side'>; // default: side when path/ride is set, else front
-  face?: Keys<1 | -1>; // side view facing (default: travel direction)
+  view?: Keys<'front' | 'side' | 'back' | '3q'>; // default: side when path/ride is set, else front
+  face?: Keys<1 | -1>; // side/3q view facing (default: travel direction or flip)
+  fg?: boolean; // render in foreground OTS plane (d = 1.2) after mid layers
   slope?: number; // ground slope dy/dx for stairs/ramps (negative = going up to the right)
   legs?: Keys<'walk' | 'sit' | 'carried'>; // side view leg mode; walk->sit animates sitting down
   seatH?: number; // hip height when sitting (rig units, standing hip = 200*h)
@@ -105,6 +106,8 @@ export type ShotDef = {
   extras?: {k: string; x: number; y: number; s?: number; c?: string}[]; // WORLD_PROPS placed on the floor
   punch?: number; // zoom kick at shot start (gags), 0.04–0.08
   shake?: number; // camera shake px (impacts only)
+  tilt?: number; // subtle Dutch/cinematic camera roll in degrees (e.g. -4..+4)
+  angle?: 'wide' | 'low' | 'high' | 'ots' | 'reverse' | 'closeup' | 'pov'; // optional cinematic shot grammar metadata
   night?: number; // 0..1 night grade
   tr?: 'cut' | 'flash' | 'wipe';
   bg?: string; // background token for the 'solid' set

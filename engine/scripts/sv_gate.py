@@ -77,7 +77,11 @@ def evidence(g):
     if g == "G1":
         return []
     if g == "G2":
-        return ["qa/script_lint.json"]
+        ev = ["qa/script_lint.json"]
+        _sc = jload("script.json") or {}
+        if _sc.get("length") == "long_16x9":
+            ev.append("qa/story_doctor.json")
+        return ev
     if g == "G3":
         return ["qa/voice_report.json"]
     if g == "G4":
@@ -109,6 +113,29 @@ def checks(g):
         code, out = run([sys.executable, "scripts/script_lint.py"])
         if code:
             bad.append("script lint failed:\n" + "\n".join(l for l in out.splitlines() if l.startswith("ERROR")))
+        _sc = jload("script.json") or {}
+        if _sc.get("length") == "long_16x9":
+            r = jload("qa/story_doctor.json")
+            if not isinstance(r, dict):
+                bad.append("qa/story_doctor.json missing — run independent Adversarial Story Doctor audit before passing G2 (sv-02-long-form)")
+            else:
+                if r.get("script_sha") != sha("script.json"):
+                    bad.append("qa/story_doctor.json script_sha does not match current script.json — re-run Adversarial Story Doctor audit")
+                if r.get("verdict") != "pass":
+                    bad.append(f"qa/story_doctor.json verdict is {r.get('verdict')!r} (must be 'pass')")
+                try:
+                    score = float(r.get("score", 0))
+                except (TypeError, ValueError):
+                    score = 0.0
+                if score < 80:
+                    bad.append(f"qa/story_doctor.json score {score:g} < 80 (100-point script rubric)")
+                reviewer = str(r.get("reviewer") or "").strip()
+                if not reviewer or reviewer.lower() in ("author", "builder"):
+                    bad.append("qa/story_doctor.json reviewer must be present and must not be 'author' or 'builder'")
+                meandering = r.get("meandering_stretches", [])
+                if not isinstance(meandering, list) or len(meandering) != 0:
+                    n_m = len(meandering) if isinstance(meandering, list) else "invalid"
+                    bad.append(f"qa/story_doctor.json has {n_m} unresolved meandering_stretches — tighten circular/filler stretches and re-audit")
     elif g == "G3":
         r = jload("qa/voice_report.json")
         if not r:
@@ -243,6 +270,7 @@ CARRY = _load_carry()
 # "model" (v3.7): every character comes from the cast rig and matches its cast sheet — v3.6 dropped the
 # "same look as the design sheets?" question and a hand-drawn Bình passed 66 reviews
 REVIEW_CHECKS = ["acting", "contact", "overlap", "set", "text", "caption", "beat", "model"]
+REVIEW_CHECKS_16X9 = REVIEW_CHECKS + ["framing", "variety"]
 
 
 def shot_reviews(st):
@@ -250,6 +278,9 @@ def shot_reviews(st):
     come from a reviewer who is not the builder, answer every check, and — for a HOT shot (geometry lint,
     reach, key event) — say it opened the measurement crops, which must be current."""
     bad, miss, old, notok, thin, nocrop, nomodel, noblind = [], [], [], [], [], [], [], []
+    _sc5 = jload("script.json") or {}
+    is_16x9 = _sc5.get("format") == "16:9" or _sc5.get("length") == "long_16x9"
+    req_checks = REVIEW_CHECKS_16X9 if is_16x9 else REVIEW_CHECKS
     hashes = {int(k): v for k, v in st.get("hashes", {}).items()}
     crops_ok = {int(k): v for k, v in st.get("crops_ok", {}).items()}
     hot = {int(k): v for k, v in (jload("qa/hot.json") or {}).items()}
@@ -285,7 +316,7 @@ def shot_reviews(st):
         checks = r.get("checks") or {}
         if "model" not in checks and r.get("verdict") == "ok":
             nomodel.append(i)
-        elif r.get("verdict") != "ok" or any(not str(checks.get(c, "")).startswith("ok") for c in REVIEW_CHECKS):
+        elif r.get("verdict") != "ok" or any(not str(checks.get(c, "")).startswith("ok") for c in req_checks):
             notok.append(i)
         if len(re.findall(r"\w+", str(r.get("note", "")))) < 6:
             thin.append(i)
@@ -302,7 +333,8 @@ def shot_reviews(st):
                    f"to qa/design/cast_episode_p*_v.jpg and adds checks.model to qa/review/NN.json: every character drawn by the "
                    f"cast rig, same face / hair / outfit / proportions as its sheet (a character drawn as a prop is a fix)")
     if notok:
-        bad.append(f"shots {fmt(notok)} are not ok in review (verdict/checks) — fix them (sv-22 fix loop), re-review")
+        extra_hint = " (16:9 requires all 10 checks incl. framing & variety)" if is_16x9 else ""
+        bad.append(f"shots {fmt(notok)} are not ok in review (verdict/checks{extra_hint}) — fix them (sv-22 fix loop), re-review")
     if thin:
         bad.append(f"review note too thin for shots {fmt(thin)} (say what you saw, >= 6 words)")
     if nocrop:

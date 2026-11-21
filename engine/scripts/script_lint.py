@@ -300,16 +300,20 @@ else:
         err("SC-19", f"beats.md ## Spine has {len(causal_lines)} causal links; write the chain as >= 4 '- vì thế …' / '- nhưng …' lines")
 
     prev_idx = -1
+    spine_spans = []
     for ln in causal_lines:
         tags = re.findall(r"\[(s\d+[a-z]?)(?:\s*[-–>→]+\s*(s\d+[a-z]?))?\]", ln, re.I)
         if not tags:
             err("SC-26", f"Spine line missing [sN] or [sN-sM] segment citation: '{ln[:60]}'")
             continue
         first_sid = tags[0][0].lower()
+        line_idxs = []
         for a_sid, b_sid in tags:
             for sid in (a_sid.lower(), b_sid.lower()) if b_sid else (a_sid.lower(),):
                 if sid not in id_to_idx:
                     err("SC-26", f"Spine cites unknown segment '{sid}' not in script.json")
+                else:
+                    line_idxs.append(id_to_idx[sid])
             if b_sid and a_sid.lower() in id_to_idx and b_sid.lower() in id_to_idx:
                 if id_to_idx[b_sid.lower()] < id_to_idx[a_sid.lower()]:
                     err("SC-26", f"Spine range [{a_sid}-{b_sid}] is out of order")
@@ -317,28 +321,177 @@ else:
             if id_to_idx[first_sid] < prev_idx:
                 err("SC-26", f"Spine causal line '{ln[:50]}' goes backwards in segment order")
             prev_idx = id_to_idx[first_sid]
+        if line_idxs:
+            spine_spans.append((min(line_idxs), max(line_idxs)))
+
+    # SC-31: long_16x9 anti-padding / causal event-density guard
+    if _len == "long_16x9":
+        if len(causal_lines) < 12:
+            err(
+                "SC-31",
+                f"long_16x9 beats.md ## Spine has {len(causal_lines)} causal links (< 12) — require >= 12 '- vì thế' / '- nhưng' [sA-sB] lines (~1 causal turn per 50 s)",
+            )
+        elif len(spine_spans) < 12:
+            err(
+                "SC-31",
+                f"long_16x9 beats.md ## Spine has only {len(spine_spans)} causal lines with valid [sA-sB] citations (< 12)",
+            )
+        for (_, prev_e), (next_s, _) in zip(spine_spans, spine_spans[1:]):
+            gap = next_s - prev_e - 1
+            if gap > 15:
+                warn(
+                    "SC-31",
+                    f"narrative drift: {gap} segments ({ids[prev_e + 1]}..{ids[next_s - 1]}) between consecutive Spine citations [{ids[prev_e]}] and [{ids[next_s]}] (> 15 segments without a causal turn)",
+                )
+
+    # SC-29: long_16x9 5-chapter structural spine integrity
+    if _len == "long_16x9":
+        ch_matches = list(re.finditer(r"^###\s+(?:Chapter|Chương|Hồi)\s+([1-5])\b", beats, re.M | re.I))
+        chapters = {}
+        for m in ch_matches:
+            ch_num = int(m.group(1))
+            if ch_num not in chapters:
+                head_end = beats.find("\n", m.start())
+                if head_end == -1:
+                    head_end = len(beats)
+                ch_head = beats[m.start():head_end]
+                nxt_h = re.search(r"^#{2,3}\s+", beats[head_end:], re.M)
+                block_end = head_end + nxt_h.start() if nxt_h else len(beats)
+                ch_body = beats[head_end:block_end]
+                chapters[ch_num] = (ch_head, ch_body)
+        missing_chs = [c for c in range(1, 6) if c not in chapters]
+        if missing_chs:
+            err("SC-29", f"long_16x9 beats.md missing required 5-chapter heading(s): Chapters {missing_chs} (expected '### Chapter/Chương/Hồi 1..5')")
+
+        def _has_ch_beat(clean_txt: str, label_pat: str) -> bool:
+            return bool(
+                re.search(
+                    rf"^\s*(?:[-+•]\s*)?(?:{label_pat})\b(?:\s*(?:\([^)\n]*\)|\[[^\]\n]*\]|/\s*[^:\n—–-]{{1,30}}))*\s*[:—–-]\s*\S",
+                    clean_txt,
+                    re.M | re.I,
+                )
+            )
+
+        ch_span_re = re.compile(r"\[(s\d+[a-z]?)\s*[-–—>→]+\s*(s\d+[a-z]?)\]", re.I)
+        for ch_num in sorted(chapters):
+            ch_head, ch_body = chapters[ch_num]
+            clean_body = re.sub(r"[*_`]", "", ch_body)
+            if not _has_ch_beat(clean_body, r"Goal|Mục\s+tiêu"):
+                err("SC-29", f"Chapter {ch_num} missing structured 'Goal' / 'Mục tiêu' beat line")
+            if not _has_ch_beat(clean_body, r"Obstacle|Chướng\s+ngại"):
+                err("SC-29", f"Chapter {ch_num} missing structured 'Obstacle' / 'Chướng ngại' beat line")
+            if not _has_ch_beat(clean_body, r"Turn|Bước\s+ngoặt"):
+                err("SC-29", f"Chapter {ch_num} missing structured 'Turn' / 'Bước ngoặt' beat line")
+            if ch_num <= 4:
+                if not _has_ch_beat(clean_body, r"Mini[- ]?Cliffhanger|Cliffhanger"):
+                    err("SC-29", f"Chapter {ch_num} missing structured 'Mini-Cliffhanger' / 'Cliffhanger' beat line")
+            else:
+                if not _has_ch_beat(clean_body, r"Ending|Kết\s+mở|Payoff"):
+                    err("SC-29", "Chapter 5 missing structured 'Ending' / 'Kết mở' / 'Payoff' beat line")
+
+            head_spans = ch_span_re.findall(ch_head)
+            body_spans = ch_span_re.findall(ch_body)
+            chosen_span = None
+            if head_spans:
+                chosen_span = head_spans[0]
+            elif body_spans:
+                valid_body = [
+                    (a, b) for a, b in body_spans
+                    if a.lower() in id_to_idx and b.lower() in id_to_idx and id_to_idx[b.lower()] >= id_to_idx[a.lower()]
+                ]
+                chosen_span = max(valid_body, key=lambda ab: id_to_idx[ab[1].lower()] - id_to_idx[ab[0].lower()]) if valid_body else body_spans[0]
+
+            if not chosen_span:
+                err("SC-29", f"Chapter {ch_num} missing [sA-sB] segment span citing script.json segments")
+            elif ids:
+                a_sid, b_sid = chosen_span[0].lower(), chosen_span[1].lower()
+                if a_sid not in id_to_idx or b_sid not in id_to_idx:
+                    err("SC-29", f"Chapter {ch_num} span [{a_sid}-{b_sid}] cites unknown segment not in script.json")
+                elif id_to_idx[b_sid] < id_to_idx[a_sid]:
+                    err("SC-29", f"Chapter {ch_num} span [{a_sid}-{b_sid}] is out of order")
+                else:
+                    ch_len = id_to_idx[b_sid] - id_to_idx[a_sid] + 1
+                    ch_pct = ch_len / len(ids)
+                    if not 0.10 <= ch_pct <= 0.34:
+                        err(
+                            "SC-29",
+                            f"Chapter {ch_num} span [{a_sid}-{b_sid}] is {ch_len}/{len(ids)} segments ({ch_pct:.0%}; must be 10%-34%)",
+                        )
 
     if "## Plant & Payoff" in beats and ids:
         pp_sec = beats.split("## Plant & Payoff", 1)[1].split("\n## ", 1)[0]
-        pm = re.search(r"Plant\s*:\s*(s\d+[a-z]?)\b", pp_sec, re.I)
-        ym = re.search(r"Payoff\s*:\s*(s\d+[a-z]?)\b", pp_sec, re.I)
-        if not pm or not ym:
-            err("SC-22", "beats.md ## Plant & Payoff must cite 'Plant: s<N>' and 'Payoff: s<M>'")
-        else:
-            p_sid, y_sid = pm.group(1).lower(), ym.group(1).lower()
-            if p_sid not in id_to_idx:
-                err("SC-22", f"Plant segment '{p_sid}' does not exist in script.json")
-            if y_sid not in id_to_idx:
-                err("SC-22", f"Payoff segment '{y_sid}' does not exist in script.json")
-            if p_sid in id_to_idx and y_sid in id_to_idx:
+        if _len == "long_16x9":
+            # SC-30: multi-knot 3+ Plant-to-Payoff verification
+            clean_pp = re.sub(r"[*_`]", "", pp_sec)
+            p_matches = [(m.group(1), m.group(2).lower()) for m in re.finditer(r"Plant(?:\s*#?\s*(\d+))?\s*:\s*(s\d+[a-z]?)\b", clean_pp, re.I)]
+            y_matches = [(m.group(1), m.group(2).lower()) for m in re.finditer(r"Payoff(?:\s*#?\s*(\d+))?\s*:\s*(s\d+[a-z]?)\b", clean_pp, re.I)]
+            for _, p_sid in p_matches:
+                if p_sid not in id_to_idx:
+                    err("SC-30", f"Plant segment '{p_sid}' does not exist in script.json")
+            for _, y_sid in y_matches:
+                if y_sid not in id_to_idx:
+                    err("SC-30", f"Payoff segment '{y_sid}' does not exist in script.json")
+            pairs = []
+            used_p, used_y = set(), set()
+            y_num_idx = {}
+            for yi, (yn, _) in enumerate(y_matches):
+                if yn is not None and yn not in y_num_idx:
+                    y_num_idx[yn] = yi
+            for pi, (pn, p_sid) in enumerate(p_matches):
+                if pn is not None and pn in y_num_idx and y_num_idx[pn] not in used_y:
+                    yi = y_num_idx[pn]
+                    pairs.append((p_sid, y_matches[yi][1]))
+                    used_p.add(pi)
+                    used_y.add(yi)
+            rem_p = [p_sid for pi, (_, p_sid) in enumerate(p_matches) if pi not in used_p]
+            rem_y = [y_sid for yi, (_, y_sid) in enumerate(y_matches) if yi not in used_y]
+            for p_sid, y_sid in zip(rem_p, rem_y):
+                pairs.append((p_sid, y_sid))
+            valid_pairs = []
+            for p_sid, y_sid in pairs:
+                if p_sid not in id_to_idx or y_sid not in id_to_idx:
+                    continue
                 p_pct = (id_to_idx[p_sid] + 1) / len(ids)
                 y_pct = (id_to_idx[y_sid] + 1) / len(ids)
-                if p_pct > 0.45:
-                    err("SC-22", f"Plant {p_sid} is at {p_pct:.0%} (> 45%) — plant it in Act 1")
-                if y_pct < 0.65:
-                    err("SC-22", f"Payoff {y_sid} is at {y_pct:.0%} (< 65%) — pay it off in Act 3")
+                pair_ok = True
+                if p_pct > 0.55:
+                    err("SC-30", f"Plant {p_sid} is at {p_pct:.0%} (> 55%) — plant within first 55% of segments")
+                    pair_ok = False
+                if y_pct < 0.60:
+                    err("SC-30", f"Payoff {y_sid} is at {y_pct:.0%} (< 60%) — pay off at >= 60% of segments")
+                    pair_ok = False
                 if id_to_idx[p_sid] >= id_to_idx[y_sid]:
-                    err("SC-22", f"Plant ({p_sid}) must come before Payoff ({y_sid})")
+                    err("SC-30", f"Plant ({p_sid}) must come before Payoff ({y_sid})")
+                    pair_ok = False
+                if pair_ok:
+                    valid_pairs.append((p_sid, y_sid))
+            distinct_plants = {p for p, _ in valid_pairs}
+            distinct_payoffs = {y for _, y in valid_pairs}
+            if len(distinct_plants) < 3 or len(distinct_payoffs) < 3:
+                err(
+                    "SC-30",
+                    f"long_16x9 ## Plant & Payoff requires >= 3 distinct Plants (<= 55%) paired with >= 3 distinct Payoffs (>= 60%) with Plant < Payoff (got {len(distinct_plants)} distinct plants, {len(distinct_payoffs)} distinct payoffs)",
+                )
+        else:
+            pm = re.search(r"Plant\s*:\s*(s\d+[a-z]?)\b", pp_sec, re.I)
+            ym = re.search(r"Payoff\s*:\s*(s\d+[a-z]?)\b", pp_sec, re.I)
+            if not pm or not ym:
+                err("SC-22", "beats.md ## Plant & Payoff must cite 'Plant: s<N>' and 'Payoff: s<M>'")
+            else:
+                p_sid, y_sid = pm.group(1).lower(), ym.group(1).lower()
+                if p_sid not in id_to_idx:
+                    err("SC-22", f"Plant segment '{p_sid}' does not exist in script.json")
+                if y_sid not in id_to_idx:
+                    err("SC-22", f"Payoff segment '{y_sid}' does not exist in script.json")
+                if p_sid in id_to_idx and y_sid in id_to_idx:
+                    p_pct = (id_to_idx[p_sid] + 1) / len(ids)
+                    y_pct = (id_to_idx[y_sid] + 1) / len(ids)
+                    if p_pct > 0.45:
+                        err("SC-22", f"Plant {p_sid} is at {p_pct:.0%} (> 45%) — plant it in Act 1")
+                    if y_pct < 0.65:
+                        err("SC-22", f"Payoff {y_sid} is at {y_pct:.0%} (< 65%) — pay it off in Act 3")
+                    if id_to_idx[p_sid] >= id_to_idx[y_sid]:
+                        err("SC-22", f"Plant ({p_sid}) must come before Payoff ({y_sid})")
 
     for i in ids:
         if not re.search(rf"\|\s*{i}\s*\|", beats):

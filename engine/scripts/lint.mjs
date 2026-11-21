@@ -39,10 +39,15 @@ const propWaived = (rule, key) => {
 const PALKEYS = new Set(Object.keys(P.PAL));
 const ROLES = new Set(['principal', 'support', 'extra']);
 const BEDS = new Set(['room', 'hum', 'quiet', 'echo', 'outdoor', 'fan', 'motor', 'basement', 'paper', 'street', 'market', 'kitchen', 'rain', 'night']);
+const VALID_ANGLES = new Set(['wide', 'low', 'high', 'ots', 'reverse', 'closeup', 'pov']);
 const EXPRS = new Set(['neutral', 'smug', 'angry', 'shock', 'sad', 'cry', 'joy', 'stern', 'sly', 'deadpan', 'eager', 'shh']);
 const SIDE_ARMS = new Set(['swing', 'down', 'hold', 'phone', 'cane', 'carry', 'ride', 'shh', 'raise', 'pocket']);
 const OVER = new Set(['tag', 'bubble', 'label', 'stamp', 'score', 'pin', 'title', 'card', 'arrow']);
 const TH = {shapes: 60, colours: 8, texts: 2, halftone: 2, glow: 1, insertShapes: 15}; // exemplar median = 60 shapes
+const scriptMeta = (() => {
+  try { return JSON.parse(fs.readFileSync('script.json', 'utf8')); } catch { return {}; }
+})();
+const isLong16x9 = scriptMeta?.length === 'long_16x9' || scriptMeta?.format === '16:9';
 
 // =============================== DESIGN ===============================
 const traitsOf = (l) => [l.glasses, l.hat && l.hat !== 'none', l.mustache, l.beard, l.pattern, l.earrings, l.chain, l.vest, l.lips,
@@ -78,7 +83,11 @@ if (phase !== 'shots') {
   }
   const princ = keys.filter((k) => P.CAST_ROLES[k]?.role === 'principal');
   if (keys.length && !princ.length) err('CH-09', 'no principal in CAST_ROLES');
-  if (princ.length > 4) warn('CH-09', `${princ.length} principals — a 2–3 minute story rarely carries more than 3`);
+  if (!isLong16x9 && princ.length > 4) warn('CH-09', `${princ.length} principals — a 2–3 minute story rarely carries more than 3`);
+  if (isLong16x9) {
+    if (keys.length < 8) err('CH-09', `long_16x9 episode has only ${keys.length} cast member(s) (minimum 8 required; recommended ≥ 10)`);
+    else if (keys.length < 10) warn('CH-09', `long_16x9 episode has ${keys.length} cast members (recommended ≥ 10 for a 10-min cast)`);
+  }
 
   const sets = Object.keys(P.EPISODE_SETS);
   const plateStats = fs.existsSync('qa/design/plate_stats.json') ? JSON.parse(fs.readFileSync('qa/design/plate_stats.json', 'utf8')) : {};
@@ -126,12 +135,27 @@ if (phase !== 'shots') {
       }
     }
   }
-  // PR-01, PR-02 & PR-03: human-scale guard, internal text collision & disembodied head check on custom episode WORLD_PROPS
+  // SE-15: set count & multi-angle cinematography diversity
+  if (isLong16x9) {
+    if (sets.length < 15) {
+      err('SE-15', `long_16x9 episode has only ${sets.length} set(s) (minimum 15 distinct sets / angle plates required for a 10-min video)`);
+    }
+    const angles = new Set(sets.map((id) => P.EPISODE_SETS[id]?.angle).filter((a) => typeof a === 'string' && VALID_ANGLES.has(a)));
+    if (angles.size < 3) {
+      err('SE-15', `long_16x9 episode declares only ${angles.size} distinct set angle type(s) [${[...angles].join(', ')}] (minimum 3 of wide|low|high|ots|reverse|closeup|pov required; recommended ≥ 4)`);
+    } else if (angles.size < 4) {
+      warn('SE-15', `long_16x9 episode declares ${angles.size} distinct set angle type(s) [${[...angles].join(', ')}] (recommended ≥ 4 of wide|low|high|ots|reverse|closeup|pov)`);
+    }
+  } else if (sets.length > 0 && sets.length < 4) {
+    warn('SE-15', `short episode has only ${sets.length} set(s) (recommended 4–5 sets for visual variety)`);
+  }
+  // PR-01, PR-02, PR-03 & PR-05: human-scale guard, internal text collision, disembodied head & partial-body continuity check on custom episode WORLD_PROPS
   {
     const BUILTIN_PROPS = new Set(['stool', 'cone', 'lamp', 'gladiolus', 'cat', 'chicken', 'xoi', 'lobster', 'wagyu', 'tofu']);
     const BIG_VEH = /bus|truck|van|train|ambulance|fire.?truck/i;
     const SMALL_VEH = /kart|cart|car|taxi|moto|bike/i;
     const GROUND_PROP = /bus|truck|van|train|ambulance|fire.?truck|kart|cart|car|taxi|moto|bike|table|desk|bench|crib|chair|stool|fence|stand|rack|float|podium|counter|shelf|crate|box|barrel|pot|plant/i;
+    const PARTIAL_BODY_PROP = /(shoe|foot|leg|hand|arm|paw|finger)/i;
     const worldPropKeys = Object.keys(P.WORLD_PROPS ?? {});
     const worldPropSet = new Set(worldPropKeys);
     for (const k of worldPropKeys) {
@@ -172,6 +196,9 @@ if (phase !== 'shots') {
             }
           }
         }
+      }
+      if (!propWaived('PR-05', k) && PARTIAL_BODY_PROP.test(k) && b.height < 720) {
+        warn('PR-05', `${k}: giant partial-body prop is only ${Math.round(b.height)} px tall (< 720 px) — risks floating severed mid-frame; draw leg/arm extending past frame top or stage flush with frame edge (GE-19)`);
       }
     }
     // PR-04: hand grip origin (0,0) distance & size check on custom HAND_PROPS
@@ -455,16 +482,100 @@ if (phase !== 'design') {
       console.log(`pacing: ${durs.length} shots, mean ${mean.toFixed(2)} s, ${perMin.toFixed(1)}/min, p10 ${p10.toFixed(2)} s`);
     }
   }
+  // SH-16: set-fatigue & unbroken streak guard for long_16x9
+  // SH-17: cinematic view diversity & WORLD_PROP reuse diversity for long_16x9
+  if (isLong16x9 && rows.length >= 30) {
+    const setCounts = new Map();
+    let runSet = null, runStart = 0, runLen = 0;
+    const flushStreak = (endIdx) => {
+      if (runSet === null) return;
+      if (runLen > 10) {
+        err('SH-16', `set '${runSet}' held for ${runLen} consecutive shots (#${runStart}..#${endIdx}) — switch angle plate or location (max 10)`);
+      } else if (runLen > 7) {
+        warn('SH-16', `set '${runSet}' held for ${runLen} consecutive shots (#${runStart}..#${endIdx}) — switch angle plate or location (max 10)`);
+      }
+    };
+    for (let i = 0; i < rows.length; i++) {
+      const sid = rows[i].set;
+      setCounts.set(sid, (setCounts.get(sid) ?? 0) + 1);
+      if (sid === runSet) {
+        runLen++;
+      } else {
+        flushStreak(i - 1);
+        runSet = sid;
+        runStart = i;
+        runLen = 1;
+      }
+    }
+    flushStreak(rows.length - 1);
+    const totalShots = rows.length;
+    for (const [setId, count] of setCounts) {
+      const ratio = (count / totalShots) * 100;
+      const pct = Number(ratio.toFixed(1));
+      if (ratio > 18) {
+        err('SH-16', `set '${setId}' occupies ${pct}% of episode (${count}/${totalShots} shots; max 18%)`);
+      } else if (ratio > 14) {
+        warn('SH-16', `set '${setId}' occupies ${pct}% of episode (${count}/${totalShots} shots; max 18%)`);
+      }
+    }
+
+    const viewCounts = {front: 0, side: 0, back: 0, '3q': 0};
+    let totalActorPlacements = 0;
+    const propShots = new Map();
+    const propVariants = new Map();
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      const s = shots[i];
+      const tMid = (r.t0 + r.t1) / 2;
+      for (const A of s?.actors ?? []) {
+        const defView = (A.path && A.path.length > 1) || A.ride ? 'side' : 'front';
+        const v = scalarKeyAt(A.view, defView, r, P, tMid);
+        viewCounts[v] = (viewCounts[v] ?? 0) + 1;
+        totalActorPlacements++;
+      }
+      for (const e of s?.extras ?? []) {
+        if (!e?.k) continue;
+        if (!propShots.has(e.k)) {
+          propShots.set(e.k, new Set());
+          propVariants.set(e.k, new Set());
+        }
+        propShots.get(e.k).add(i);
+        propVariants.get(e.k).add(e.c ?? '');
+      }
+    }
+    if (totalActorPlacements > 0) {
+      const frontShare = (viewCounts.front / totalActorPlacements) * 100;
+      const angledCount = (viewCounts.back ?? 0) + (viewCounts['3q'] ?? 0);
+      const angledShare = (angledCount / totalActorPlacements) * 100;
+      if (frontShare > 70) {
+        err('SH-17', `front view accounts for ${Number(frontShare.toFixed(1))}% of actor placements (${viewCounts.front}/${totalActorPlacements}; max 70%)`);
+      } else if (frontShare > 60) {
+        warn('SH-17', `front view accounts for ${Number(frontShare.toFixed(1))}% of actor placements (${viewCounts.front}/${totalActorPlacements}; recommended ≤ 60%)`);
+      }
+      if (angledShare < 15) {
+        err('SH-17', `back + 3q views account for only ${Number(angledShare.toFixed(1))}% of actor placements (${angledCount}/${totalActorPlacements}; minimum 15%, recommended ≥ 25%)`);
+      } else if (angledShare < 25) {
+        warn('SH-17', `back + 3q views account for ${Number(angledShare.toFixed(1))}% of actor placements (${angledCount}/${totalActorPlacements}; recommended ≥ 25%)`);
+      }
+    }
+    for (const [k, shotSet] of propShots) {
+      const variants = propVariants.get(k);
+      if (shotSet.size > 15 && variants.size <= 1) {
+        warn('SH-17', `WORLD_PROP '${k}' appears in ${shotSet.size} shots with only ${variants.size} variant(s) (c) — add variant diversity or alternate props to prevent copy-paste sticker fatigue`);
+      }
+    }
+  }
   // ---- screen geometry (GE-*): measured from the shot table, no render. Each hit makes the shot HOT:
   // its review must open the measurement crops (node scripts/qa.mjs crops <i>) — see sv-22 "review cards".
   const looks = {...(P.EX_LOOKS ?? {}), ...P.CAST};
   const hot = {};
+  const markHot = (i, rule) => { (hot[i] ??= []).push(rule); };
   const seen = new Set();
   const flag = (r, rule, msg, who = '', makeHot = rule !== 'GE-10') => {
     if (waived(rule, r.name) || seen.has(`${r.i}|${rule}|${who}`)) return; // one warning per shot, rule and actor
     seen.add(`${r.i}|${rule}|${who}`);
     warn(rule, `#${r.i} '${r.name}': ${msg}`);
-    if (makeHot) (hot[r.i] ??= []).push(rule);
+    if (makeHot) markHot(r.i, rule);
   };
   const lastH = {};
   for (const r of rows) {
@@ -506,6 +617,13 @@ if (phase !== 'design') {
               flag(r, 'GE-17', `prop '${pr.k}' (y=${Math.round(pr.y)}) covers ${Math.round(frac * 100)}% of ${x.id}'s head (y=${Math.round(x.worldY)}) at ${t.toFixed(2)} s`, `${pr.k}:${x.id}`);
             }
           }
+        }
+      }
+      for (const dl of g.detachedLimbIssues ?? []) {
+        if (!waived('GE-19', r.name) && !seen.has(`${r.i}|GE-19|${dl.k}`)) {
+          seen.add(`${r.i}|GE-19|${dl.k}`);
+          err('GE-19', `#${r.i} '${r.name}': giant partial-body prop '${dl.k}' (screen height ${Math.round(dl.screenH)} px, box [${Math.round(dl.sx0)}, ${Math.round(dl.sy0)}, ${Math.round(dl.sx1)}, ${Math.round(dl.sy1)}]) terminates floating in mid-air inside frame at ${t.toFixed(2)} s — extend limb off top/side edge or waive if standalone item`);
+          markHot(r.i, 'GE-19');
         }
       }
       const GE16_KINDS = new Set(['bubble', 'label', 'stamp', 'tag']);

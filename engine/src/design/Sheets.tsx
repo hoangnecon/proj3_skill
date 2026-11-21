@@ -1,5 +1,5 @@
 // Design sheets rendered by scripts/design.mjs into qa/design/. These are the evidence images for gate G4.
-//  CastSheet  — every look: front idle + side mid-stride, name, role, Vietnamese description
+//  CastSheet  — every look: front + 3/4 + back views, name, role, Vietnamese description
 //  ExprSheet  — one look: 12 expressions (head close-up), 6 poses, 6 walk-cycle phases, sitting
 //  SetPlate   — one set at its plate camera, empty, with optional world-coordinate grid
 import React from 'react';
@@ -7,6 +7,8 @@ import {AbsoluteFill} from 'remotion';
 import {Defs, FONT, PAL, Txt, S, Rr, L} from '../kit';
 import {Person, POSES, Expr, Look} from '../chars';
 import {PersonSide} from '../side';
+import {PersonBack} from '../back';
+import {Person3Q} from '../threeq';
 import {SETS} from '../sets';
 import {WORLD_PROPS} from '../props';
 import {CAST, CAST_ROLES} from '../episode/cast';
@@ -48,18 +50,24 @@ export const CastSheet: React.FC<{which: 'episode' | 'exemplar'; page: number}> 
         return (
           <g key={k}>
             <S d={Rr(cx - cw / 2 + 12, top, cw - 24, ch - 30, 24)} f="white" sw={4} />
-            {/* height ruler: standing height at s=1 is ~610*h px (drawn at sheet scale 0.74) */}
-            <L d={`M${cx - cw / 2 + 36} ${top + 700}v${-610 * H0 * 0.74}`} w={4} c="concreteDark" />
-            <g transform={`translate(${cx - 72} ${top + 700}) scale(0.74)`}>
+            {/* height ruler: standing height at s=1 is ~610*h px (drawn at sheet scale 0.54 for Front + 3/4 + Back) */}
+            <L d={`M${cx - cw / 2 + 24} ${top + 676}v${-610 * H0 * 0.54}`} w={4} c="concreteDark" />
+            <g transform={`translate(${cx - 114} ${top + 676}) scale(0.54)`}>
               <Person look={look} pose={POSES.idle} expr="neutral" t={0.5} />
             </g>
-            <g transform={`translate(${cx + 92} ${top + 700}) scale(0.74)`}>
-              <PersonSide look={look} t={0.5} phase={0.3} speed={1} />
+            <g transform={`translate(${cx} ${top + 676}) scale(0.54)`}>
+              <Person3Q look={look} pose={POSES.idle} expr="neutral" t={0.5} face={1} />
             </g>
-            <L d={`M${cx - cw / 2 + 30} ${top + 702}h${cw - 60}`} w={4} />
-            <Txt x={cx} y={top + 770} s={40} c="ink" w={900}>{k}</Txt>
-            <Txt x={cx} y={top + 816} s={28} c={role?.role === 'principal' ? 'red' : role?.role === 'support' ? 'blue' : 'concreteDark'} w={900}>{(role?.role ?? (which === 'exemplar' ? 'exemplar' : 'THIẾU ROLE')).toUpperCase()}</Txt>
-            <foreignObject x={cx - cw / 2 + 30} y={top + 840} width={cw - 60} height={170}>
+            <g transform={`translate(${cx + 114} ${top + 676}) scale(0.54)`}>
+              <PersonBack look={look} pose={POSES.idle} t={0.5} />
+            </g>
+            <L d={`M${cx - cw / 2 + 24} ${top + 678}h${cw - 48}`} w={4} />
+            <Txt x={cx - 114} y={top + 706} s={18} c="concreteDark" w={800}>FRONT</Txt>
+            <Txt x={cx} y={top + 706} s={18} c="concreteDark" w={800}>3/4</Txt>
+            <Txt x={cx + 114} y={top + 706} s={18} c="concreteDark" w={800}>BACK</Txt>
+            <Txt x={cx} y={top + 766} s={40} c="ink" w={900}>{k}</Txt>
+            <Txt x={cx} y={top + 812} s={28} c={role?.role === 'principal' ? 'red' : role?.role === 'support' ? 'blue' : 'concreteDark'} w={900}>{(role?.role ?? (which === 'exemplar' ? 'exemplar' : 'THIẾU ROLE')).toUpperCase()}</Txt>
+            <foreignObject x={cx - cw / 2 + 30} y={top + 836} width={cw - 60} height={170}>
               <div style={{fontFamily: FONT, fontWeight: 700, fontSize: 24, lineHeight: 1.25, color: PAL.ink, textAlign: 'center'}}>{role?.vi ?? ''}</div>
             </foreignObject>
           </g>

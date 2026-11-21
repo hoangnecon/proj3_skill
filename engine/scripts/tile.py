@@ -19,7 +19,20 @@ def font(size):
 
 spec = json.loads(Path(sys.argv[1]).read_text())
 cells, cols, w = spec["cells"], spec["cols"], spec["w"]
-h = int(w * 1920 / 1080)
+aspect = spec.get("aspect")
+if isinstance(aspect, str) and ":" in aspect:
+    aw, ah = aspect.split(":", 1)
+    h = max(1, round(w * float(ah) / float(aw)))
+elif isinstance(aspect, (list, tuple)) and len(aspect) == 2 and aspect[0] and aspect[1]:
+    h = max(1, round(w * float(aspect[1]) / float(aspect[0])))
+elif isinstance(aspect, (int, float)) and aspect > 0:
+    h = max(1, round(w / float(aspect)))
+elif cells:
+    with Image.open(cells[0]["img"]) as _im0:
+        iw, ih = _im0.size
+    h = max(1, round(w * ih / iw))
+else:
+    h = int(w * 1920 / 1080)
 lab = 58
 rows = (len(cells) + cols - 1) // cols
 top = 64
@@ -29,7 +42,8 @@ d.text((12, 14), spec.get("title", ""), fill=(255, 210, 63), font=font(30))
 for i, c in enumerate(cells):
     x = 8 + (i % cols) * (w + 8)
     y = top + (i // cols) * (h + lab + 8)
-    sheet.paste(Image.open(c["img"]).convert("RGB").resize((w, h)), (x, y))
+    with Image.open(c["img"]) as cim:
+        sheet.paste(cim.convert("RGB").resize((w, h), Image.LANCZOS), (x, y))
     d.text((x + 4, y + h + 4), c.get("label", ""), fill=(255, 255, 255), font=font(20))
     sub = c.get("sub", "")
     if sub:

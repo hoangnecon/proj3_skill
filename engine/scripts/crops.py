@@ -2,7 +2,7 @@
 Each row = one moment: a small full frame with the measured boxes drawn on it, then full-resolution crops of
 every actor's head, hands and feet, and of any overlap between two actors. Crops are 1:1 or larger, so a wrong
 hand, a floating foot, a face under a prop or two bodies merging are visible — the contact sheet hides them.
-Spec JSON: {"out", "title", "rows": [{"frame", "label", "boxes": [{"label", "box": [x0,y0,x1,y1], "kind"}]}]}"""
+Spec JSON: {"out", "title", "frame_size": [W, H] (optional), "rows": [{"frame", "label", "boxes": [{"label", "box": [x0,y0,x1,y1], "kind"}]}]}"""
 import json
 import sys
 from pathlib import Path
@@ -24,19 +24,24 @@ def font(n):
 
 
 F, FT = font(15), font(20)
+spec_frame_size = spec.get("frame_size")
 rows = []
 for r in spec["rows"]:
     im = Image.open(r["frame"]).convert("RGB")
     W, H = im.size
-    sc = W / 1080
+    if isinstance(spec_frame_size, (list, tuple)) and len(spec_frame_size) == 2 and spec_frame_size[0] and spec_frame_size[1]:
+        fw, fh = float(spec_frame_size[0]), float(spec_frame_size[1])
+    else:
+        fw, fh = (1920, 1080) if W > H else (1080, 1920)
+    sc = W / fw
     th = im.resize((TW, round(TW * H / W)))
     d = ImageDraw.Draw(th)
-    k = TW / 1080
+    k = TW / fw
     cells = []
     for b in r["boxes"]:
         x0, y0, x1, y1 = b["box"]
         d.rectangle([x0 * k, y0 * k, x1 * k, y1 * k], outline=COL.get(b["kind"], (255, 255, 255)), width=2)
-        cx0, cy0, cx1, cy1 = [round(v * sc) for v in (max(0, x0), max(0, y0), min(1080, x1), min(1920, y1))]
+        cx0, cy0, cx1, cy1 = [round(v * sc) for v in (max(0, x0), max(0, y0), min(fw, x1), min(fh, y1))]
         if cx1 - cx0 < 8 or cy1 - cy0 < 8:
             continue
         c = im.crop((cx0, cy0, cx1, cy1))

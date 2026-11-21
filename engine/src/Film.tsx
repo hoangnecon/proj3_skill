@@ -3,6 +3,8 @@ import {AbsoluteFill, Audio, staticFile, useCurrentFrame} from 'remotion';
 import {Defs, FONT, L, PAL, S, E} from './kit';
 import {Person, POSES, Pose, poseMix, Expr, Look} from './chars';
 import {PersonSide, SIDE_CYCLE} from './side';
+import {PersonBack} from './back';
+import {Person3Q} from './threeq';
 import {SETS, SetLayers, Item, SetOpts} from './sets';
 import {OverView} from './overlays';
 import {Actor, DURATION, FPS, Keys, Shot, TT, WORDS, abs, resolveShots, tAt} from './engine';
@@ -155,7 +157,7 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx}> = ({a, ctx}) => {
     }
   }
   const hasPath = !!(a.path && a.path.length > 1);
-  const vk = keyAt<'front' | 'side'>(a.view, hasPath || a.ride ? 'side' : 'front', shot, t, 0.24);
+  const vk = keyAt<'front' | 'side' | 'back' | '3q'>(a.view, hasPath || a.ride ? 'side' : 'front', shot, t, 0.24);
   const hop = a.hop ? Math.abs(Math.sin(t * 9 + ph)) * a.hop : 0;
   const sh = a.shake ? Math.sin(t * 40 + ph) * a.shake : 0;
 
@@ -228,8 +230,10 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx}> = ({a, ctx}) => {
     const p0: Pose = POSES[pk.prev] ?? POSES.idle;
     const p1: Pose = POSES[pk.cur] ?? POSES.idle;
     let pose = pk.u < 1 ? poseMix(p0, p1, smooth(pk.u)) : p1;
+    const face3q: 1 | -1 = dir < 0 ? -1 : 1;
     if (rb) {
-      const lx = (rb.x - x) / (s * (a.flip ? -1 : 1));
+      const flipSign = view === '3q' ? face3q : (a.flip ? -1 : 1);
+      const lx = (rb.x - x) / (s * flipSign);
       const ly = (rb.y - y) / s;
       const W = look.w ?? 1;
       const side = rb.hand === 'l' ? -1 : 1;
@@ -237,8 +241,16 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx}> = ({a, ctx}) => {
       const tg = {x: lerp(rest.x, lx + side * rb.press * 6, rb.w), y: lerp(rest.y, ly, rb.w)};
       pose = side > 0 ? {...pose, ra: tg} : {...pose, la: tg};
     }
-    sx = (a.flip ? -1 : 1) * Math.abs(sx);
-    body = <Person look={look} pose={pose} expr={ek.cur} talk={talk} t={t} gaze={a.gaze ?? 0} blinkPh={ph} prop={propFor(a.prop, t)} />;
+    if (view === 'back') {
+      sx = (a.flip ? -1 : 1) * Math.abs(sx);
+      body = <PersonBack look={look} pose={pose} t={t} gaze={a.gaze ?? 0} lean={a.lean} prop={propFor(a.prop, t)} />;
+    } else if (view === '3q') {
+      sx = Math.abs(sx);
+      body = <Person3Q look={look} pose={pose} expr={ek.cur} talk={talk} t={t} face={face3q} gaze={a.gaze ?? 0} blinkPh={ph} prop={propFor(a.prop, t)} />;
+    } else {
+      sx = (a.flip ? -1 : 1) * Math.abs(sx);
+      body = <Person look={look} pose={pose} expr={ek.cur} talk={talk} t={t} gaze={a.gaze ?? 0} blinkPh={ph} prop={propFor(a.prop, t)} />;
+    }
   }
   return (
     <g transform={`translate(${x + sh} ${y - hop + bob}) scale(${s * sx} ${s})`} opacity={op}>
@@ -331,7 +343,7 @@ export const Film: React.FC = () => {
 
   const acts = shot.actors ?? [];
   const ctx: Ctx = {shot, t, actors: acts, memo: new Map()};
-  const actors: Item[] = acts.map((a) => {
+  const toActorItem = (a: Actor): Item => {
     let yy = a.y;
     if (a.path && a.path.length > 1) yy = placeOf(a, ctx).y;
     if (a.ride) {
@@ -339,7 +351,9 @@ export const Film: React.FC = () => {
       if (c) yy = placeOf(c, ctx).y - 0.5;
     }
     return {y: yy + (a.z ?? 0), key: 'a-' + a.id, node: <ActorView key={a.id} a={a} ctx={ctx} />};
-  });
+  };
+  const actors: Item[] = acts.filter((a) => !a.fg).map(toActorItem);
+  const fgActors: Item[] = acts.filter((a) => a.fg).map(toActorItem).sort((p, q) => p.y - q.y);
   const extras: Item[] = (shot.extras ?? []).map((x, i) => {
     const f = WORLD_PROPS[x.k];
     if (!f) throw new Error('unknown world prop ' + x.k + ' (register it in props.tsx WORLD_PROPS)');
@@ -348,14 +362,16 @@ export const Film: React.FC = () => {
   const midItems = [...layers.mid, ...extras, ...actors].sort((p, q) => p.y - q.y);
 
   // background and actors share depth 1 so feet never slide on the floor when the camera moves
-  const world = (
+  const worldLayers = (
     <>
       {layers.far && <LayerG d={0.5} cam={cam}>{layers.far}</LayerG>}
       <LayerG d={1} cam={cam}>{layers.back}</LayerG>
       <LayerG d={1} cam={cam}>{midItems.map((m) => <g key={m.key}>{m.node}</g>)}</LayerG>
+      {fgActors.length > 0 && <LayerG d={1.2} cam={cam}>{fgActors.map((m) => <g key={m.key}>{m.node}</g>)}</LayerG>}
       {layers.fg && <LayerG d={1.3} cam={cam}>{layers.fg}</LayerG>}
     </>
   );
+  const world = shot.tilt ? <g transform={`rotate(${shot.tilt} ${FRAME_W / 2} ${FRAME_H / 2})`}>{worldLayers}</g> : worldLayers;
 
   const night = shot.night ?? 0;
   const overs = (shot.over ?? []).map((o, i) => {

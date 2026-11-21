@@ -548,10 +548,54 @@ const targetsFixture = (defActor, sign) => {
   return false;
 };
 
+const PARTIAL_BODY_RE = /(shoe|foot|leg|hand|arm|paw|finger)/i;
+
 /**
- * Compute full 1080×1920 screen-space geometry of shot i (or row) at time t:
+ * GE-19: detect giant partial-body WORLD_PROPS (shoe/foot/leg/hand/arm/paw/finger)
+ * whose top/side cuff terminates floating in mid-air inside the visible frame
+ * instead of bleeding off the top or side edge.
+ */
+export const detachedLimbIssues = (row, t, P = cachedP, precomputedProps = null) => {
+  if (P) cachedP = P;
+  const issues = [];
+  if (Array.isArray(precomputedProps)) {
+    for (const pr of precomputedProps) {
+      if (!pr || !PARTIAL_BODY_RE.test(pr.k)) continue;
+      const sb = pr.screenBox;
+      const screenH = sb.y1 - sb.y0;
+      const visArea = area(clip(sb));
+      if (visArea > 0 && screenH >= 260 && sb.y0 > 24 && sb.x0 > 24 && sb.x1 < W - 24) {
+        issues.push({k: pr.k, t, screenH, screenBox: sb, sx0: sb.x0, sy0: sb.y0, sx1: sb.x1, sy1: sb.y1});
+      }
+    }
+    return issues;
+  }
+  const def = P?.SHOTS?.[row.i] ?? row;
+  const extras = Array.isArray(def?.extras) && (def.extras.length === 0 || typeof def.extras[0] === 'object')
+    ? def.extras
+    : (Array.isArray(row?.extras) && typeof row.extras[0] === 'object' ? row.extras : []);
+  if (!extras.length) return issues;
+  const cam = camAt(row, t);
+  for (const e of extras) {
+    if (!e || !PARTIAL_BODY_RE.test(e.k)) continue;
+    let mb;
+    try { mb = measurePropBox(e.k, P, e.c, t); } catch { continue; }
+    const sc = e.s ?? 1;
+    const wb = box(e.x + mb.minX * sc, e.y + mb.minY * sc, e.x + mb.maxX * sc, e.y + mb.maxY * sc);
+    const sb = projectBox(wb, cam, 1);
+    const screenH = sb.y1 - sb.y0;
+    const visArea = area(clip(sb));
+    if (visArea > 0 && screenH >= 260 && sb.y0 > 24 && sb.x0 > 24 && sb.x1 < W - 24) {
+      issues.push({k: e.k, t, screenH, screenBox: sb, sx0: sb.x0, sy0: sb.y0, sx1: sb.x1, sy1: sb.y1});
+    }
+  }
+  return issues;
+};
+
+/**
+ * Compute full screen-space geometry of shot i (or row) at time t:
  * actors (head, body, hands, feet, all, dir, view), visible set + WORLD_PROP signs (clipped/occluded status),
- * extras (WORLD_PROPS), active overlays, reachIssues, captionIssues, and caption band.
+ * extras (WORLD_PROPS), active overlays, reachIssues, captionIssues, detachedLimbIssues, and caption band.
  */
 export const shotGeometry = (shotOrIdx, t, P, rowsCache = null) => {
   if (P) cachedP = P;
@@ -742,6 +786,8 @@ export const shotGeometry = (shotOrIdx, t, P, rowsCache = null) => {
     }
   }
 
+  const limbIssues = detachedLimbIssues(row, t, P, props);
+
   return {
     i: row.i,
     name: row.name,
@@ -754,6 +800,7 @@ export const shotGeometry = (shotOrIdx, t, P, rowsCache = null) => {
     overlays,
     reachIssues,
     captionIssues,
+    detachedLimbIssues: limbIssues,
     caption: capBox,
   };
 };

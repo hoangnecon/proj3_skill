@@ -110,6 +110,14 @@ if (args.includes('--status')) { // no browser: which sheets no longer match the
   process.exit(0);
 }
 {
+  const is16x9 = (() => {
+    try {
+      const s = JSON.parse(fs.readFileSync('script.json', 'utf8'));
+      return s?.format === '16:9' || s?.length === 'long_16x9';
+    } catch {
+      return false;
+    }
+  })();
   const traitsOf = (l) => [l.glasses, l.hat && l.hat !== 'none', l.mustache, l.beard, l.pattern, l.earrings, l.chain, l.vest, l.lips,
     (l.belly ?? 0) > 0.05, Math.abs((l.w ?? 1) - 1) > 0.04, Math.abs((l.h ?? 1) - 1) > 0.04, Math.abs((l.head ?? 1) - 1) > 0.03,
     l.hairC && l.hairC !== 'hair', l.topC2].filter(Boolean).length;
@@ -120,7 +128,7 @@ if (args.includes('--status')) { // no browser: which sheets no longer match the
   }));
   const setsSpec = Object.fromEntries(setIds.map((id) => {
     const d = P.EPISODE_SETS[id];
-    return [id, {title: d.title ?? null, bed: d.bed ?? null, bounds: d.bounds ?? null, plateCam: d.plateCam ?? [540, 1150, 1]}];
+    return [id, {title: d.title ?? null, bed: d.bed ?? null, bounds: d.bounds ?? null, plateCam: d.plateCam ?? (is16x9 ? [960, 540, 1] : [540, 1150, 1])}];
   }));
   const worldPropsSpec = {};
   for (const k of propKeys) {

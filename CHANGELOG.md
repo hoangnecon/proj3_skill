@@ -1,5 +1,26 @@
 # Changelog
 
+## `v4.1.0` — 2026-11-22 · Cinematic 16:9 Long-Form RSI: 4-View Rigs, True 16:9 QA, Anti-Slop/Severed-Limb CI & G2 Story Doctor (`docs/rsi-forensics-v4.0-2026-11-22.md`)
+- **Pillar 1 — Fixed 16:9 QA/Tile/Crop Corruption (`tile.py`, `crops.py`, `qa.mjs`, `design.mjs`, `deliver.mjs`, `blind_pack.mjs`):**
+  - Fixed `tile.py` hardcoded `9:16` cell height (`h = int(w * 1920 / 1080)`) → dynamic aspect ratio from actual image dimensions + `4×3` wide grids for `16:9` contact sheets, strips, and `final_check.jpg`.
+  - Fixed `crops.py` hardcoded `1080×1920` crop clamping → dynamic `[W, H]` frame space so `16:9` HOT crops capture exact right/left pixels.
+  - Fixed `design.mjs` `visual_spec.json` fallback `plateCam` for `16:9`.
+  - Upgraded `blind_pack.mjs` & `qa.mjs review --batch` to **10 checks** on `long_16x9` (`+ framing` for severed/floating limbs & depth, `+ variety` for static-wall/prop fatigue) with `set_streak` & `prev_set` metadata.
+- **Pillar 2 — Cinematic 4-View 2D Engine (`back.tsx`, `threeq.tsx`, `engine.ts`, `Film.tsx`, `sets/types.ts`, `Sheets.tsx`):**
+  - Added full riso-ink **`PersonBack` (`view: 'back'`)** and **`Person3Q` (`view: '3q'`)** character rigs matching exact `Person` proportions (`0` raw hex colors, `324/324` SVG smoke renders clean).
+  - Added foreground Over-The-Shoulder (`Actor.fg: true`) depth plane (`d = 1.2`), subtle Dutch camera roll (`ShotDef.tilt`), `SetDef.angle` (`wide|low|high|ots|reverse|closeup|pov`), and **Front + 3/4 + Back** turnarounds on `CastSheet`.
+- **Pillar 3 — Anti-Slop, Anti-Repetition & Severed-Limb CI (`geom.mjs`, `lint.mjs`):**
+  - `SE-15`: requires **`>= 15` distinct sets / angle plates** and **`>= 3` (target `>= 4`) distinct camera angle types** for `long_16x9` (WARN `< 4` sets for Shorts).
+  - `CH-09`: format-aware cast richness — requires **`>= 8` (target `>= 10`) cast looks** for `long_16x9` (removes Short `> 4` principal warning on Long-Form).
+  - `PR-05` & `GE-19` (**ERROR + HOT**): bans severed/floating giant body-part props (`Shoe|Foot|Leg|Hand|Arm|Paw|Finger`) whose top/side cut terminates inside the visible frame (`sy0 > 24 && sx0 > 24 && sx1 < W - 24`).
+  - `SH-16`: bans unbroken same-set streaks `> 10` shots (WARN `> 7`) and single-set dominance `> 18%` (WARN `> 14%`) on `long_16x9`.
+  - `SH-17`: enforces cinematic view diversity (`front <= 70%`, `back + 3q >= 15%`) and flags static `WORLD_PROP` copy-paste reuse `> 15` shots without variant diversity.
+- **Pillar 4 — Long-Form Narrative Depth & G2 Adversarial Story Doctor (`script_lint.py`, `sv_gate.py`, `skills/sv-02-long-form/references/story-doctor-prompt.md`):**
+  - `SC-29` (`long_16x9` ERROR): validates all 5 structured chapters (`Goal / Obstacle / Turn / Mini-Cliffhanger`) with balanced `10%–34%` segment spans.
+  - `SC-30` (`long_16x9` ERROR): requires `>= 3` distinct `Plant` (`<= 55%`) → `Payoff` (`>= 60%`) knots.
+  - `SC-31` (`long_16x9` ERROR/WARN): requires `>= 12` causal Spine links and warns on `> 15`-segment plot gaps.
+  - `sv_gate.py`: enforces mandatory **G2 Adversarial Story Doctor** audit (`qa/story_doctor.json`, `score >= 80`, `verdict: "pass"`, `0` meandering stretches) and **10-check Blind Review** at G5 for `long_16x9`.
+
 ## `v4.0.0` — 2026-11-21 · 16:9 long-form skill (sv-02-long-form), native 1920×1080 engine & Drive-verified content ideation RSI
 - **New Dedicated Long-Form Skill (`skills/sv-02-long-form/SKILL.md` + `references/ideation-system-prompt.md`):**
   - Complete standard for 10-minute (`8–12 min`, `2,200–3,600` words, `75–160` segments) 16:9 widescreen (`1920×1080`) animated story episodes reusing the exact same G1–G7 gates, `visual_spec.json`, `bundle_cache.mjs`, `deliver.mjs` per-shot chunk cache (`out/_chunks/`), `blind_pack.mjs` + `blind_sha`, and lean swarm orchestration.

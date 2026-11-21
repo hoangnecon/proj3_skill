@@ -57,12 +57,21 @@ const qaStatus = readJson('qa/qa_status.json', {hashes: {}});
 const hot = readJson('qa/hot.json', {});
 const stripsNeeded = readJson('qa/strips_needed.json', []);
 const script = readJson('script.json', {});
+const isLong16x9 = script?.format === '16:9' || script?.length === 'long_16x9';
+const format = isLong16x9 ? '16:9' : '9:16';
 const words = readJson('src/data/words.json', []);
 const brief = readText('brief.md');
 const setTitles = extractSetTitles(script, brief);
 
-const entries = shots.map((r) => {
+const orderedShots = [...shots].sort((a, b) => a.i - b.i);
+let lastSet = null;
+let streak = 0;
+
+const entries = orderedShots.map((r) => {
   const i = r.i;
+  const prevSet = lastSet;
+  streak = r.set === lastSet ? streak + 1 : 1;
+  lastSet = r.set;
   const hash = String(qaStatus?.hashes?.[i] ?? qaStatus?.hashes?.[String(i)] ?? '');
   const narration = (Array.isArray(words) ? words : [])
     .filter((w) => w && typeof w.s === 'number' && w.s >= r.t0 - 0.05 && w.s < r.t1)
@@ -88,7 +97,10 @@ const entries = shots.map((r) => {
     name: r.name,
     t0: r.t0,
     t1: r.t1,
+    format,
     set_title: setTitles[r.set] || r.set,
+    set_streak: streak,
+    prev_set: prevSet,
     narration,
     is_hot: hotReasons.length > 0,
     hot_reasons: hotReasons,
@@ -152,7 +164,10 @@ const formatSliceShot = (e) => ({
   name: e.name,
   t0: e.t0,
   t1: e.t1,
+  format: e.format,
   set_title: e.set_title,
+  set_streak: e.set_streak,
+  prev_set: e.prev_set,
   narration: e.narration,
   is_hot: e.is_hot,
   hot_reasons: e.hot_reasons,
@@ -172,6 +187,7 @@ fs.mkdirSync(outDir, {recursive: true});
 
 const manifest = {
   generated_at: new Date().toISOString(),
+  format,
   total_shots: entries.length,
   slices: [1, 2, 3].map((k) => `${outDir}/slice_${k}.json`),
   shots: entries,
@@ -191,6 +207,7 @@ for (let k = 0; k < 3; k++) {
   const payload = {
     slice: k + 1,
     total_slices: 3,
+    format,
     count: sl.length,
     hot_count: sl.filter((e) => e.is_hot).length,
     contact_pages: contactPages,
@@ -200,7 +217,31 @@ for (let k = 0; k < 3; k++) {
   fs.writeFileSync(path.join(outDir, `slice_${k + 1}.json`), JSON.stringify(payload, null, 1) + '\n');
 }
 
-const rubric = `# Blind Visual QA Rubric (Contact-First)
+const rubric = isLong16x9
+  ? `# Blind Visual QA Rubric (Contact-First · 16:9 Long-Form)
+
+1. **Judge ONLY from the rendered images and \`narration\`** in \`qa/blind_review/slice_*.json\`.
+2. **NEVER read \`src/episode/shotlist.ts\`** or inspect coordinates, actor rigs, or prop code while reviewing.
+3. **Contact-First Workflow (Token-Lean)**:
+   - **First**, open every image in \`contact_pages\` at the top of your slice (typically only 2 contact pages covering ~12 shots each in a wide 4-column 16:9 grid). Use these contact pages to inspect all non-HOT shots in each \`pages[]\` group.
+   - **Next**, for every HOT shot (\`is_hot: true\`), open its \`images.card\`, \`images.crop\` (if non-null), and any \`images.strips\`, and include \`"crops"\` in \`looked\`.
+   - For non-HOT shots with non-empty \`images.strips\`, open those strips; only open \`images.card_fallback\` if a frame on the contact page is ambiguous or looks suspicious.
+   - In \`looked\`, include \`"contact"\` (or \`"card"\`) for every shot, plus \`"crops"\` for HOT shots.
+4. **Include \`"blind_sha"\`** from the slice entry verbatim in each JSONL review line.
+5. **Check ALL 10 criteria** (\`acting\`, \`contact\`, \`overlap\`, \`set\`, \`text\`, \`caption\`, \`beat\`, \`model\`, \`framing\`, \`variety\`) formatted as \`"ok — ..."\` or \`"fix — ..."\`, with a \`note\` of >= 6 words describing what you actually saw:
+   - \`acting\`: expression, gesture, posture, and gaze match the narration beat.
+   - \`contact\`: feet planted on ground/floor, hands actually meet props/targets, seated bodies rest on seats.
+   - \`overlap\`: no unintended character/prop collisions or faces hidden behind props/overlays.
+   - \`set\`: environment reads clearly, clean perspective, no stray/clipped set geometry.
+   - \`text\`: every sign, label, and overlay is legible, unclipped, and unoccluded.
+   - \`caption\`: caption band is clear of faces, hands, and hero props.
+   - \`beat\`: visual action and timing match the spoken \`narration\` for this shot.
+   - \`model\`: character proportions, outfits, and identity stay on-model.
+   - \`framing\` (**16:9 cinematic framing — MANDATORY \`fix\` trigger**): check depth, angle, and frame edges. **Any severed or floating giant limb** (arm, hand, leg, tentacle, creature appendage) terminating mid-air inside the frame is an automatic \`fix\` — giant limbs MUST bleed off the frame edge, never end floating in mid-air!
+   - \`variety\` (**visual freshness — MANDATORY \`fix\` trigger**): inspect \`set_streak\` and \`prev_set\` on each shot entry alongside the rendered contact page. **Same-wall / same-prop copy-paste fatigue** or repeating the same static wall framing, pose, or prop layout across consecutive shots is an automatic \`fix\`!
+6. Submit reviews via \`node scripts/qa.mjs review --batch <file.jsonl>\`.
+`
+  : `# Blind Visual QA Rubric (Contact-First)
 
 1. **Judge ONLY from the rendered images and \`narration\`** in \`qa/blind_review/slice_*.json\`.
 2. **NEVER read \`src/episode/shotlist.ts\`** or inspect coordinates, actor rigs, or prop code while reviewing.
