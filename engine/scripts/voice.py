@@ -531,6 +531,8 @@ def main():
     PA = json.loads((ROOT / "standards/pacing.json").read_text())
     if script.get("length") == "long":  # opt-in band, approved in brief.md (script_lint SC-27)
         PA["episode"] = PA["episode_long"]
+    elif script.get("length") == "long_16x9":  # 10-min 16:9 band (sv-02-long-form)
+        PA["episode"] = PA["episode_long_16x9"]
     default_pause = script.get("pause_after", PA["voice"]["default_pause_after_s"])
     global_english = script.get("english", [])
     sents_dir = ROOT / "audio" / "_sents"
