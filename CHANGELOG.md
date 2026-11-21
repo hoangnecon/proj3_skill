@@ -1,5 +1,17 @@
 # Changelog
 
+## `v4.0.0` — 2026-11-21 · 16:9 long-form skill (sv-02-long-form), native 1920×1080 engine & Drive-verified content ideation RSI
+- **New Dedicated Long-Form Skill (`skills/sv-02-long-form/SKILL.md` + `references/ideation-system-prompt.md`):**
+  - Complete standard for 10-minute (`8–12 min`, `2,200–3,600` words, `75–160` segments) 16:9 widescreen (`1920×1080`) animated story episodes reusing the exact same G1–G7 gates, `visual_spec.json`, `bundle_cache.mjs`, `deliver.mjs` per-shot chunk cache (`out/_chunks/`), `blind_pack.mjs` + `blind_sha`, and lean swarm orchestration.
+  - Reusable **4-Agent Pitch → Cross-Critique → Blind Judge** System Prompt with 100-point blind scorecard, 5-chapter 10-minute pacing architecture, Inductive Hook (`0:00–0:25`), and open/series-capable ending guidelines.
+- **Native 16:9 Widescreen Engine + 10-Min Budget (`standards/pacing.json`, `engine/src/format.ts`, `Root.tsx`, `Film.tsx`, `Sheets.tsx`, `geom.mjs`, `lint.mjs`, `qa.mjs`, `deliver.mjs`, `script_lint.py`, `sv_gate.py`):**
+  - Opt-in `"format": "16:9"` and `"length": "long_16x9"` in `script.json` (`episode_long_16x9` in `standards/pacing.json`), 100% backward-compatible with `9:16` Shorts (`1080×1920`).
+  - Dynamic `FRAME_W`/`FRAME_H`/`CAPTION_BAND` across Remotion compositions, `SetPlate` grids, geometry/lint checks (`CA-05`, `GE-*`, `OV-03`, `SZ-*`), `deliver.mjs` chunk cache key (`${W}x${H}`), and `sv_gate.py` G2/G3/G7 checks.
+- **Short & Long Content DNA RSI from 23 Published Drive Hits (`skills/sv-01-series-bible`, `skills/sv-10-script`, `references/premise-ideation.md`, `sv-00-pipeline`, `README.md`):**
+  - Codified the winning patterns across the 23 published `SCRIPT_YOUTUBE` episodes (*Bốn nghìn đôi cánh*, *Huy hiệu không bao giờ sai*, *Luôn với tới cậu*, *Chiếc bóng đen nhất*, *Điểm hồi sinh*, *Nhãn mặt cười*, *Trước khi trời sáng*, *Thị trấn trên đĩa*, *Người trực tàu*, *Nói gì thành nấy*, *Vảy ngọc rồng*): kids/school-age appeal, World-Sorting / Power-Tier contrasts (Group A vs B vs C), Survival/Impostor/Chase stakes, Relatable Relational Cores (best friends, family, siblings, grandparent), `s1–s2` Inductive Hook, zero-math clarity, and recurring hero **Nhím**.
+
+## `v3.9.1` — 2026-11-21 · Default H.264 CRF 21 in `deliver.mjs` (~100–140 MB per 2m30s episode)
+
 ## `v3.9.0` — 2026-11-21 · Stage-1 visual_spec, PR-03/04, GE-16..18, MO-12, hash/cache & anti-bypass blind review (docs/rsi-loop-v3.9-2026-11-21.md)
 - **Stage-1 Front-Loaded Visual Manifest & Design CI (`engine/scripts/design.mjs`, `engine/scripts/geom.mjs`, `engine/scripts/lint.mjs`):**
   - Auto-writes `qa/design/visual_spec.json` measuring cast, sets (`bounds`, `plateCam`), `WORLD_PROPS`, and `HAND_PROPS` (`gripDist`).

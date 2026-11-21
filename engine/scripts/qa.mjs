@@ -296,7 +296,7 @@ if (mode === 'where') {
         console.log(`    !! ${ri.id} reaches to x=${Math.round(ri.rx)} behind facing dir=${ri.dir > 0 ? '+1' : '-1'} (actor x=${Math.round(ri.x)}) @ t=${ri.t.toFixed(2)}s`);
       }
     }
-    const cap = g.caption ?? {x0: 0, y0: 1570, x1: 1080, y1: 1710};
+    const cap = g.caption ?? {x0: 0, y0: geom.CAPTION[0], x1: geom.W, y1: geom.CAPTION[1]};
     const capFlag = g.captionIssues?.length ? `  !! CAPTION(${g.captionIssues.map((c) => `${c.kind}:${c.id}`).join(', ')})` : '  (head/hands/hero-props clear)';
     console.log(`\n@ t=${t.toFixed(2)}s  cam=[${g.cam.map((v, k) => k === 2 ? v.toFixed(2) : Math.round(v)).join(', ')}]  caption=${fmtB(cap)}${capFlag}`);
     if (g.actors?.length) {

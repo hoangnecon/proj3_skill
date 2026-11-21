@@ -40,7 +40,7 @@ if (process.env.SV_SKIP_RENDER && fresh) {
   const DEPS = makeShotHash(rows, P.SHOTS);
   const hashes = rows.map((r) => DEPS.hashOf(r));
   const globalFiles = [
-    'src/Film.tsx', 'src/Root.tsx', 'src/kit.tsx', 'src/chars.tsx',
+    'src/Film.tsx', 'src/Root.tsx', 'src/format.ts', 'src/kit.tsx', 'src/chars.tsx',
     'src/side.tsx', 'src/overlays.tsx', 'src/data/words.json',
     'src/data/cues.json', 'src/episode/cast.ts', 'src/props.tsx',
   ];
@@ -53,7 +53,13 @@ if (process.env.SV_SKIP_RENDER && fresh) {
     }
   }
   const srcGlobalHash = gh.digest('hex').slice(0, 14);
-  const globalKey = `crf21|1080x1920|30fps|${srcGlobalHash}`;
+  const fmt = (() => {
+    try { return JSON.parse(fs.readFileSync('script.json', 'utf8'))?.format === '16:9' ? '16:9' : '9:16'; }
+    catch { return '9:16'; }
+  })();
+  const W = fmt === '16:9' ? 1920 : 1080;
+  const H = fmt === '16:9' ? 1080 : 1920;
+  const globalKey = `crf21|${W}x${H}|30fps|${srcGlobalHash}`;
   const FPS = 30;
   const totalFrames = Math.max(1, Math.round(P.DURATION * FPS));
   const frameRanges = rows.map((r, idx) => {

@@ -6,6 +6,7 @@ import {PersonSide, SIDE_CYCLE} from './side';
 import {SETS, SetLayers, Item, SetOpts} from './sets';
 import {OverView} from './overlays';
 import {Actor, DURATION, FPS, Keys, Shot, TT, WORDS, abs, resolveShots, tAt} from './engine';
+import {FRAME_W, FRAME_H, CAPTION_Y} from './format';
 import {SHOTS} from './episode/shotlist';
 import {clamp, easeIO, easeOut, lerp, smooth} from './math';
 import {HAND_PROPS, SIDE_PROPS, WORLD_PROPS} from './props';
@@ -250,9 +251,9 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx}> = ({a, ctx}) => {
 export const LayerG: React.FC<{d: number; cam: [number, number, number]; children: React.ReactNode}> = ({d, cam, children}) => {
   const [cx, cy, k] = cam;
   const kd = Math.pow(k, d);
-  const x = 540 + (cx - 540) * d;
-  const y = 960 + (cy - 960) * d;
-  return <g transform={`translate(540 960) scale(${kd}) translate(${-x} ${-y})`}>{children}</g>;
+  const x = FRAME_W / 2 + (cx - FRAME_W / 2) * d;
+  const y = FRAME_H / 2 + (cy - FRAME_H / 2) * d;
+  return <g transform={`translate(${FRAME_W / 2} ${FRAME_H / 2}) scale(${kd}) translate(${-x} ${-y})`}>{children}</g>;
 };
 
 const Captions: React.FC<{t: number}> = ({t}) => {
@@ -277,9 +278,9 @@ const Captions: React.FC<{t: number}> = ({t}) => {
   const ch = chunks.find((c, i) => t >= c.s - 0.05 && t < (chunks[i + 1]?.s ?? c.e + 0.6) - 0.05 && t < c.e + 0.6);
   if (!ch) return null;
   const age = t - ch.s;
-  const y = 1640 + (1 - easeOut(clamp(age / 0.12))) * 20;
+  const y = CAPTION_Y + (1 - easeOut(clamp(age / 0.12))) * 20;
   return (
-    <text x={540} y={y} textAnchor="middle" fontFamily={FONT} fontWeight={900} fontSize={66} paintOrder="stroke" stroke={PAL.ink} strokeWidth={16} strokeLinejoin="round">
+    <text x={FRAME_W / 2} y={y} textAnchor="middle" fontFamily={FONT} fontWeight={900} fontSize={66} paintOrder="stroke" stroke={PAL.ink} strokeWidth={16} strokeLinejoin="round">
       {ch.w.map((w, i) => (
         <tspan key={i} fill={t >= w.s && t < w.e + 0.15 ? PAL.yellow : PAL.white}>{(i ? ' ' : '') + w.w.replace(/\.{3,}$/, '…').replace(/[,.:]$/, '')}</tspan>
       ))}
@@ -373,19 +374,19 @@ export const Film: React.FC = () => {
   return (
     <AbsoluteFill style={{background: PAL.navy}}>
       <Audio src={staticFile('mix.wav')} />
-      <svg viewBox="0 0 1080 1920" width={1080} height={1920} style={{display: 'block'}}>
+      <svg viewBox={`0 0 ${FRAME_W} ${FRAME_H}`} width={FRAME_W} height={FRAME_H} style={{display: 'block'}}>
         <Defs seed={grainSeed + 1} />
-        <clipPath id="wipe"><rect x={0} y={0} width={1080 * wipe} height={1920} /></clipPath>
+        <clipPath id="wipe"><rect x={0} y={0} width={FRAME_W * wipe} height={FRAME_H} /></clipPath>
         <g clipPath={wipe < 1 ? 'url(#wipe)' : undefined}>{world}</g>
-        {wipe < 1 && <rect x={1080 * wipe - 40} y={0} width={40} height={1920} fill={PAL.yellow} />}
-        {night > 0 && <rect width={1080} height={1920} fill={PAL.navy} opacity={0.55 * night} style={{mixBlendMode: 'multiply'}} />}
-        {night > 0 && <circle cx={540} cy={1000} r={700} fill="url(#glowY)" opacity={0.45 * night} style={{mixBlendMode: 'screen'}} />}
+        {wipe < 1 && <rect x={FRAME_W * wipe - 40} y={0} width={40} height={FRAME_H} fill={PAL.yellow} />}
+        {night > 0 && <rect width={FRAME_W} height={FRAME_H} fill={PAL.navy} opacity={0.55 * night} style={{mixBlendMode: 'multiply'}} />}
+        {night > 0 && <circle cx={FRAME_W / 2} cy={FRAME_H / 2} r={700} fill="url(#glowY)" opacity={0.45 * night} style={{mixBlendMode: 'screen'}} />}
         {overs}
-        <rect width={1080} height={1920} filter="url(#grain)" style={{mixBlendMode: 'multiply'}} />
-        <rect width={1080} height={1920} fill="url(#vig)" />
+        <rect width={FRAME_W} height={FRAME_H} filter="url(#grain)" style={{mixBlendMode: 'multiply'}} />
+        <rect width={FRAME_W} height={FRAME_H} fill="url(#vig)" />
         <Captions t={t} />
-        {flash > 0 && <rect width={1080} height={1920} fill={PAL.white} opacity={flash} />}
-        {Math.max(fadeIn, fadeOut) > 0 && <rect width={1080} height={1920} fill={PAL.navy} opacity={Math.max(fadeIn, fadeOut)} />}
+        {flash > 0 && <rect width={FRAME_W} height={FRAME_H} fill={PAL.white} opacity={flash} />}
+        {Math.max(fadeIn, fadeOut) > 0 && <rect width={FRAME_W} height={FRAME_H} fill={PAL.navy} opacity={Math.max(fadeIn, fadeOut)} />}
       </svg>
     </AbsoluteFill>
   );

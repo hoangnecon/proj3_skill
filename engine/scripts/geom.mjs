@@ -1,13 +1,23 @@
 // Screen geometry & SVG bounds/text measurement for shots and design lint (no browser render).
 // Used by lint.mjs (GE-*, PR-*, SE-14, MO-10), qa.mjs (crops, where), and Sheets.tsx (PropSheet).
 // World → screen at depth d follows Film.tsx LayerG:
-//   kd = k^d, ox = 540 + (cx - 540)·d, oy = 960 + (cy - 960)·d
-//   sx = 540 + (wx - ox)·kd, sy = 960 + (wy - oy)·kd
+//   kd = k^d, ox = W/2 + (cx - W/2)·d, oy = H/2 + (cy - H/2)·d
+//   sx = W/2 + (wx - ox)·kd, sy = H/2 + (wy - oy)·kd
+import fs from 'node:fs';
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 
-export const W = 1080, H = 1920;
-export const CAPTION = [1570, 1710]; // caption band (Film.tsx Captions y = 1640, 66 px type, stroke)
+export const FORMAT = (() => {
+  try {
+    const s = JSON.parse(fs.readFileSync('script.json', 'utf8'));
+    return s?.format === '16:9' ? '16:9' : '9:16';
+  } catch {
+    return '9:16';
+  }
+})();
+export const W = FORMAT === '16:9' ? 1920 : 1080;
+export const H = FORMAT === '16:9' ? 1080 : 1920;
+export const CAPTION = FORMAT === '16:9' ? [880, 1000] : [1570, 1710]; // caption band (Film.tsx Captions y = 940 or 1640, 66 px type, stroke)
 
 const lerp = (a, b, u) => a + (b - a) * u;
 const clamp = (u) => Math.max(0, Math.min(1, u));
@@ -45,8 +55,8 @@ export const clip = (b) => {
 /** looks: {key: {h, head, w}}; returns [{id, look, hc, head, body, hands, feet, all, h}] in screen px */
 export const actorBoxes = (row, t, looks = {}) => {
   const [cx, cy, k] = camAt(row, t);
-  const sx = (wx) => 540 + (wx - cx) * k;
-  const sy = (wy) => 960 + (wy - cy) * k;
+  const sx = (wx) => W / 2 + (wx - cx) * k;
+  const sy = (wy) => H / 2 + (wy - cy) * k;
   return (row.actors ?? []).map((a) => {
     const L = looks[a.look] ?? {};
     const s = a.s ?? 1, hh = L.h ?? 1, hd = L.head ?? 1, ww = L.w ?? 1;
@@ -409,13 +419,13 @@ export const measureHandPropBox = (k, P = cachedP) => {
   return res;
 };
 
-/** Project a world box through camera [cx, cy, k] at LayerG depth d into 1080×1920 screen px. */
+/** Project a world box through camera [cx, cy, k] at LayerG depth d into W×H screen px. */
 export const projectBox = (b, cam, d = 1) => {
   const [cx, cy, k] = cam;
   const kd = Math.pow(k, d);
-  const ox = 540 + (cx - 540) * d;
-  const oy = 960 + (cy - 960) * d;
-  return box(540 + (b.x0 - ox) * kd, 960 + (b.y0 - oy) * kd, 540 + (b.x1 - ox) * kd, 960 + (b.y1 - oy) * kd);
+  const ox = W / 2 + (cx - W / 2) * d;
+  const oy = H / 2 + (cy - H / 2) * d;
+  return box(W / 2 + (b.x0 - ox) * kd, H / 2 + (b.y0 - oy) * kd, W / 2 + (b.x1 - ox) * kd, H / 2 + (b.y1 - oy) * kd);
 };
 
 /** Extract set <text> boxes for a set id at given options, separated by depth layer (back/mid d=1, fg d=1.3). */

@@ -30,6 +30,9 @@ checks), `mix_targets.json` (voice chain, music 15–18 dB under, −14 LUFS), `
 answer, and quote it in the review (`user_quote`). If the user told you to continue without checking with
 them, write `approval: delegated` and quote that instruction.
 
+## Long-form mode (`sv-02-long-form` · 16:9 · 10-minute)
+When the user asks for a **16:9 horizontal, ~10-minute Long-Form** episode (instead of the default 1080×1920 2–3 min Short-Form pipeline), read `sv-02-long-form` alongside `sv-01` and `sv-10` before G1. (`sv-02-long-form` governs 16:9 framing, multi-act pacing, and 10-minute production; `SC-27` in `sv-10` remains the opt-in `episode_long` 170–240 s vertical short override.)
+
 ## Start a new episode
 ```bash
 bash <suite>/tools/new_episode.sh ~/Work/PROJ3/<slug> --node-modules ~/Work/PROJ3/mua-noi-doi/node_modules

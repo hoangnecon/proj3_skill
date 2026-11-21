@@ -26,6 +26,7 @@
   "_why": "2-3 minute vertical story (~2.5 min target = 150 s). At ~5.0 overall words/s (5.25 in-segment ups + sentence/segment pauses), 620-860 spoken words run 125-170 s."
  },
  "episode_long": {"_doc": "OPT-IN length band for an adapted source story the USER asked to keep longer than 2-3 min. Needs script.json \"length\": \"long\" AND brief.md '## Length override' with user_quote (script_lint SC-27). Cutting pace (shots) is unchanged.", "voice_s_target": 200, "voice_s": [170, 240], "voice_s_hard": [160, 250], "words": [860, 1150], "segments": [34, 52]},
+ "episode_long_16x9": {"_doc": "10-minute 16:9 long-form story (sv-02-long-form). Needs script.json \"length\": \"long_16x9\" AND \"format\": \"16:9\" AND brief.md '## Length override' with user_quote.", "voice_s_target": 600, "voice_s": [480, 720], "voice_s_hard": [420, 780], "words": [2200, 3600], "segments": [75, 160]},
  "shots": {
   "mean_s": [2.0, 3.0],
   "shots_per_min": [20, 28],

@@ -11,13 +11,15 @@ A weak script cannot be saved by pictures. This skill turns an idea into `brief.
 
 ## Read first
 1. `sv-01-series-bible/SKILL.md` — three archetypes (`Personal Rule-Trap`, `Systemic Satire`, `Hybrid VN Trap`), premise test, banned premise traps, no-copying rule.
-2. `references/premise-ideation.md` — 4 Generative Lenses and Reverse-Design Protocol (designing the Lateral Rule-Hack and Double-Bind before `s1`).
+2. `references/premise-ideation.md` — 4 Generative Lenses, **23-Published-Hits DNA** (kids/school-age audience, World-Sorting/Tiers, Survival/Impostor stakes, Relational Cores, `s1–s2` Inductive Hook, 15s clarity / zero math overload, recurring hero **Nhím**), Reverse-Design Protocol, and the **4-Pitch → Cross-Critique → Blind Judge** ideation protocol.
 3. `references/craft.md` — 548-script survey benchmarks, 3-Act / 10-Beat 5-Knot Engine, rhythm, northern wording, `script.json` format, 14-point rubric.
 4. `references/exemplar.md` — *Thang máy ăn bí mật*: study **only** for northern voice, concrete details, and sentence-length rhythm (`SD 4.3`); read the `v3.4.0` warning banner at the top before outlining structure.
 
 ## Workflow
 ### G1 — brief
-1. Use `references/premise-ideation.md` (Reverse-Design Protocol) to invent **3 candidate premises** spanning distinct Generative Lenses. Every candidate must pass `sv-01` Premise Test and avoid all Banned Premise Traps. Pitch each in 2–3 crisp lines (rule `s1` + blocker + personal handicap + double-bind & hack). Let the user pick (or pick if delegated, and quote them).
+1. Use `references/premise-ideation.md` (Reverse-Design Protocol + 23-Hits DNA) to invent **3 candidate premises** spanning distinct Generative Lenses.
+   - **High-stakes / fresh Shorts option:** run the **4-Pitch → Cross-Critique → Blind Judge** protocol (`references/premise-ideation.md §5`) — generate 4 distinct pitches, cross-critique for Stranger Test / math overload / Act-3 hack, and blind-judge the survivors before presenting the winner (and runner-up if close).
+   - Every candidate must pass `sv-01` Premise Test, avoid all Banned Premise Traps, use an **Inductive Hook (`s1–s2`)**, and keep the core rule explainable to a **10-year-old in 15 seconds** (zero math overload). Pitch each in 2–3 crisp lines (rule `s1` + blocker + relational core/handicap + double-bind & hack). Let the user pick (or pick if delegated, and quote them).
 2. Fill `brief.md`: `## Archetype` (`Personal Rule-Trap | Systemic Satire | Hybrid VN Trap` + Generative Lens), `## Premise` (`s1`, visual state, surface-loophole blocker), `## Spine` (5-Knot Engine: Want/Handicap + Foil, Plant, Crisis + Ticking Clock, Double-Bind, Lateral Rule-Hack + Cost, Past-Reinterpreting Turn), `## Why it is funny`, `## Characters`, `## Locations`, `## Ending` (`≤ 12w` deadpan button), and `## Not copying`.
 3. Show `brief.md`; get approval. Fill `gates/G1.review.md` (`verdict: pass`, `approval: user|delegated`, `user_quote`).
 4. Run `python3 scripts/sv_gate.py pass G1`.

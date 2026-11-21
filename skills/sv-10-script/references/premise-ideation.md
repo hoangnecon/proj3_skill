@@ -28,7 +28,21 @@ Divide everyone in town, school, or one household into **Group A** and **Group B
 Everyone in the alley obeys a quirky personal rule. Most neighbours draw flashy, convenient rules (`sv-01` world); the narrator draws the single glitch that looks purely humiliating or counterproductive — until Act 3 reveals it is the **only** mechanical tool that fits the climax lock.
 - *Strict bans:* Never use `"your birth name is your superpower"`, never hand out generic fantasy spells, and never build a villain defeated by brute force.
 
-## 2. Reverse-design protocol (design Act 3 before s1)
+## 2. 23-Published-Hits DNA (`Drive/SCRIPT_YOUTUBE`)
+
+Core viewers are **kids & school-age students**. Across 23 published channel hits, the strongest premises combine an immediately graspable rule with high-visibility stakes and a human anchor:
+
+- **World-Sorting / Power / Trait Tiers (Group A vs Group B vs Group C):** Divide the world into distinct, visual tiers or classes with clear trade-offs — e.g. *Bốn nghìn đôi cánh* (dragons / owls / mice), *Huy hiệu không bao giờ sai* (heroes vs villains), *Chiều cao của tiền*, *Chiếc bóng đen nhất*, *Luôn với tới cậu* (best friend picks your superpower).
+- **Immediate Survival / Chase / Impostor / Mild-Horror Stakes:** Put the characters inside a ticking-clock threat, chase, or infiltration mystery — e.g. *Trước khi trời sáng* (aliens & curfew), *Nhãn mặt cười* (spaceship impostor), *Sân bóng không hồi kết*, *Người trực tàu* (100-year ship), *Bẫy dịch chuyển*.
+- **Relatable Relational Cores:** Ground the uncanny rule inside an everyday bond kids care about:
+  - *Best friends:* *Huy hiệu không bao giờ sai*, *Luôn với tới cậu*
+  - *Family:* *Thị trấn trên đĩa*, *Nói gì thành nấy*, *Dấu lặng của thị trấn*
+  - *Siblings:* *Nhãn mặt cười*
+  - *Grandparent–grandchild:* *Điểm hồi sinh của ông*, *Giỗ chia đất*
+- **Inductive Hook (`Hook Quy Nạp`) & 15-Second Rule:** Drop into a vivid, concrete crisis or puzzle in `s1–s2` *before* expanding the wider world rule. The core rule must be explainable to a **10-year-old in 15 seconds** — **ZERO math overload** (no multi-variable formulas, percentages, or nested conditional tables).
+- **Series / Open-Ended Potential:** When designing expandable worlds or recurring adventures, consider anchoring the protagonist around recurring hero **Nhím** so episodes work both standalone and as an open-ended series.
+
+## 3. Reverse-design protocol (design Act 3 before s1)
 
 Do **not** invent a clever `s1` hook first and scramble for an ending later — that creates external-disaster twists and preachy morals. Design **backwards**:
 
@@ -40,7 +54,16 @@ Do **not** invent a clever `s1` hook first and scramble for an ending later — 
    - `s1` (`≤ 16–18` words): State the rule with zero preamble.
    - `s2–s3`: Show the visual state (`sv-20`) + immediately slam the **Surface-Loophole Blocker** (*"Leaving the room doesn't reset it; faking X does nothing"*).
 
-## 3. Sanity checklist before pitching G1
+## 4. Sanity checklist before pitching G1
 - **The Stranger Test:** If you say ONLY `s1` out loud, does someone ask *"Wait, then what happens when..."* within 2 seconds? If they shrug *"Oh, like a metaphor"*, discard it.
+- **15-Second / Zero-Math Test:** Can a 10-year-old repeat the core rule and stakes back after 15 seconds without doing arithmetic?
 - **No-Escape Test:** Is the protagonist forced to interact with the rule even if they try to stay home and do nothing?
 - **Optics & Physics Check:** Check sightlines, gravity, conservation of action, and sleeping/eating edge cases before writing `beats.md`.
+
+## 5. 4-Pitch → Cross-Critique → Blind Judge Ideation Protocol (G1 High-Stakes / Fresh Shorts)
+
+Use this protocol for high-stakes or fresh Short-Form episodes instead of settling on the first decent idea:
+
+1. **4 Distinct Pitches:** Generate 4 candidate premises spanning distinct Generative Lenses (`§1`) and grounded in the 23-Hits DNA (`§2`). Each pitch specifies: `s1–s2` Inductive Hook, 15-second rule, Surface-Loophole Blocker, Relational Core, Double-Bind, and Act-3 Lateral Rule-Hack (plus whether it fits a recurring **Nhím** arc).
+2. **Cross-Critique:** Stress-test each pitch against the other 3 to expose Stranger Test weakness, math overload, passive-middle risk, or an unearned Act-3 hack. Patch or cut any pitch that fails.
+3. **Blind Judge:** Strip lens/author labels and score the surviving pitches on four criteria: (a) `s1–s2` Inductive Hook pull, (b) 10-year-old 15-second clarity, (c) relational + survival/impostor stakes, (d) Act-3 lateral hack inevitability. Present the top winner (and runner-up if close) to the user for G1 approval.

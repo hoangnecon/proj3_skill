@@ -109,7 +109,7 @@ if (phase !== 'shots') {
       if (st.glow < TH.glow) err('SE-10', `${id}: no light source glow (url(#glowY)) — every location has a visible light source`);
       // SE-14: diegetic sign clipped on set plate camera
       if (!lineWaived(setsSrc, 'SE-14', id)) {
-        const cam = d.plateCam ?? [540, 1150, 1];
+        const cam = d.plateCam ?? [W / 2, H / 2 + 190, 1];
         const txs = setTextsAt(id, {t: 1, ...(d.plateOpts ?? {})}, P).filter((s) => s.fontSize >= 18);
         for (const tx of txs) {
           const sb = projectBox({x0: tx.x0, y0: tx.y0, x1: tx.x1, y1: tx.y1}, cam, tx.d);
@@ -265,7 +265,7 @@ if (phase !== 'design') {
       visitTT(o.at, tag + '.over'); visitTT(o.until, tag + '.over');
       if (!OVER.has(o.k)) err('OV-01', `${tag}: overlay kind ${o.k}`);
       if (o.k === 'bubble' && (o.text ?? '').length > 28) err('OV-02', `${tag}: bubble text > 28 chars: "${o.text}"`);
-      if (!o.world && o.y > 1480 && o.y < 1760) err('OV-03', `${tag}: overlay at y=${o.y} sits in the caption band (1480–1760)`);
+      if (!o.world && o.y > CAPTION[0] - 90 && o.y < CAPTION[1] + 50) err('OV-03', `${tag}: overlay at y=${o.y} sits in the caption band (${CAPTION[0] - 90}–${CAPTION[1] + 50})`);
     }
     for (const a of s.actors ?? []) {
       const at = `${tag} actor ${a.id}`;
@@ -317,7 +317,7 @@ if (phase !== 'design') {
     if (r.cam2 && dur < 1.0 && (Math.abs(r.cam2[0] - r.cam[0]) > 40 || Math.abs(k1 - k0) > 0.1)) warn('CA-02', `${tag}: camera move in a ${dur.toFixed(2)} s shot reads as a jolt`);
     const B = P.SETS[r.set]?.bounds;
     if (B) for (const [cx, cy, k] of [r.cam, r.cam2 ?? r.cam]) {
-      const [x0, y0, x1, y1] = [cx - 540 / k, cy - 960 / k, cx + 540 / k, cy + 960 / k];
+      const [x0, y0, x1, y1] = [cx - (W / 2) / k, cy - (H / 2) / k, cx + (W / 2) / k, cy + (H / 2) / k];
       if (x0 < B[0] - 1 || y0 < B[1] - 1 || x1 > B[2] + 1 || y1 > B[3] + 1)
         err('CA-05', `${tag}: camera [${cx}, ${cy}, ${k}] sees [${Math.round(x0)}, ${Math.round(y0)}, ${Math.round(x1)}, ${Math.round(y1)}] — outside the painted set bounds [${B.join(', ')}] (empty void on screen)`);
     }
@@ -401,7 +401,7 @@ if (phase !== 'design') {
         else if (Math.abs(y - rc.fy) > 160 * a.s) warn('MO-09', `${tag}: ${a.id} stands ${Math.round(Math.abs(y - rc.fy))} px off the target's floor line — check the reach strip: does the hand meet the fixture?`);
         // SZ-02: the acting body must be inside the frame at the moment of the reach
         { const u = Math.max(0, Math.min(1, (t - r.t0) / dur)); const c0 = r.cam, c1 = r.cam2 ?? r.cam; const cx = c0[0] + (c1[0] - c0[0]) * u, k = c0[2] + (c1[2] - c0[2]) * u;
-          if (Math.abs(x - cx) > 540 / k - 110 * a.s) warn('SZ-02', `${tag}: ${a.id} is cut by the frame edge while reaching (x ${Math.round(x)}, frame ${Math.round(cx - 540 / k)}…${Math.round(cx + 540 / k)})`); }
+          if (Math.abs(x - cx) > (W / 2) / k - 110 * a.s) warn('SZ-02', `${tag}: ${a.id} is cut by the frame edge while reaching (x ${Math.round(x)}, frame ${Math.round(cx - (W / 2) / k)}…${Math.round(cx + (W / 2) / k)})`); }
         strips.push({name: `s${String(i).padStart(2, '0')}_${a.id}_reach`, t0: +Math.max(r.t0, t - 0.7).toFixed(2), t1: +Math.min(r.t1, t + (rc.hold ?? 0.4) + 0.5).toFixed(2), n: 8, why: 'reach'});
       }
       if (A.legs && Array.isArray(A.legs) && A.legs.length > 1) {

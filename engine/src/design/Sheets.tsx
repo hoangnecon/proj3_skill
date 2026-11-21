@@ -12,6 +12,7 @@ import {WORLD_PROPS} from '../props';
 import {CAST, CAST_ROLES} from '../episode/cast';
 import {EX_LOOKS} from '../exemplar/looks';
 import {LayerG} from '../Film';
+import {FRAME_W, FRAME_H} from '../format';
 
 const ALL: Record<string, Look> = {...EX_LOOKS, ...CAST};
 const EXPRS: Expr[] = ['neutral', 'joy', 'smug', 'sly', 'eager', 'shock', 'angry', 'stern', 'sad', 'cry', 'deadpan', 'shh'];
@@ -124,15 +125,15 @@ export const ExprSheet: React.FC<{look: string}> = ({look: key}) => {
 
 export const SetPlate: React.FC<{id: string; grid?: boolean}> = ({id, grid}) => {
   const def = SETS[id];
-  if (!def) return <Paper w={1080} h={1920}><Txt x={540} y={960} s={50} c="red" w={900}>không có set {id}</Txt></Paper>;
-  const cam = def.plateCam ?? [540, 1150, 1];
+  if (!def) return <Paper w={FRAME_W} h={FRAME_H}><Txt x={FRAME_W / 2} y={FRAME_H / 2} s={50} c="red" w={900}>không có set {id}</Txt></Paper>;
+  const cam = def.plateCam ?? [FRAME_W / 2, FRAME_H / 2 + 190, 1];
   const layers = def.render({t: 1.0, ...(def.plateOpts ?? {})});
   const [cx, cy, k] = cam;
-  const x0 = cx - 540 / k, x1 = cx + 540 / k, y0 = cy - 960 / k, y1 = cy + 960 / k;
+  const x0 = cx - (FRAME_W / 2) / k, x1 = cx + (FRAME_W / 2) / k, y0 = cy - (FRAME_H / 2) / k, y1 = cy + (FRAME_H / 2) / k;
   const step = k < 0.8 ? 200 : 100;
   return (
     <AbsoluteFill style={{background: PAL.navy}}>
-      <svg viewBox="0 0 1080 1920" width={1080} height={1920} style={{display: 'block'}}>
+      <svg viewBox={`0 0 ${FRAME_W} ${FRAME_H}`} width={FRAME_W} height={FRAME_H} style={{display: 'block'}}>
         <Defs />
         {layers.far && <LayerG d={0.5} cam={cam}>{layers.far}</LayerG>}
         <LayerG d={1} cam={cam}>{layers.back}</LayerG>
@@ -150,10 +151,10 @@ export const SetPlate: React.FC<{id: string; grid?: boolean}> = ({id, grid}) => 
             })}
           </LayerG>
         )}
-        {!grid && <rect width={1080} height={1920} filter="url(#grain)" style={{mixBlendMode: 'multiply'}} />}
-        {!grid && <rect width={1080} height={1920} fill="url(#vig)" />}
-        <rect x={0} y={1800} width={1080} height={120} fill={PAL.ink} opacity={0.75} />
-        <text x={540} y={1876} textAnchor="middle" fontFamily={FONT} fontWeight={900} fontSize={44} fill={PAL.yellow}>{id} · {def.title}</text>
+        {!grid && <rect width={FRAME_W} height={FRAME_H} filter="url(#grain)" style={{mixBlendMode: 'multiply'}} />}
+        {!grid && <rect width={FRAME_W} height={FRAME_H} fill="url(#vig)" />}
+        <rect x={0} y={FRAME_H - 120} width={FRAME_W} height={120} fill={PAL.ink} opacity={0.75} />
+        <text x={FRAME_W / 2} y={FRAME_H - 44} textAnchor="middle" fontFamily={FONT} fontWeight={900} fontSize={44} fill={PAL.yellow}>{id} · {def.title}</text>
       </svg>
     </AbsoluteFill>
   );

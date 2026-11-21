@@ -135,6 +135,11 @@ def checks(g):
             for c in r["episode_checks"]:
                 if not c["ok"]:
                     bad.append(f"{c['group']}.{c['check']} = {c['value']} outside {c['range']}")
+            _sc3 = jload("script.json") or {}
+            if _sc3.get("length") == "long_16x9":
+                _pa3 = jload("standards/pacing.json") or {}
+                if "episode_long_16x9" not in _pa3:
+                    bad.append("standards/pacing.json missing episode_long_16x9")
     elif g == "G4":
         code, out = run(["node", "scripts/lint.mjs", "design"])
         if code:
@@ -207,8 +212,10 @@ def checks(g):
         else:
             if abs(r["duration"] - r["expected"]) > 0.15:
                 bad.append(f"duration {r['duration']} vs expected {r['expected']}")
-            if (r["width"], r["height"]) != (1080, 1920) or abs(r["fps"] - 30) > 0.01:
-                bad.append(f"format {r['width']}x{r['height']}@{r['fps']}")
+            _sc7 = jload("script.json") or {}
+            _exp_wh = (1920, 1080) if _sc7.get("format") == "16:9" else (1080, 1920)
+            if (r["width"], r["height"]) != _exp_wh or abs(r["fps"] - 30) > 0.01:
+                bad.append(f"format {r['width']}x{r['height']}@{r['fps']} (expected {_exp_wh[0]}x{_exp_wh[1]}@30)")
             if not r["audio"]:
                 bad.append("no audio stream")
             if r["final_sha"] != sha("out/final.mp4"):

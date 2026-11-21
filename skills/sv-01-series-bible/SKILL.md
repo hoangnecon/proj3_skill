@@ -11,8 +11,14 @@ description: The identity of the story-video series — format, narrator persona
   Be Vietnam Pro type. Animated in Remotion, every shot anchored to a word.
 - Sound: voice Hải Đăng (northern male), the series theme music (`scripts/theme.py`) 15–18 dB under the voice, mixed by the `sv-42` standard, room ambience per location, small foley.
 
-## Narrator
-"Tôi" — an ordinary resident living inside the story (a tenant, a neighbour, a student, the guard, the maintenance worker). Calm, tired, precise, deadpan: never explains the joke or laughs at it. Knows numbers, floor levels and names. Enters early (`s1`–`s7`) with a personal stake or handicap under the rule.
+## Narrator & recurring hero
+"Tôi" — an ordinary resident living inside the story (a tenant, a neighbour, a student, the guard, the maintenance worker). Calm, tired, precise, deadpan: never explains the joke or laughs at it. Knows numbers, floor levels and names. Enters early (`s1`–`s7`) with a personal stake or handicap under the rule. For recurring or open-ended Short-Form series, anchor adventures around **Nhím** (`sv-10-script/references/premise-ideation.md`).
+
+## Audience & 23-Published-Hits DNA
+Core viewers are **kids & school-age students**. Calibration from 23 published channel hits (`sv-10-script/references/premise-ideation.md §2`):
+- **World-Sorting / Power / Trait Tiers (Group A vs B vs C)**, **Immediate Survival / Chase / Impostor / Mild-Horror Stakes**, and **Relatable Relational Cores** (best friends, family, siblings, grandparent–grandchild).
+- **Inductive Hook (`Hook Quy Nạp`):** drop into a vivid concrete crisis/question in `s1–s2` before expanding the rule, and keep the core rule explainable to a **10-year-old in 15 seconds** (zero math overload).
+- **Series / Open-Ended Potential:** build expandable worlds around recurring hero **Nhím** where appropriate.
 
 ## Story engine & three archetypes
 One weird, topsy-turvy rule enters ordinary northern Vietnamese life and is treated with total seriousness. Pick **one** of three archetypes in `brief.md` (`## Archetype`) before outlining:
