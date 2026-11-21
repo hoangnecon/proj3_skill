@@ -17,15 +17,16 @@ belongs in the same series and carry the same density of detail. Agents that ski
 4. `references/props-overlays.md` — when a shot needs an object in hand / on the floor, or a screen graphic.
 
 ## Inputs → outputs
-- In: `brief.md` (Characters, Locations), `beats.md` (segment map: who is where), G3 passed.
+- In: `brief.md` (Characters, Locations), `beats.md` (segment map: who is where), `script.json`, G2/G3 passed (run `python3 scripts/plan_assets.py` for the G2→G4 asset blueprint).
 - Out: `src/episode/cast.ts` (CAST + CAST_ROLES), `src/episode/sets.tsx` (EPISODE_SETS), `src/episode/subjects.tsx` (multi-pose Hero `SUBJECTS`), `src/episode/geo.ts` (touch
-  points), new props in `src/props.tsx` if needed, evidence in `qa/design/`, `gates/G4.review.md`.
+  points), new props in `src/props.tsx` if needed, evidence in `qa/design/` (including `overview_sets.jpg`), `gates/G4.review.md`.
 
 ## Workflow
 
-1. **See the bar.** `node scripts/design.mjs --exemplar` then open `qa/design/cast_exemplar_p1.png`,
+1. **See the bar & generate the asset blueprint.** `node scripts/design.mjs --exemplar` then open `qa/design/cast_exemplar_p1.png`,
    `expr_ex_baHanh.png`, `set_ex-lobby.png`, `set_ex-corridor.png`. Spend real attention here: count the
-   objects on the lobby plate, notice the small print, the halftone, the glows.
+   objects on the lobby plate, notice the small print, the halftone, the glows. Run `python3 scripts/plan_assets.py`
+   before splitting G4 work to derive the deterministic G2→G4 asset blueprint (required cast looks, multi-pose Hero Subjects, and multi-angle / drawn sub-scene set targets).
 2. **Cast.** Follow characters.md §3: list everyone from the segment map → card (`vi`) → silhouette →
    colours → story trait → register → `node scripts/design.mjs` → look at `cast_episode_p*.png` and every
    `expr_<key>.png` (open the light `_v.jpg` views; sets also get `set_<id>_zoom.jpg`, 3×3 full-resolution
@@ -34,12 +35,12 @@ belongs in the same series and carry the same density of detail. Agents that ski
    touch points in `geo.ts` → six passes, rendering `node scripts/design.mjs --only set:<id>` after each
    pass → compare with the exemplar plate of the same kind → `bounds` → register. For natural/outdoor environments, use the Botanical Kit in `kit.tsx` (`Leaf`, `GrassTuft`, `GrassStrip`, `LeafCluster`, `Bush`, `TreeCanopy`, `Vine`) rather than flat geometric blobs. In `long_16x9` episodes, every non-insert set MUST declare `actorScale: [minS, maxS]`, `shotScale: 'establishing' | 'medium' | 'closeup' | 'insert'`, and `location` (`LA-01`), and at least 3 locations should include `≥ 2` drawn `shotScale` plates (`SE-15`, never fake close-ups via camera zoom).
 3b. **Hero Subjects (`src/episode/subjects.tsx`).** Every recurring hero creature, boss, vehicle, or rideable machine MUST be registered in `SUBJECTS` (`PR-06`) with `title`, `kind`, `relToActor: [minR, maxR]`, optional `seats` for `Actor.mount`, and **`≥ 4` distinct poses** (at least 3 producing distinct SVG markup/bounds; no copy-paste static stickers).
-4. **Lint.** `node scripts/lint.mjs design` must print 0 errors (checks `CH-01..10`, `SE-01..15`, `PR-01..06`, `LA-01`, `TK-01..03`). It prints the density line per set
+4. **Lint.** `node scripts/lint.mjs design` must print 0 errors (checks `CH-01..10`, `SE-01..16`, `PR-01..06`, `LA-01`, `TK-01..03`). It prints the density line per set
    (`set kitchen: 118 shapes · 14 colours · 6 texts · halftone 4 · glow 3 · mid 2`). Do not weaken a
    threshold; add detail.
 5. **Render all evidence.** `node scripts/design.mjs` (writes cast pages, expression sheets for every
-   principal and support, `props_episode_p*.png` + `_v.jpg` human-scale prop sheets, `subject_<id>.png` + `_v.jpg` multi-pose Hero Subject sheets, set plates + grids with scale silhouettes, and auto-generates `qa/design/visual_spec.json` with `cast`, `sets`, `subjects`, `world_props`, and `hand_props` specs).
-6. **Review.** Fill `gates/G4.review.md`: one line per evidence image — including `props_episode_p*_v.jpg`, every `subject_<id>_v.jpg` (verify `≥ 4` distinct poses and `relToActor` human-scale proportions), and every `set_<id>_v.jpg` / `_grid_v.jpg` — with what you actually saw (≥ 4
+   principal and support, `props_episode_p*.png` + `_v.jpg` human-scale prop sheets, `subject_<id>.png` + `_v.jpg` multi-pose Hero Subject sheets, set plates + grids with scale silhouettes, `qa/design/overview_sets.jpg` single-sheet overview of all episode sets for fast palette/angle consistency checks, and auto-generates `qa/design/visual_spec.json` with `cast`, `sets`, `subjects`, `world_props`, and `hand_props` specs).
+6. **Review.** Fill `gates/G4.review.md`: one line per evidence image — including `qa/design/overview_sets.jpg`, `props_episode_p*_v.jpg`, every `subject_<id>_v.jpg` (verify `≥ 4` distinct poses and `relToActor` human-scale proportions), and every `set_<id>_v.jpg` / `_grid_v.jpg` — with what you actually saw (≥ 4
    words) and the rubric answers (characters.md §8, sets.md §11).
 7. **Show the user** the cast sheet and the set plates (send the PNGs) and get their OK. Put their words
    in `user_quote`. If they asked you to carry on without checking, use `approval: delegated` and quote that.

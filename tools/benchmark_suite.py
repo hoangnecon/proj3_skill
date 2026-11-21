@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unified Dual-Format Quality & Speed Benchmark CLI (RSI v4.4.0).
+"""Unified Dual-Format Quality & Speed Benchmark CLI (RSI v4.5.0).
 
 Runs a clean, read-only regression & speed benchmark across the suite and
 representative 9:16 Short + 16:9 Long-Form projects inside isolated temporary
@@ -7,12 +7,13 @@ sandboxes (source episode directories are never modified):
 
   1. Suite integrity: tools/validate_skills.py (skills, lint rules, errors, warnings, ms)
   2. Script syntax:   node --check on engine/scripts/*.mjs + py_compile on engine/scripts/*.py
-  3. 9:16 Short:      lint.mjs all, qa.mjs layout, voice.py --preflight, sv_doctor.py --stage all
-  4. 16:9 Long-Form:  lint.mjs shots, qa.mjs layout, qa.mjs place <set>, sv_doctor.py --stage G5
-  5. Optional render: --render-frames N (timed Remotion frame render inside temp sandbox)
+  3. 9:16 Short:      plan_assets.py (if present), lint.mjs all, qa.mjs layout, voice.py --preflight, sv_doctor.py --stage all
+  4. 16:9 Long-Form:  plan_assets.py (if present), lint.mjs shots, qa.mjs layout, qa.mjs place <set>, sv_doctor.py --stage G5
+  5. Optional script: --long-script [<dir>] (runs plan_assets.py blueprint check in isolated sandbox)
+  6. Optional render: --bench-render [N] / --render-frames N (timed Remotion frame render inside temp sandbox)
 
 Usage:
-  python3 tools/benchmark_suite.py [--short <dir>] [--long <dir>] [--render-frames 90] [--overlay|--no-overlay] [--json [out.json]]
+  python3 tools/benchmark_suite.py [--short <dir>] [--long <dir>] [--long-script [<dir>]] [--bench-render [90]] [--render-frames 90] [--overlay|--no-overlay] [--json [out.json]]
 
 Exits 0 if all executed checks pass (0 suite errors, 0 syntax errors, 0 Short errors,
 0 Long-Form shot errors); exits 1 otherwise.
@@ -34,6 +35,7 @@ from pathlib import Path
 SUITE_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SHORT = Path("/Users/hoangnguyen142/Work/PROJ3/bench-v39-loop2")
 DEFAULT_LONG = Path("/Users/hoangnguyen142/Work/PROJ3-2/v42-showcase-5a")
+DEFAULT_LONG_SCRIPT = Path("/Users/hoangnguyen142/Work/PROJ3-2/ca-lop-5a-bi-thu-nho-3cm")
 VENV_PYTHON = Path("/Users/Shared/Tools/VieNeu-TTS/.venv/bin/python")
 VENV_BIN = "/Users/Shared/Tools/VieNeu-TTS/.venv/bin"
 
@@ -379,6 +381,213 @@ def detect_place_set_id(ep: Path) -> str | None:
     return None
 
 
+def _count_field(val: object) -> int | None:
+    if isinstance(val, int) and not isinstance(val, bool):
+        return val
+    if isinstance(val, (list, dict)):
+        return len(val)
+    return None
+
+
+def _extract_blueprint_counts(ep: Path, out: str) -> tuple[int, int, str]:
+    candidates: list[Path] = []
+    # Any JSON path mentioned in stdout
+    for m in re.findall(r"([A-Za-z0-9_./-]+\.json)\b", out):
+        p = Path(m)
+        if not p.is_absolute():
+            p = ep / p
+        if p.is_file() and p not in candidates:
+            candidates.append(p)
+
+    for rel in (
+        "qa/design/asset_blueprint.json",
+        "qa/asset_blueprint.json",
+        "qa/design/blueprint.json",
+        "qa/blueprint.json",
+        "qa/plan_assets.json",
+        "qa/asset_plan.json",
+    ):
+        p = ep / rel
+        if p.is_file() and p not in candidates:
+            candidates.append(p)
+
+    bp_data = None
+    bp_rel = ""
+    for p in candidates:
+        try:
+            parsed = json.loads(p.read_text(encoding="utf-8"))
+            if isinstance(parsed, dict):
+                bp_data = parsed
+                try:
+                    bp_rel = str(p.relative_to(ep))
+                except ValueError:
+                    bp_rel = p.name
+                break
+        except Exception:
+            continue
+
+    if bp_data is None:
+        # Try parsing stdout directly as JSON
+        idx = out.find("{")
+        if idx != -1:
+            try:
+                parsed = json.loads(out[idx:])
+                if isinstance(parsed, dict):
+                    bp_data = parsed
+                    bp_rel = "stdout"
+            except Exception:
+                pass
+
+    subjects = 0
+    sub_scenes = 0
+    if isinstance(bp_data, dict):
+        metrics = bp_data.get("metrics") if isinstance(bp_data.get("metrics"), dict) else {}
+        summary = bp_data.get("summary") if isinstance(bp_data.get("summary"), dict) else {}
+        counts = bp_data.get("counts") if isinstance(bp_data.get("counts"), dict) else {}
+
+        for cand in (
+            metrics.get("required_subjects"),
+            bp_data.get("required_subjects"),
+            bp_data.get("subjects"),
+            bp_data.get("hero_subjects"),
+            bp_data.get("heroSubjects"),
+            summary.get("subjects"),
+            summary.get("hero_subjects"),
+            counts.get("subjects"),
+            counts.get("hero_subjects"),
+        ):
+            n = _count_field(cand)
+            if n is not None:
+                subjects = n
+                break
+
+        for cand in (
+            metrics.get("planned_sets"),
+            bp_data.get("sets_matrix"),
+            bp_data.get("sub_scenes"),
+            bp_data.get("subScenes"),
+            bp_data.get("set_plates"),
+            bp_data.get("plates"),
+            summary.get("sub_scenes"),
+            summary.get("subScenes"),
+            counts.get("sub_scenes"),
+            counts.get("subScenes"),
+        ):
+            n = _count_field(cand)
+            if n is not None:
+                sub_scenes = n
+                break
+        else:
+            # Check nested sub_scenes inside locations or sets
+            locs = bp_data.get("locations")
+            sets = bp_data.get("sets")
+            if isinstance(locs, list) and any(
+                isinstance(x, dict) and isinstance(x.get("sub_scenes") or x.get("subScenes") or x.get("plates"), list)
+                for x in locs
+            ):
+                sub_scenes = sum(
+                    len(x.get("sub_scenes") or x.get("subScenes") or x.get("plates") or [])
+                    for x in locs
+                    if isinstance(x, dict)
+                )
+            elif isinstance(sets, (list, dict)):
+                sub_scenes = len(sets)
+            else:
+                for cand in (summary.get("sets"), counts.get("sets"), summary.get("plates"), counts.get("plates")):
+                    n = _count_field(cand)
+                    if n is not None:
+                        sub_scenes = n
+                        break
+
+    # Regex fallback from stdout if JSON didn't provide non-zero counts
+    if subjects == 0:
+        m_sub = re.search(r"(?:hero[_\s-]*)?subjects?\s*[=:]\s*(\d+)", out, re.I)
+        if m_sub:
+            subjects = int(m_sub.group(1))
+    if sub_scenes == 0:
+        m_sc = re.search(r"(?:sub[_\s-]?scenes?|set[_\s-]?plates?|sets)\s*[=:]\s*(\d+)", out, re.I)
+        if m_sc:
+            sub_scenes = int(m_sc.group(1))
+
+    return subjects, sub_scenes, bp_rel
+
+
+def run_plan_assets_check(ep: Path, py_exe: str, env: dict[str, str]) -> dict:
+    script_path = ep / "scripts" / "plan_assets.py"
+    if not script_path.is_file():
+        return {
+            "passed": True,
+            "skipped": True,
+            "rc": 0,
+            "elapsed_ms": 0.0,
+            "elapsed_s": 0.0,
+            "subjects": 0,
+            "sub_scenes": 0,
+            "blueprint_path": "",
+            "reason": "scripts/plan_assets.py not present",
+            "error": "",
+        }
+
+    rc, dt, out, err = run_cmd([py_exe, "scripts/plan_assets.py"], ep, env, timeout_s=60.0)
+    subjects, sub_scenes, bp_rel = _extract_blueprint_counts(ep, out)
+    return {
+        "passed": rc == 0,
+        "skipped": False,
+        "rc": rc,
+        "elapsed_ms": round(dt * 1000, 1),
+        "elapsed_s": round(dt, 3),
+        "subjects": subjects,
+        "sub_scenes": sub_scenes,
+        "blueprint_path": bp_rel,
+        "summary": (out.strip().splitlines()[-1][:140] if out.strip() else ""),
+        "error": (err.strip() or out.strip())[:200] if rc != 0 else "",
+    }
+
+
+def benchmark_long_script(
+    ep_path: Path,
+    suite_dir: Path,
+    tmp_root: Path,
+    env: dict[str, str],
+    py_exe: str,
+    overlay: bool,
+) -> dict:
+    if not ep_path.is_dir():
+        return {"status": "SKIP", "path": str(ep_path), "reason": "directory not found", "passed": True}
+
+    t_all = time.perf_counter()
+    sandbox = tmp_root / "long_script_plan"
+    sandbox.mkdir(parents=True, exist_ok=True)
+    for fname in ("brief.md", "beats.md", "script.json"):
+        src_f = ep_path / fname
+        if src_f.is_file():
+            shutil.copy2(src_f, sandbox / fname)
+    for dname in ("standards", "scripts"):
+        src_d = ep_path / dname
+        if src_d.is_dir():
+            shutil.copytree(src_d, sandbox / dname, symlinks=True)
+    if overlay:
+        src_scripts = suite_dir / "engine" / "scripts"
+        dst_scripts = sandbox / "scripts"
+        dst_scripts.mkdir(parents=True, exist_ok=True)
+        for f in src_scripts.iterdir():
+            if f.is_file():
+                shutil.copy2(f, dst_scripts / f.name)
+
+    pa = run_plan_assets_check(sandbox, py_exe, env)
+    status = "SKIP" if pa.get("skipped") else ("PASS" if pa["passed"] else "FAIL")
+    return {
+        "status": status,
+        "passed": pa["passed"],
+        "path": str(ep_path),
+        "format": "16:9",
+        "elapsed_s": round(time.perf_counter() - t_all, 3),
+        "errors": 0 if pa["passed"] else 1,
+        "warnings": 0,
+        "checks": {"plan_assets": pa},
+    }
+
+
 def run_optional_render(ep: Path, frames: int, env: dict[str, str]) -> dict:
     out_mp4 = ep / "out" / "_bench_render.mp4"
     out_mp4.parent.mkdir(parents=True, exist_ok=True)
@@ -424,6 +633,9 @@ def benchmark_short(
     prepare_sandbox(ep_path, sandbox, suite_dir, overlay=overlay, writable_out=(render_frames > 0))
 
     checks: dict[str, dict] = {}
+    if (sandbox / "scripts" / "plan_assets.py").is_file() or (suite_dir / "engine" / "scripts" / "plan_assets.py").is_file():
+        checks["plan_assets"] = run_plan_assets_check(sandbox, py_exe, env)
+
     rc, dt, out, err = run_cmd(["node", "scripts/lint.mjs", "all"], sandbox, env)
     checks["lint_all"] = parse_lint_result(sandbox, rc, dt, out, err)
 
@@ -443,6 +655,7 @@ def benchmark_short(
         checks["lint_all"]["errors"]
         + checks["voice_preflight"]["errors"]
         + checks["sv_doctor_all"]["errors"]
+        + (0 if checks.get("plan_assets", {"passed": True})["passed"] else 1)
         + (0 if checks["qa_layout"]["passed"] else 1)
         + (0 if checks.get("render_frames", {"passed": True})["passed"] else 1)
     )
@@ -481,6 +694,9 @@ def benchmark_long(
     prepare_sandbox(ep_path, sandbox, suite_dir, overlay=overlay, writable_out=(render_frames > 0))
 
     checks: dict[str, dict] = {}
+    if (sandbox / "scripts" / "plan_assets.py").is_file() or (suite_dir / "engine" / "scripts" / "plan_assets.py").is_file():
+        checks["plan_assets"] = run_plan_assets_check(sandbox, py_exe, env)
+
     rc, dt, out, err = run_cmd(["node", "scripts/lint.mjs", "shots"], sandbox, env)
     checks["lint_shots"] = parse_lint_result(sandbox, rc, dt, out, err)
 
@@ -518,6 +734,7 @@ def benchmark_long(
     total_errors = (
         checks["lint_shots"]["errors"]
         + checks["sv_doctor_g5"]["errors"]
+        + (0 if checks.get("plan_assets", {"passed": True})["passed"] else 1)
         + (0 if checks["qa_layout"]["passed"] else 1)
         + (0 if checks["qa_place"]["passed"] else 1)
         + (0 if checks.get("render_frames", {"passed": True})["passed"] else 1)
@@ -568,6 +785,16 @@ def render_scorecard(report: dict) -> str:
         lines.append(f"| 9:16 Short (`{Path(sh['path']).name}`) | SKIP | — | 0 | 0 | {sh['reason']} |")
     else:
         sc = sh["checks"]
+        if "plan_assets" in sc:
+            pa = sc["plan_assets"]
+            if pa.get("skipped"):
+                lines.append(f"| 9:16 Short · `plan_assets.py` | SKIP | — | 0 | 0 | {pa.get('reason', 'not present')} |")
+            else:
+                lines.append(
+                    f"| 9:16 Short · `plan_assets.py` | {'PASS' if pa['passed'] else 'FAIL'} | "
+                    f"{pa['elapsed_ms']:.0f} ms | {0 if pa['passed'] else 1} | 0 | "
+                    f"subjects={pa['subjects']}, sub_scenes={pa['sub_scenes']} |"
+                )
         la = sc["lint_all"]
         ly = sc["qa_layout"]
         vp = sc["voice_preflight"]
@@ -605,6 +832,16 @@ def render_scorecard(report: dict) -> str:
         lines.append(f"| 16:9 Long-Form (`{Path(lg['path']).name}`) | SKIP | — | 0 | 0 | {lg['reason']} |")
     else:
         lc = lg["checks"]
+        if "plan_assets" in lc:
+            pa = lc["plan_assets"]
+            if pa.get("skipped"):
+                lines.append(f"| 16:9 Long · `plan_assets.py` | SKIP | — | 0 | 0 | {pa.get('reason', 'not present')} |")
+            else:
+                lines.append(
+                    f"| 16:9 Long · `plan_assets.py` | {'PASS' if pa['passed'] else 'FAIL'} | "
+                    f"{pa['elapsed_ms']:.0f} ms | {0 if pa['passed'] else 1} | 0 | "
+                    f"subjects={pa['subjects']}, sub_scenes={pa['sub_scenes']} |"
+                )
         ls = lc["lint_shots"]
         ly = lc["qa_layout"]
         pl = lc["qa_place"]
@@ -637,13 +874,29 @@ def render_scorecard(report: dict) -> str:
                 f"{rf['fps']} fps ({rf['size_kb']} KB) |"
             )
 
+    lsp = report.get("long_script_plan")
+    if isinstance(lsp, dict):
+        if lsp["status"] == "SKIP":
+            reason = lsp.get("reason") or (lsp.get("checks", {}).get("plan_assets", {}).get("reason")) or "skipped"
+            lines.append(f"| 16:9 Long-Script (`{Path(lsp['path']).name}`) · `plan_assets.py` | SKIP | — | 0 | 0 | {reason} |")
+        else:
+            pa = lsp["checks"]["plan_assets"]
+            lines.append(
+                f"| 16:9 Long-Script (`{Path(lsp['path']).name}`) · `plan_assets.py` | {'PASS' if pa['passed'] else 'FAIL'} | "
+                f"{pa['elapsed_ms']:.0f} ms | {0 if pa['passed'] else 1} | 0 | "
+                f"subjects={pa['subjects']}, sub_scenes={pa['sub_scenes']} |"
+            )
+
     # Show any failure details concisely
     failures: list[str] = []
     if not vs["passed"] and vs.get("output"):
         failures.append(f"- `validate_skills.py`: {vs['output']}")
     for fail in sx["mjs_failed"] + sx["py_failed"]:
         failures.append(f"- syntax `{fail['file']}`: {fail['error']}")
-    for label, sec in (("9:16 Short", sh), ("16:9 Long", lg)):
+    sections = [("9:16 Short", sh), ("16:9 Long", lg)]
+    if isinstance(lsp, dict):
+        sections.append(("16:9 Long-Script", lsp))
+    for label, sec in sections:
         if sec.get("status") == "FAIL":
             for cname, cdata in sec.get("checks", {}).items():
                 if not cdata.get("passed"):
@@ -668,7 +921,22 @@ def main() -> int:
     )
     ap.add_argument("--short", default=str(DEFAULT_SHORT), help=f"9:16 Short episode directory (default: {DEFAULT_SHORT})")
     ap.add_argument("--long", default=str(DEFAULT_LONG), help=f"16:9 Long-Form episode directory (default: {DEFAULT_LONG})")
+    ap.add_argument(
+        "--long-script",
+        nargs="?",
+        const=str(DEFAULT_LONG_SCRIPT),
+        default=None,
+        help=f"Optional full-script 16:9 Long-Form episode directory to benchmark scripts/plan_assets.py (default when flag omitted: disabled; default when passed bare: {DEFAULT_LONG_SCRIPT})",
+    )
     ap.add_argument("--render-frames", type=int, default=0, help="Optional timed Remotion render frames per episode (default: 0 = disabled)")
+    ap.add_argument(
+        "--bench-render",
+        nargs="?",
+        const=90,
+        type=int,
+        default=0,
+        help="Optional timed Remotion render benchmark hook (defaults to 90 frames when passed without value; combines with --render-frames)",
+    )
     ap.add_argument(
         "--overlay",
         action=argparse.BooleanOptionalAction,
@@ -695,6 +963,7 @@ def main() -> int:
         except Exception:
             pass
 
+    render_frames = max(0, args.render_frames, args.bench_render)
     tmp_root = Path(tempfile.mkdtemp(prefix="sv_bench_suite_"))
     try:
         vs = check_validate_skills(SUITE_ROOT, env)
@@ -706,7 +975,7 @@ def main() -> int:
             env,
             py_exe,
             overlay=args.overlay,
-            render_frames=max(0, args.render_frames),
+            render_frames=render_frames,
         )
         lg = benchmark_long(
             Path(args.long).expanduser().resolve(),
@@ -715,15 +984,25 @@ def main() -> int:
             env,
             py_exe,
             overlay=args.overlay,
-            render_frames=max(0, args.render_frames),
+            render_frames=render_frames,
         )
+        lsp = None
+        if args.long_script:
+            lsp = benchmark_long_script(
+                Path(args.long_script).expanduser().resolve(),
+                SUITE_ROOT,
+                tmp_root,
+                env,
+                py_exe,
+                overlay=args.overlay,
+            )
 
-        passed = vs["passed"] and sx["passed"] and sh["passed"] and lg["passed"]
+        passed = vs["passed"] and sx["passed"] and sh["passed"] and lg["passed"] and (lsp["passed"] if lsp is not None else True)
         report = {
             "suite_root": str(SUITE_ROOT),
             "suite_version": suite_version,
             "overlay": args.overlay,
-            "render_frames": max(0, args.render_frames),
+            "render_frames": render_frames,
             "total_elapsed_s": round(time.perf_counter() - t0, 3),
             "passed": passed,
             "validate_skills": vs,
@@ -731,6 +1010,8 @@ def main() -> int:
             "short_9x16": sh,
             "long_16x9": lg,
         }
+        if lsp is not None:
+            report["long_script_plan"] = lsp
 
         if args.json == "-":
             print(json.dumps(report, indent=2, ensure_ascii=False))

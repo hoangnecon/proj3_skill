@@ -130,15 +130,15 @@ if (args.includes('--status')) { // no browser: which sheets no longer match the
   console.log(JSON.stringify({stale}));
   process.exit(0);
 }
+const is16x9 = (() => {
+  try {
+    const s = JSON.parse(fs.readFileSync('script.json', 'utf8'));
+    return s?.format === '16:9' || s?.length === 'long_16x9';
+  } catch {
+    return false;
+  }
+})();
 {
-  const is16x9 = (() => {
-    try {
-      const s = JSON.parse(fs.readFileSync('script.json', 'utf8'));
-      return s?.format === '16:9' || s?.length === 'long_16x9';
-    } catch {
-      return false;
-    }
-  })();
   const traitsOf = (l) => [l.glasses, l.hat && l.hat !== 'none', l.mustache, l.beard, l.pattern, l.earrings, l.chain, l.vest, l.lips,
     (l.belly ?? 0) > 0.05, Math.abs((l.w ?? 1) - 1) > 0.04, Math.abs((l.h ?? 1) - 1) > 0.04, Math.abs((l.head ?? 1) - 1) > 0.03,
     l.hairC && l.hairC !== 'hair', l.topC2].filter(Boolean).length;
@@ -221,4 +221,38 @@ console.log(`design: ${todo.length} rendered, ${jobs.length - todo.length} uncha
 // visible-detail measure of every clean plate (lint SE-13 reads qa/design/plate_stats.json)
 const plates = jobs.filter(([id, props]) => id === 'SetPlate' && !props.grid && !P.SETS[props.id]?.insert).map(([, , out]) => out);
 if (plates.length) execFileSync(PY, ['scripts/plate_check.py', ...plates], {stdio: 'inherit'});
+// glanceable G4 set overview sheet (qa/design/overview_sets.jpg — .jpg so sv_gate G4 .png glob stays untouched)
+const epPlates = setIds.filter((id) => !P.EPISODE_SETS[id]?.insert && fs.existsSync(`qa/design/set_${id}.png`));
+if (!only && plates.length >= 2 && epPlates.length >= 2) {
+  const plateStats = (() => {
+    try { return JSON.parse(fs.readFileSync('qa/design/plate_stats.json', 'utf8')); }
+    catch { return {}; }
+  })();
+  const maxLabel = is16x9 ? 38 : 28;
+  const cells = epPlates.map((id) => {
+    const d = P.EPISODE_SETS[id] ?? {};
+    const st = plateStats[id] ?? {};
+    const fullLabel = `${id} (${d.location ?? '-'} · ${d.shotScale ?? '-'} · ${d.angle ?? '-'})`;
+    const label = fullLabel.length > maxLabel ? fullLabel.slice(0, maxLabel - 1) + '…' : fullLabel;
+    return {
+      img: `qa/design/set_${id}.png`,
+      label,
+      sub: `scale ${d.actorScale ? d.actorScale.join('–') : '-'} · empty ${st.empty_mid ?? '?'} · ctr ${st.contrast_std ?? '?'}`,
+    };
+  });
+  const tmpTileSpec = 'qa/design/_overview_tile.json';
+  fs.writeFileSync(tmpTileSpec, JSON.stringify({
+    out: 'qa/design/overview_sets.jpg',
+    cols: is16x9 ? 4 : 3,
+    w: is16x9 ? 440 : 320,
+    q: 76,
+    title: `G4 SET OVERVIEW · ${cells.length} plate(s) · ${is16x9 ? '16:9' : '9:16'}`,
+    cells,
+  }));
+  try {
+    execFileSync(PY, [path.resolve('scripts/tile.py'), tmpTileSpec], {stdio: 'inherit'});
+  } finally {
+    try { fs.unlinkSync(tmpTileSpec); } catch {}
+  }
+}
 if (!jobs.length) console.log('nothing to render (cast and sets are empty)');

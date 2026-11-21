@@ -21,7 +21,7 @@ checks), `mix_targets.json` (voice chain, music 15–18 dB under, −14 LUFS), `
 | G1 | Brief | sv-10 (+ sv-01) | Archetype, Blocker, 5-Knot Spine filled | brief.md | **user** |
 | G2 | Script + beats | sv-10 | `script_lint.py` (`SC-01..26`) | qa/script_lint.json | **user** |
 | G3 | Voice | sv-12 | one take/line vs voice_standard.json + pacing.json | qa/voice_report.json + listening | — |
-| G4 | Cast + sets | sv-20 | `lint.mjs design` (CH/TK/SE/PR) | qa/design/*.png (look at `*_v.jpg`, `props_episode_p*_v.jpg`, `*_zoom.jpg`) | **user** |
+| G4 | Cast + sets | sv-20 | `plan_assets.py` (G2→G4 blueprint) + `lint.mjs design` (CH/TK/SE/PR) | qa/design/*.png (look at `overview_sets.jpg`, `*_v.jpg`, `props_episode_p*_v.jpg`, `*_zoom.jpg`) | **user** |
 | G5 | Shots + motion | sv-22, sv-21 | `lint.mjs shots` (SH/AN/OV/CA/SZ/MO/KY/CO/PC/GE) | qa/contact_p*.jpg, qa/strips/*.jpg, qa/review/NN.json per shot | — |
 | G6 | Audio | sv-40 (sounds) + sv-42 (mix & master) | 21 measured checks vs mix_targets.json | qa/mix_report.json, qa/mix/overview.png, qa/mix/segments.png + listening | — |
 | G7 | Delivery | sv-41 (+ sv-42 audio-in-video) | deliver report + video audio checks | qa/deliver_report.json, qa/final_check.jpg, qa/video_audio.json, full watch | — |
@@ -93,23 +93,23 @@ Three roles, each with a one-page brief in `references/roles.md` so a helper doe
 - **Reviewers**: open cards + crops and write batches with `qa.mjs review --batch`; never review shots they built.
 Run renders through the scripts only (one render per episode at a time: `qa/.render.lock`).
 
-## Dual-Standard Production SLA (`v4.3.0` — 15-Min Short / 45-Min Long-Form)
+## Dual-Standard Production SLA (`v4.5.0` — 15-Min Short / 45-Min Long-Form)
 Run `python3 scripts/sv_doctor.py --stage <G>` before every gate and run independent phases/splits concurrently instead of waiting on a single serial chain:
 
 | Gate | Stage | 15-Min Short SLA (`9:16`, 2–3 min) | 45-Min Long-Form SLA (`16:9`, 8–12 min) | Zero-Rework Accelerator |
 |---|---|---|---|---|
 | **G1** | Brief & Premise | `1–2 min` | `3–4 min` | `sv_doctor.py --stage G1` + user approval |
-| **G2** | Script & Beats | `2 min` | `5–6 min` (incl. Story Doctor) | `script_lint.py` + `sv_doctor.py --stage G2` |
+| **G2** | Script & Beats | `2 min` | `5–6 min` (incl. Story Doctor) | `script_lint.py` + `plan_assets.py` G2→G4 blueprint + `sv_doctor.py --stage G2` |
 | **G3** | Voice (`Hải Đăng`) | `2 min` (∥ G4) | `6–8 min` (∥ G4) | `voice.py --preflight` zero-GPU check before TTS |
-| **G4** | Design (`Cast+Sets+Subjects`) | `3 min` (2 builders ∥ G2/G3) | `8–10 min` (4–5 builders ∥ G2/G3) | `design.mjs` + `lint.mjs design` (`SE-16` perceptual plate gate) |
+| **G4** | Design (`Cast+Sets+Subjects`) | `3 min` (2 builders ∥ G2/G3) | `8–10 min` (4–5 builders ∥ G2/G3) | `plan_assets.py` blueprint + `design.mjs` (`overview_sets.jpg`) + `lint.mjs design` (`SE-16`) |
 | **G5** | Shots, Camera & Blind QA | `4 min` (3-way blind review) | `12–15 min` (ch-split builders + 3-way blind review) | `qa.mjs place <setId>` + `lint.mjs shots` (`CA-06`, `CA-07`, `LA-01..04`) + single-bundle `qa.mjs pass changed` |
 | **G6** | Audio Mix & Master | `1 min` (∥ G5 QA) | `2 min` (∥ G5 QA) | `mix.py` + `audio_qa.py` on stable `qa/timing.json` |
-| **G7** | Render & Delivery | `2 min` | `8–10 min` | `SV_CHUNK_RENDER=1 deliver.mjs` (cached single-browser chunked render) |
+| **G7** | Render & Delivery | `2 min` | `8–10 min` | `SV_CHUNK_RENDER=1 deliver.mjs` (cached single-browser macro-block render) |
 | **Total** | **Cold `G1 → out/final.mp4`** | **~15 min** (parallel wall time) | **~45 min** (parallel wall time) | Zero wasted GPU/browser loops |
 
 Parallel execution blueprint:
 1. **G1 (Brief)** → `sv_doctor.py --stage G1` → user approval.
-2. **Parallel G2/G3 + split G4**: once G1 passes, write script/beats (**G2**) and run `voice.py --preflight` → **G3** voice while splitting **G4** across parallel builders (`cast + props + subjects` ∥ `sets` builders). Run `node scripts/design.mjs` (auto-generates `qa/design/visual_spec.json` + perceptual `plate_stats.json`) + `node scripts/lint.mjs design` (`SE-16`), get user approval, and pass G4.
+2. **Parallel G2/G3 + G2→G4 Blueprint + split G4**: once G1 passes, write script/beats (**G2**) and run `python3 scripts/plan_assets.py` to generate the G2→G4 asset blueprint (exact cast roster, Hero Subjects, and multi-angle/sub-scene set plate targets). Run `voice.py --preflight` → **G3** voice while splitting **G4** across parallel builders (`cast + props + subjects` ∥ `sets` builders) from the blueprint. Run `node scripts/design.mjs` (auto-generates `qa/design/visual_spec.json`, perceptual `plate_stats.json`, and `qa/design/overview_sets.jpg`) + `node scripts/lint.mjs design` (`SE-16`), inspect `qa/design/overview_sets.jpg` alongside individual views, get user approval, and pass G4.
 3. **G5 (Shots + pre-render CI lint) ∥ G6 (Mix)**: pre-solve clean coordinates with `node scripts/qa.mjs place <setId>`, write `shotlist.ts`, run `node scripts/lint.mjs shots` (`CA-06`, `CA-07`, `LA-01..04`) + `node scripts/qa.mjs layout` / `where <i>` until clean, then run `node scripts/qa.mjs pass changed` (writes enriched `qa/blind_review/slice_1..3.json`). Once `qa/timing.json` is stable, run **G6** (`scripts/mix.py` + `scripts/audio_qa.py`) in parallel with G5 QA/fixes.
 4. **3-way Blind Reviewers**: dispatch 3 parallel reviewers on `qa/blind_review/slice_1.json`, `slice_2.json`, and `slice_3.json` (each outputting `blind_sha`-verified JSONL via `node scripts/qa.mjs review --batch`), then pass G5 and G6.
 5. **G7 (`scripts/deliver.mjs`)**: run `sv_doctor.py --stage G7`, render `out/final.mp4`, verify `qa/deliver_report.json` + `qa/final_check.jpg` + `qa/video_audio.json`, and pass G7.

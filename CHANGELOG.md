@@ -1,5 +1,14 @@
 # Changelog
 
+## `v4.5.0` — 2026-11-22 · Deterministic G2→G4 Asset Blueprint (`plan_assets.py`), Glanceable Set Overview (`overview_sets.jpg`), Fast Long-Form QA Probes & Benchmark Suite v4.5 (`tools/benchmark_suite.py`)
+- **Pillar 1 — G2→G4 Asset Blueprint Planner, Set Overview Contact Sheet & Fast Long-Form Probes (`plan_assets.py`, `design.mjs`, `qa.mjs`):**
+  - `engine/scripts/plan_assets.py`: zero-dependency deterministic G2→G4 blueprint and parallel worker planner reading `script.json`, `brief.md`, and `beats.md` in `< 0.5 s` to emit `qa/asset_blueprint.json` + `qa/asset_blueprint.md` (planned cast roster, recurring multi-pose Hero Subjects with `+seats` flags, multi-angle/sub-scene `sets_matrix`, and conflict-free G4/G5 worker splits).
+  - `engine/scripts/design.mjs`: automatically tiles all episode sets into a single glanceable G4 overview contact sheet (`qa/design/overview_sets.jpg`, `.jpg` to keep `sv_gate.py` `.png` evidence checks clean).
+  - `engine/scripts/qa.mjs`: adapts per-shot carry probe density on heavy `16:9` episodes (`>= 80` shots: `4–8` probes @ `0.45 s` vs `6–16` @ `0.2 s`), keeping browser QA time well inside the 45-minute Long-Form SLA while preserving full HOT-shot crops.
+- **Pillar 2 — Final Pinnacle Integration & Benchmark Suite v4.5 (`tools/benchmark_suite.py`, Skills & Docs):**
+  - `tools/benchmark_suite.py`: integrates `scripts/plan_assets.py` checks (elapsed ms, required subject count, planned sub-scene count) across isolated 9:16 Short and 16:9 Long-Form sandboxes plus optional `--long-script [<dir>]` full-script blueprint benchmark and `--bench-render [N]` timed Remotion render hook.
+  - Updated `sv-00-pipeline`, `sv-02-long-form`, `sv-20-design-system`, `CONVENTIONS.md`, `README.md` (with verified `v4.0 → v4.5` Measured RSI Evolution summary table), `CHANGELOG.md`, and `.claude-plugin/plugin.json` (`4.5.0`).
+
 ## `v4.4.0` — 2026-11-22 · Studio Atmospheric Mood & Depth (`ShotDef.mood`/`dof`), Static Riso Grain (`url(#grainPat)`), Macro-Block Delivery, `SH-19` Mood Lint & Unified Dual-Format Benchmark Suite (`tools/benchmark_suite.py`)
 - **Pillar 1 — Studio Lighting, Depth Separation, Static Riso Grain & Macro-Block Render (`kit.tsx`, `engine.ts`, `Film.tsx`, `Sheets.tsx`, `deliver.mjs`):**
   - `engine.ts` & `Film.tsx`: added `ShotDef.mood` (`'default' | 'morning' | 'golden' | 'danger' | 'lab' | 'flashback' | 'dramatic'`) PAL-token atmospheric lighting grade overlay and `ShotDef.dof` subtle depth-separation haze between far (`d = 0.5`) and midground (`d = 1`) layers.

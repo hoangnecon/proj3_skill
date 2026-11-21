@@ -1,4 +1,4 @@
-# Conventions (`v4.4.0`)
+# Conventions (`v4.5.0`)
 
 Enforced by `tools/validate_skills.py`.
 
@@ -52,7 +52,8 @@ A rule documented in a skill must name its lint ID when one exists. A waiver is
 `// lint-ok: <ID> <reason>` on the shot's line, and it must be justified in the G5 review.
 
 ## Gates
-- There are seven gates, G1 to G7 (see sv-00). Run `scripts/sv_doctor.py --stage G#` for fast zero-cost preflight before checking or passing a gate.
+- There are seven gates, G1 to G7 (see sv-00). Run `scripts/sv_doctor.py --stage G#` for fast zero-cost preflight before checking or passing a gate, and `scripts/plan_assets.py` at the G2→G4 handoff to derive the deterministic asset blueprint (cast, Hero Subjects, and multi-angle/sub-scene set targets).
+- `scripts/design.mjs` renders all design sheets plus `qa/design/overview_sets.jpg` (single-page set overview contact sheet) and `qa/design/visual_spec.json`.
 - `scripts/sv_gate.py` writes `gates/log.jsonl` with hashes of each gate's inputs. When an input changes, that gate and every later gate become STALE.
 - Review files must name every evidence file with a remark of at least 4 words, and must be newer than the evidence.
 - G1, G2 and G4 need `approval: user` (with `user_quote`) or `approval: delegated`.

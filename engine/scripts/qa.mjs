@@ -978,8 +978,14 @@ const runCards = async (which, forceAll, includeStaleInChanged = false) => {
   const jobs = sel.flatMap((x) => [0.15, 0.5, 0.85].map((u, n) => ({x, n, t: x.t0 + (x.t1 - x.t0) * u, out: `qa/_f/k${x.i}_${n}.jpg`})));
   cache.cards ??= {};
   await renderAll(jobs, (j) => !forceAll && cache.cards[j.x.i] === hashes[j.x.i]);
-  const probes = sel.flatMap((x) => { const n = Math.max(6, Math.min(16, Math.ceil((x.t1 - x.t0) / 0.2)));
-    return Array.from({length: n}, (_, k) => ({x, k, n, t: x.t0 + (x.t1 - x.t0) * (k + 0.5) / n, scale: 0.25, q: 92, out: `qa/snap/${hashes[x.i]}_p${k}.jpg`})); });
+  const isLongHeavy = is16x9 && rows.length >= 80;
+  const probes = sel.flatMap((x) => {
+    const dur = x.t1 - x.t0;
+    const n = isLongHeavy
+      ? Math.max(4, Math.min(8, Math.ceil(dur / 0.45)))
+      : Math.max(6, Math.min(16, Math.ceil(dur / 0.2)));
+    return Array.from({length: n}, (_, k) => ({x, k, n, t: x.t0 + dur * (k + 0.5) / n, scale: 0.25, q: 92, out: `qa/snap/${hashes[x.i]}_p${k}.jpg`}));
+  });
   fs.mkdirSync('qa/snap', {recursive: true});
   await renderAll(probes, () => !forceAll);
   for (const x of sel) {
