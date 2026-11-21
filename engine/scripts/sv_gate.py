@@ -6,6 +6,7 @@ Gates depend on what they read, not on a fixed order (v3.7): design (G4) needs o
 while the voice (G3) is still being made; shots (G5) need voice timing AND design.
   G1 <- -    G2 <- G1    G3 <- G2    G4 <- G1    G5 <- G3, G4    G6 <- G3, G5    G7 <- G5, G6
 
+  python3 scripts/sv_doctor.py [--stage G4]  # fast zero-cost preflight before checking/passing a gate
   python3 scripts/sv_gate.py status          # table of all gates: pass / stale / open
   python3 scripts/sv_gate.py status --brief  # one line per gate + the next command (also writes qa/state.json)
   python3 scripts/sv_gate.py check G4        # run G4's checks, print what is missing (no logging)
@@ -201,6 +202,26 @@ def checks(g):
         code, out = run(["node", "scripts/lint.mjs", "shots"])
         if code:
             bad.append("shot lint failed:\n" + "\n".join(l for l in out.splitlines() if l.startswith("ERROR")))
+        lr = jload("qa/layout_report.json")
+        if isinstance(lr, list):
+            overcrowded = [
+                e.get("i") for e in lr
+                if isinstance(e, dict) and not e.get("la02Waived")
+                and ((e.get("gridLayout") or {}).get("overcrowdedCells") or float((e.get("gridLayout") or {}).get("occupancyFrac") or 0) > 0.78)
+            ]
+            scale_errors = [
+                e.get("i") for e in lr
+                if isinstance(e, dict) and not e.get("la01Waived") and (e.get("scaleIssues") or [])
+            ]
+            if overcrowded:
+                bad.append(f"qa/layout_report.json has {len(overcrowded)} overcrowded shot(s) {overcrowded[:10]} — declutter or split (LA-02)")
+            if scale_errors:
+                bad.append(f"qa/layout_report.json has {len(scale_errors)} scale error shot(s) {scale_errors[:10]} — fix actorScale/relToActor (LA-01)")
+        elif isinstance(lr, dict):
+            if int(lr.get("overcrowded", 0) or 0) > 0:
+                bad.append(f"qa/layout_report.json reports overcrowded={lr.get('overcrowded')} — declutter or split (LA-02)")
+            if int(lr.get("scale_errors", 0) or 0) > 0:
+                bad.append(f"qa/layout_report.json reports scale_errors={lr.get('scale_errors')} — fix actorScale/relToActor (LA-01)")
         ev = evidence("G5")
         if not any("contact_p" in e for e in ev):
             bad.append("no contact sheet — node scripts/qa.mjs contact")
@@ -432,7 +453,7 @@ def status(brief=False):
     nxt = next_gates(memo)
     print("\n".join(rows))
     if brief:
-        print("next:", " | ".join(f"{g} ({NAMES[g]}): python3 scripts/sv_gate.py check {g}" for g in nxt) or "all gates pass")
+        print("next:", " | ".join(f"{g} ({NAMES[g]}): python3 scripts/sv_doctor.py --stage {g} && python3 scripts/sv_gate.py check {g}" for g in nxt) or "all gates pass")
     (ROOT / "qa").mkdir(exist_ok=True)
     (ROOT / "qa/state.json").write_text(json.dumps({
         "at": time.strftime("%Y-%m-%d %H:%M:%S"),

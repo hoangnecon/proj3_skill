@@ -2,6 +2,7 @@
 // (each ≤ ~1 MB, usually 100–400 KB) so a reviewer can open many of them cheaply.
 //   node scripts/qa.mjs where <i> [t] [--free WxH] -> terminal layout table of frame boxes + 3x3 grid + scale/cutoff (no render)
 //   node scripts/qa.mjs layout [i] [t]             -> 3x3 grid + scale + creature-cutoff summary for 1 shot or all shots (no render)
+//   node scripts/qa.mjs place <setId> [--actors N] [--subject key[:pose]] [--ots] [--cam cx,cy,k] -> zero-browser auto-layout solver
 //   node scripts/qa.mjs pass [changed|all]         -> ONE bundle/browser: contact + stale strips + cards + HOT crops + carry.py
 //   node scripts/qa.mjs review --batch <file.jsonl> -> validate & atomically write batch qa/review/NN.json (no render)
 //   node scripts/qa.mjs contact [--all]            -> qa/contact_p<N>.jpg : every shot at 25 % and 75 % (full frame)
@@ -28,17 +29,25 @@ import {makeShotHash} from './deps.mjs';
 
 const {actorBoxes, inter, area} = geom;
 
-// ---- CLI parsing (preserves positional args while supporting --batch <f>, --free <WxH>, --all)
+// ---- CLI parsing (preserves positional args while supporting --batch <f>, --free <WxH>, --all, --actors, --subject, --ots, --cam)
 const rawArgs = process.argv.slice(2);
 let ALL = false, batchFile = null, freeBox = null;
+let placeActors = null, placeSubject = null, placeOts = false, placeCam = null;
 const posArgs = [];
 for (let i = 0; i < rawArgs.length; i++) {
   const a = rawArgs[i];
   if (a === '--all') { ALL = true; }
+  else if (a === '--ots') { placeOts = true; }
   else if (a === '--batch') { batchFile = rawArgs[++i] ?? ''; }
   else if (a.startsWith('--batch=')) { batchFile = a.slice(8); }
   else if (a === '--free') { freeBox = rawArgs[++i] ?? ''; }
   else if (a.startsWith('--free=')) { freeBox = a.slice(7); }
+  else if (a === '--actors') { placeActors = rawArgs[++i] ?? ''; }
+  else if (a.startsWith('--actors=')) { placeActors = a.slice(9); }
+  else if (a === '--subject') { placeSubject = rawArgs[++i] ?? ''; }
+  else if (a.startsWith('--subject=')) { placeSubject = a.slice(10); }
+  else if (a === '--cam') { placeCam = rawArgs[++i] ?? ''; }
+  else if (a.startsWith('--cam=')) { placeCam = a.slice(6); }
   else if (!a.startsWith('--')) { posArgs.push(a); }
 }
 const [mode = 'contact', arg, arg2] = posArgs;
@@ -464,6 +473,425 @@ if (mode === 'layout') {
   process.exit(0);
 }
 
+// place <setId> [--actors N] [--subject key[:pose]] [--ots] [--cam cx,cy,k]: zero-browser auto-layout solver
+if (mode === 'place') {
+  const tStartPlace = Date.now();
+  const setId = arg;
+  const def = setId ? P.SETS?.[setId] : null;
+  if (!setId || !def) {
+    const avail = Object.keys(P.EPISODE_SETS ?? P.SETS ?? {});
+    console.error(`usage: node scripts/qa.mjs place <setId> [--actors N] [--subject key[:pose]] [--ots] [--cam cx,cy,k]`);
+    if (setId) console.error(`unknown set '${setId}'. available: ${avail.join(', ')}`);
+    process.exit(1);
+  }
+  const W = geom.W, H = geom.H;
+  const capBox = {x0: 0, y0: geom.CAPTION[0], x1: W, y1: geom.CAPTION[1]};
+  const looks = {...(P.EX_LOOKS ?? {}), ...(P.CAST ?? {})};
+
+  // 1. Camera [cx, cy, k]
+  let cam;
+  if (placeCam !== null) {
+    const parts = placeCam.split(',').map((v) => Number(v.trim()));
+    if (parts.length !== 3 || parts.some((v) => !Number.isFinite(v)) || parts[2] <= 0) {
+      console.error(`invalid --cam '${placeCam}' (expected cx,cy,k with k > 0)`);
+      process.exit(1);
+    }
+    cam = parts;
+  } else if (Array.isArray(def.plateCam) && def.plateCam.length === 3) {
+    cam = [...def.plateCam];
+  } else {
+    cam = [W / 2, H / 2, 1];
+  }
+  const [cx, cy, k] = cam;
+  const sxAt = (wx, d = 1) => { const kd = Math.pow(k, d); const ox = W / 2 + (cx - W / 2) * d; return W / 2 + (wx - ox) * kd; };
+  const syAt = (wy, d = 1) => { const kd = Math.pow(k, d); const oy = H / 2 + (cy - H / 2) * d; return H / 2 + (wy - oy) * kd; };
+  const invX = (px, d = 1) => { const kd = Math.pow(k, d); const ox = W / 2 + (cx - W / 2) * d; return ox + (px - W / 2) / kd; };
+  const invY = (py, d = 1) => { const kd = Math.pow(k, d); const oy = H / 2 + (cy - H / 2) * d; return oy + (py - H / 2) / kd; };
+
+  // 2. Actor count, cast selection, and safe scale s
+  const actorCount = placeActors !== null ? Math.max(0, Math.floor(Number(placeActors))) : 2;
+  if (!Number.isFinite(actorCount)) {
+    console.error(`invalid --actors '${placeActors}'`);
+    process.exit(1);
+  }
+  const defaultScale = geom.FORMAT === '16:9' ? [0.72, 0.92] : [0.85, 1.05];
+  const [minS, maxS] = Array.isArray(def.actorScale) && def.actorScale.length === 2 ? def.actorScale : defaultScale;
+  const midS = (minS + maxS) / 2;
+  const talkTargetS = Math.ceil((480 / Math.max(1, 610 * k)) * 100) / 100;
+  const rawS = midS < talkTargetS ? Math.min(maxS, talkTargetS) : midS;
+  const actorS = +Math.max(minS, Math.min(maxS, rawS)).toFixed(2);
+
+  const roleRank = {principal: 0, support: 1, extra: 2};
+  const castKeys = Object.keys(P.CAST ?? {}).sort((a, b) => (roleRank[P.CAST_ROLES?.[a]?.role] ?? 3) - (roleRank[P.CAST_ROLES?.[b]?.role] ?? 3));
+  const pickLook = (idx) => castKeys[idx % Math.max(1, castKeys.length)] ?? `actor${idx + 1}`;
+
+  // 3. Depth zones & visible diegetic signs
+  const mgY = (Array.isArray(def.zones?.mgY) && def.zones.mgY.length === 2)
+    ? [def.zones.mgY[0], def.zones.mgY[1]]
+    : [Math.round(invY(H * 0.62)), Math.round(invY(geom.CAPTION[0] - 10))];
+  const visSigns = geom.setTextsAt(setId, {t: 1, ...(def.plateOpts ?? {})}, P)
+    .filter((sg) => sg.fontSize >= 14)
+    .map((sg) => ({...sg, screenBox: geom.projectBox({x0: sg.x0, y0: sg.y0, x1: sg.x1, y1: sg.y1}, cam, sg.d)}))
+    .filter((sg) => area(geom.clip(sg.screenBox)) > 0);
+
+  const mkBox = (x0, y0, x1, y1) => ({x0: Math.min(x0, x1), y0: Math.min(y0, y1), x1: Math.max(x0, x1), y1: Math.max(y0, y1)});
+  const estActorBox = (wx, wy, sVal, lookKey, d = 1) => {
+    const L = looks[lookKey] ?? {};
+    const hh = L.h ?? 1, hd = L.head ?? 1, ww = L.w ?? 1;
+    const headC = wy - (382 * hh + 90 * hd) * sVal, headR = 100 * hd * sVal;
+    const top = headC - headR * 1.15;
+    const half = Math.max(headR, 110 * ww * sVal);
+    return {
+      head: mkBox(sxAt(wx - headR * 1.3, d), syAt(top - 40 * sVal, d), sxAt(wx + headR * 1.3, d), syAt(headC + headR * 1.25, d)),
+      body: mkBox(sxAt(wx - half, d), syAt(headC + headR * 0.8, d), sxAt(wx + half, d), syAt(wy, d)),
+      hands: mkBox(sxAt(wx - 260 * sVal, d), syAt(wy - 400 * hh * sVal, d), sxAt(wx + 260 * sVal, d), syAt(wy - 120 * hh * sVal, d)),
+      all: mkBox(sxAt(wx - half * 1.2, d), syAt(top, d), sxAt(wx + half * 1.2, d), syAt(wy + 10 * sVal, d)),
+      h: (wy - top) * Math.pow(k, d),
+      halfScreen: half * Math.pow(k, d),
+    };
+  };
+
+  // Helper: fast 3x3 maxCellCount check matching geom.mjs LA-02
+  const evalMaxCell = (clusterBoxes) => {
+    const colW = W / 3, rowH = H / 3, cellArea = colW * rowH;
+    let maxC = 0;
+    for (let rr = 0; rr < 3; rr++) {
+      for (let cc = 0; cc < 3; cc++) {
+        const cbox = {x0: cc * colW, y0: rr * rowH, x1: (cc + 1) * colW, y1: (rr + 1) * rowH};
+        let n = 0;
+        for (const b of clusterBoxes) {
+          const cb = geom.clip(b);
+          const ca = area(cb);
+          if (ca <= 0) continue;
+          const ov = inter(cb, cbox);
+          if (ov / cellArea > 0.12 || ov / Math.max(1, ca) > 0.25) n++;
+        }
+        if (n > maxC) maxC = n;
+      }
+    }
+    return maxC;
+  };
+
+  const hasOts = placeOts && actorCount >= 1;
+  const mgCount = hasOts ? actorCount - 1 : actorCount;
+  const mgLooks = Array.from({length: mgCount}, (_, idx) => pickLook(hasOts ? idx + 1 : idx));
+  const avgActorH = mgLooks.length > 0
+    ? mgLooks.reduce((sum, lk) => sum + estActorBox(cx, mgY[1], actorS, lk).h, 0) / mgLooks.length
+    : 587 * actorS * k;
+
+  // 4. Optional Subject / Prop placement in right-third focal zone (0% edge clipping, above CAPTION[0])
+  let placedSubject = null;
+  if (placeSubject) {
+    const [subjKey, subjPoseRaw] = placeSubject.split(':');
+    const subjDef = P.SUBJECTS?.[subjKey] ?? null;
+    const propFn = !subjDef ? P.WORLD_PROPS?.[subjKey] ?? null : null;
+    if (!subjDef && !propFn) {
+      const availS = Object.keys(P.SUBJECTS ?? {});
+      const availP = Object.keys(P.WORLD_PROPS ?? {});
+      console.error(`unknown --subject '${subjKey}'. SUBJECTS: [${availS.join(', ')}]; WORLD_PROPS: [${availP.slice(0, 12).join(', ')}]`);
+      process.exit(1);
+    }
+    const pose = subjDef ? (subjPoseRaw || subjDef.poses?.[0] || 'idle') : null;
+    const expr = subjDef ? (subjDef.exprs?.[0] ?? undefined) : undefined;
+    const mb = subjDef
+      ? geom.measureSubjectBox(subjKey, pose, P, {t: 1.0, expr})
+      : geom.measurePropBox(subjKey, P);
+    const flip = actorCount > 0;
+    const rel = Array.isArray(subjDef?.relToActor) && subjDef.relToActor.length === 2 ? subjDef.relToActor : [0.85, 1.45];
+    const mbH = Math.max(1, mb.height), mbW = Math.max(1, mb.width);
+    const sMin = (rel[0] * avgActorH) / (mbH * k);
+    const sMinLa01 = (rel[0] * 0.74 * avgActorH) / (mbH * k);
+    const sMax = (rel[1] * avgActorH) / (mbH * k);
+    const sMid = (((rel[0] + rel[1]) / 2) * avgActorH) / (mbH * k);
+    const sFitH = Math.max(0.1, (geom.CAPTION[0] - 44) / (mbH * k));
+    const sFitW = Math.max(0.1, (W * 0.44) / (mbW * k));
+    const sStart = Math.max(sMin, Math.min(sMax, Math.min(sMid, sFitH, sFitW)));
+    const scaleCands = [...new Set([
+      sStart,
+      sMin + (sStart - sMin) * 0.80,
+      sMin + (sStart - sMin) * 0.60,
+      sMin + (sStart - sMin) * 0.35,
+      sMin,
+      Math.max(sMinLa01, Math.min(sMin, sFitW)),
+      sMinLa01,
+    ].map((v) => +Math.max(0.15, Math.min(sMax, v)).toFixed(2)))];
+
+    const subjBoxFor = (ex, ey, sc) => {
+      const wx0 = flip ? ex - mb.maxX * sc : ex + mb.minX * sc;
+      const wx1 = flip ? ex - mb.minX * sc : ex + mb.maxX * sc;
+      return geom.projectBox(mkBox(wx0, ey + mb.minY * sc, wx1, ey + mb.maxY * sc), cam, 1);
+    };
+
+    let bestSubj = null;
+    const targetWx = invX(W * 0.72);
+    const prefSubjY = Math.round(mgY[0] + (mgY[1] - mgY[0]) * 0.68);
+    for (const sc of scaleCands) {
+      const exLo = Math.ceil(flip ? invX(20) + mb.maxX * sc : invX(20) - mb.minX * sc);
+      const exHi = Math.floor(flip ? invX(W - 20) + mb.minX * sc : invX(W - 20) - mb.maxX * sc);
+      const eyLo = Math.ceil(Math.max(mgY[0], invY(20) - mb.minY * sc));
+      const eyHi = Math.floor(Math.min(mgY[1], invY(geom.CAPTION[0] - 8) - mb.maxY * sc));
+      const xStart = exLo <= exHi ? Math.max(exLo, Math.round(invX(W * 0.60))) : Math.round(targetWx);
+      const xEnd = exLo <= exHi ? Math.min(exHi, Math.round(invX(W * 0.86))) : Math.round(targetWx);
+      const xs = [];
+      if (xStart <= xEnd) {
+        for (let x = xStart; x <= xEnd; x += 24) xs.push(x);
+        if (xs[xs.length - 1] !== xEnd) xs.push(xEnd);
+      } else {
+        xs.push(exLo <= exHi ? Math.max(exLo, Math.min(exHi, Math.round(targetWx))) : Math.round(targetWx));
+      }
+      const ys = [];
+      if (eyLo <= eyHi) {
+        for (let y = eyLo; y <= eyHi; y += 20) ys.push(y);
+        if (ys[ys.length - 1] !== eyHi) ys.push(eyHi);
+      } else {
+        ys.push(Math.max(mgY[0], Math.min(mgY[1], Math.floor(invY(geom.CAPTION[0] - 8) - mb.maxY * sc))));
+      }
+
+      for (const ex of xs) {
+        for (const ey of ys) {
+          const sb = subjBoxFor(ex, ey, sc);
+          const sArea = Math.max(1, area(sb));
+          const clipFrac = 1 - area(geom.clip(sb)) / sArea;
+          const capOv = inter(sb, capBox);
+          let signOv = 0, signHits = 0;
+          for (const sg of visSigns) {
+            const padSg = {x0: sg.screenBox.x0 - 12, y0: sg.screenBox.y0 - 12, x1: sg.screenBox.x1 + 12, y1: sg.screenBox.y1 + 12};
+            const ov = inter(sb, padSg);
+            if (ov > 0) { signOv += ov; signHits++; }
+          }
+          const leftPenalty = Math.max(0, W * 0.52 - sb.x0) * 40;
+          const ratio = (sb.y1 - sb.y0) / Math.max(1, avgActorH);
+          const ratioErr = (ratio < rel[0] * 0.7 || ratio > rel[1] * 1.35) ? 1e7 : (ratio < rel[0] ? 15000 : 0);
+          const score =
+            clipFrac * 1e7 +
+            (capOv > 0 ? 5e6 + capOv : 0) +
+            ratioErr +
+            signHits * 5e5 + signOv * 20 +
+            leftPenalty +
+            Math.abs(sxAt(ex) - W * 0.72) * 1.5 +
+            Math.abs(ey - prefSubjY) * 1.2 +
+            Math.abs(sc - sStart) * 1200;
+          if (!bestSubj || score < bestSubj.score) {
+            bestSubj = {score, k: subjKey, pose, expr, x: ex, y: ey, s: sc, flip, isSubject: !!subjDef, screenBox: sb, clipFrac};
+          }
+        }
+      }
+    }
+    placedSubject = bestSubj;
+  }
+
+  // 5. Place actors (optional foreground OTS #0 + midground Rule-of-Thirds columns + sign/collision sweep)
+  const placedActors = [];
+  if (hasOts) {
+    const lk = pickLook(0);
+    const otsX = Math.round(invX(W * 0.13, 1.2));
+    const otsY = Math.round(invY(H * 1.01, 1.2));
+    placedActors.push({id: lk, look: lk, x: otsX, y: otsY, s: 1.42, view: 'back', fg: true, p: 'brace'});
+  }
+
+  if (mgCount > 0) {
+    const halfScreens = mgLooks.map((lk) => estActorBox(cx, mgY[1], actorS, lk).halfScreen);
+    const maxHalf = Math.max(...halfScreens, 90);
+    let leftSx = hasOts ? Math.max(W * 0.27, W * 0.13 + 220) : Math.max(W * 0.16, maxHalf + 48);
+    let rightSx = placedSubject
+      ? Math.min(W * 0.62, placedSubject.screenBox.x0 - maxHalf - 36)
+      : Math.min(W * 0.84, W - maxHalf - 48);
+    const minSpan = Math.max(0, (mgCount - 1) * (maxHalf * 2 + 28));
+    if (rightSx - leftSx < minSpan) {
+      leftSx = hasOts ? Math.max(W * 0.23, maxHalf + 36) : Math.max(W * 0.11, maxHalf + 32);
+      rightSx = placedSubject
+        ? Math.min(W - maxHalf - 32, placedSubject.screenBox.x0 - maxHalf - 16)
+        : W - maxHalf - 32;
+    }
+
+    let colSx;
+    if (!placedSubject && !hasOts) {
+      if (mgCount === 1) colSx = [W * 0.36];
+      else if (mgCount === 2) colSx = [W * 0.30, W * 0.70];
+      else if (mgCount === 3) colSx = [W * 0.22, W * 0.50, W * 0.78];
+      else colSx = Array.from({length: mgCount}, (_, idx) => leftSx + ((rightSx - leftSx) * idx) / (mgCount - 1));
+    } else {
+      if (mgCount === 1) colSx = [Math.min(rightSx, Math.max(leftSx, W * 0.34))];
+      else if (mgCount === 2) {
+        const a0 = Math.max(leftSx, hasOts ? W * 0.30 : W * 0.24);
+        const a1 = Math.min(rightSx, hasOts ? W * 0.51 : W * 0.48);
+        colSx = a1 - a0 >= maxHalf * 2 + 24 ? [a0, a1] : [leftSx, Math.max(leftSx + maxHalf * 2 + 24, rightSx)];
+      } else {
+        colSx = Array.from({length: mgCount}, (_, idx) => leftSx + ((rightSx - leftSx) * idx) / (mgCount - 1));
+      }
+    }
+
+    // Build initial midground placements inside safe Y window of mgY
+    const mgActors = mgLooks.map((lk, idx) => {
+      const L = looks[lk] ?? {};
+      const hh = L.h ?? 1, hd = L.head ?? 1;
+      const yMinHead = Math.ceil(invY(24) + (382 * hh + 205 * hd + 40) * actorS);
+      const yMaxCap = Math.floor(invY(geom.CAPTION[0] - 8) + 120 * hh * actorS);
+      const yMaxFrame = Math.floor(invY(H - 20));
+      const yLo = Math.max(mgY[0], yMinHead);
+      const yHi = Math.min(mgY[1], yMaxCap, yMaxFrame);
+      const stagger = mgCount > 1 ? ((idx % 2 === 0 ? 0 : 14) - 6) : 0;
+      const yPref = Math.round(mgY[0] + (mgY[1] - mgY[0]) * 0.68) + stagger;
+      const wy = yLo <= yHi ? Math.max(yLo, Math.min(yHi, yPref)) : Math.max(mgY[0], Math.min(mgY[1], yMaxCap));
+      const wx = Math.round(invX(colSx[idx]));
+      const face = placedSubject ? 1 : (idx < mgCount - 1 ? 1 : -1);
+      return {
+        id: lk, look: lk, x: wx, y: wy, s: actorS, view: '3q', face,
+        p: idx === 0 ? 'pointR' : 'idle',
+        e: idx === 0 ? 'eager' : 'stern',
+        _baseX: wx, _baseY: wy, _yLo: yLo <= yHi ? yLo : mgY[0], _yHi: yLo <= yHi ? yHi : Math.min(mgY[1], yMaxCap),
+      };
+    });
+
+    // Coordinate sweep: ±80px X, ±30px Y (2 passes) for zero caption/sign/body overlap & maxCell <= 2
+    const dxs = [0, -16, 16, -32, 32, -48, 48, -64, 64, -80, 80];
+    const dys = [0, -10, 10, -20, 20, -30, 30];
+    for (let pass = 0; pass < 2; pass++) {
+      for (let i = 0; i < mgActors.length; i++) {
+        const cur = mgActors[i];
+        const minWx = Math.ceil(invX(hasOts ? W * 0.23 : halfScreens[i] + 24));
+        const maxWx = Math.floor(invX(W - halfScreens[i] - 24));
+        let best = null;
+        for (const dx of dxs) {
+          const wx = Math.max(minWx, Math.min(maxWx, cur._baseX + dx));
+          for (const dy of dys) {
+            const wy = Math.max(cur._yLo, Math.min(cur._yHi, cur._baseY + dy));
+            const ab = estActorBox(wx, wy, cur.s, cur.look);
+            const capHit = inter(ab.head, capBox) + inter(ab.hands, capBox);
+            const headClip = (ab.head.y0 < 8 || ab.head.x0 < 8 || ab.head.x1 > W - 8) ? 1 : 0;
+            let bodyOv = 0, bodyHits = 0;
+            const clusterBoxes = placedSubject ? [placedSubject.screenBox] : [];
+            for (let j = 0; j < mgActors.length; j++) {
+              const ob = j === i ? ab : estActorBox(mgActors[j].x, mgActors[j].y, mgActors[j].s, mgActors[j].look);
+              clusterBoxes.push(ob.all);
+              if (j === i) continue;
+              const ov = inter(ab.body, ob.body);
+              if (ov > 0) { bodyOv += ov; bodyHits++; }
+            }
+            let subjOv = 0;
+            if (placedSubject) {
+              subjOv = inter(ab.body, placedSubject.screenBox) + inter(ab.head, placedSubject.screenBox) * 2;
+            }
+            let signOv = 0, signHits = 0;
+            for (const sg of visSigns) {
+              const ov = inter(ab.head, sg.screenBox) + inter(ab.body, sg.screenBox);
+              if (ov > 0) { signOv += ov; signHits++; }
+            }
+            const maxCell = evalMaxCell(clusterBoxes);
+            const cellPen = maxCell > 2 ? (maxCell - 2) * 1.5e5 : 0;
+            const score =
+              (capHit > 0 ? 1e6 + capHit : 0) +
+              headClip * 1e6 +
+              bodyHits * 5e5 + bodyOv * 20 +
+              (subjOv > 0 ? 2e5 + subjOv * 10 : 0) +
+              cellPen +
+              signHits * 5e4 + signOv * 5 +
+              (Math.abs(dx) + Math.abs(dy)) * 0.05;
+            if (!best || score < best.score) best = {score, wx, wy};
+          }
+        }
+        if (best) { cur.x = best.wx; cur.y = best.wy; }
+      }
+    }
+
+    for (const a of mgActors) {
+      placedActors.push({id: a.id, look: a.look, x: a.x, y: a.y, s: a.s, view: a.view, face: a.face, p: a.p, e: a.e});
+    }
+  }
+
+  const placedExtras = placedSubject ? [{
+    id: `${placedSubject.k}1`,
+    k: placedSubject.k,
+    x: placedSubject.x,
+    y: placedSubject.y,
+    s: placedSubject.s,
+    ...(placedSubject.pose ? {pose: placedSubject.pose} : {}),
+    ...(placedSubject.expr ? {expr: placedSubject.expr} : {}),
+    ...(placedSubject.flip ? {flip: true} : {}),
+  }] : [];
+
+  // 6. Fast end-to-end verification through geom.shotGeometry (zero browser)
+  const mockShot = {
+    at: 's1', name: `place_${setId}`, set: setId, cam,
+    o: def.plateOpts ?? {},
+    actors: placedActors,
+    extras: placedExtras,
+    over: [],
+  };
+  const mockRow = {
+    i: 0, name: mockShot.name, set: setId, t0: 0, t1: 2, cam, cam2: null,
+    actors: placedActors.map((a) => ({...a})),
+    extras: placedExtras,
+    over: [], keys: [], reaches: [],
+  };
+  const mockP = {...P, SHOTS: [mockShot], shotTable: () => [mockRow]};
+  const g = geom.shotGeometry(mockRow, 1.0, mockP, [mockRow]);
+
+  // Strict pairwise body overlap + sign overlap counts
+  let pairOverlaps = 0;
+  for (let i = 0; i < g.actors.length; i++) {
+    if (g.actors[i].fg) continue;
+    for (let j = i + 1; j < g.actors.length; j++) {
+      if (g.actors[j].fg) continue;
+      if (inter(g.actors[i].body, g.actors[j].body) > 0) pairOverlaps++;
+    }
+  }
+  const visSetSigns = (g.signs ?? []).filter((sg) => sg.onScreen && sg.source === 'set');
+  let signOverlapCount = 0;
+  for (const sg of visSetSigns) {
+    const hitActor = g.actors.some((a) => !a.fg && (inter(a.head, sg.screenBox) > 0 || inter(a.body, sg.screenBox) > 0));
+    const hitProp = g.props.some((pr) => !pr.fg && inter(pr.screenBox, sg.screenBox) > 0);
+    if (hitActor || hitProp) signOverlapCount++;
+  }
+  const signOccludedCount = visSetSigns.reduce((n, sg) => n + (sg.occludedBy?.length ?? 0), 0);
+
+  // 7. Print clean ready-to-paste TypeScript snippet + verification scorecard
+  const fmtActor = (a) => {
+    const parts = [`id: '${a.id}'`, `look: '${a.look}'`, `x: ${a.x}`, `y: ${a.y}`, `s: ${a.s}`, `view: '${a.view}'`];
+    if (a.fg) parts.push('fg: true');
+    if (a.face !== undefined) parts.push(`face: ${a.face}`);
+    if (a.p) parts.push(`p: '${a.p}'`);
+    if (a.e) parts.push(`e: '${a.e}'`);
+    return `    {${parts.join(', ')}},`;
+  };
+  const fmtExtra = (e) => {
+    const parts = [`id: '${e.id}'`, `k: '${e.k}'`, `x: ${e.x}`, `y: ${e.y}`, `s: ${e.s}`];
+    if (e.pose) parts.push(`pose: '${e.pose}'`);
+    if (e.expr) parts.push(`expr: '${e.expr}'`);
+    if (e.flip) parts.push('flip: true');
+    return `    {${parts.join(', ')}},`;
+  };
+
+  console.log(`place: set=${setId} · shotScale=${def.shotScale ?? '-'} · actorScale=[${minS}..${maxS}] -> s=${actorS} (talkH=${Math.round(610 * actorS * k)}px) · mgY=[${mgY.join('..')}] · cam=[${cam.join(', ')}]`);
+  console.log('\n// --- Ready-to-paste ShotDef snippet ---');
+  console.log(`  set: '${setId}',`);
+  console.log(`  cam: [${cam.map((v, idx) => idx === 2 ? +v.toFixed(2) : Math.round(v)).join(', ')}],`);
+  console.log('  actors: [');
+  for (const a of placedActors) console.log(fmtActor(a));
+  console.log('  ],');
+  if (placedExtras.length) {
+    console.log('  extras: [');
+    for (const e of placedExtras) console.log(fmtExtra(e));
+    console.log('  ],');
+  }
+
+  const gl = g.gridLayout;
+  const cellStr = (id) => `${id}=${gl.cells[id] ?? 0}`;
+  const subjClip = g.props.length ? Math.round((g.props[0].clippedFrac ?? 0) * 100) : 0;
+  const fgActorIds = new Set(g.actors.filter((a) => a.fg).map((a) => a.id));
+  const mgCaptionIssues = g.captionIssues.filter((c) => !fgActorIds.has(c.id));
+  const fgCaptionIssues = g.captionIssues.filter((c) => fgActorIds.has(c.id));
+  console.log('\n// --- Layout Verification (zero-browser) ---');
+  console.log(`  3x3 GRID:  ${cellStr('A1')} ${cellStr('B1')} ${cellStr('C1')} | ${cellStr('A2')} ${cellStr('B2')} ${cellStr('C2')} | ${cellStr('A3')} ${cellStr('B3')} ${cellStr('C3')}  (maxCell=${gl.maxCellCount}, occ=${Math.round(gl.occupancyFrac * 100)}%)`);
+  console.log(`  CAPTION:   ${mgCaptionIssues.length} midground issue(s)${fgCaptionIssues.length ? ` (+${fgCaptionIssues.length} fg-OTS lower-hands)` : ''} (band y=${geom.CAPTION[0]}..${geom.CAPTION[1]})`);
+  console.log(`  SIGNS:     ${visSetSigns.length} visible · ${signOverlapCount} touched · ${signOccludedCount} GE-11 occluded`);
+  console.log(`  OVERLAP:   ${pairOverlaps} pairwise body overlap(s)`);
+  console.log(`  SCALE:     ${g.scaleIssues.length} LA-01 issue(s) (actor s=${actorS} in [${minS}..${maxS}]${placedSubject ? `, subject s=${placedSubject.s}` : ''})`);
+  console.log(`  CUTOFF:    ${g.creatureCutoffIssues.length} LA-04 issue(s)${placedExtras.length ? ` (subject edge clip=${subjClip}%)` : ''}`);
+  console.log(`  SOLVED IN: ${Date.now() - tStartPlace} ms`);
+  process.exit(0);
+}
+
 // ---- lock: two renders of the same episode at once only fight for CPU and overwrite each other's frames
 const LOCK = 'qa/.render.lock';
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
@@ -631,7 +1059,7 @@ try {
     tile({out: `qa/shots/${pad(r.i)}.jpg`, cols: 3, w: 300, title: `#${r.i} ${r.name} · ${r.set} · hash ${hashes[r.i]}`, cells: jobs.map((j) => ({img: j.out, label: fmt(j.t), sub: ''}))});
     console.log('ok', r.i, `${((Date.now() - t00) / 1000).toFixed(0)} s`);
   } else {
-    console.log('modes: pass [changed|all] | where <i> [t] [--free WxH] | layout [i] [t] | review --batch <file.jsonl> | contact [--all] | strips [names] [--all] | cards [changed|hot|all|i,j] | crops <i> | frames t1,t2 | shot <i> | status');
+    console.log('modes: pass [changed|all] | where <i> [t] [--free WxH] | layout [i] [t] | place <setId> [--actors N] [--subject key[:pose]] [--ots] [--cam cx,cy,k] | review --batch <file.jsonl> | contact [--all] | strips [names] [--all] | cards [changed|hot|all|i,j] | crops <i> | frames t1,t2 | shot <i> | status');
     process.exitCode = 1;
   }
 } finally {

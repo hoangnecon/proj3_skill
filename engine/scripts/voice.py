@@ -13,6 +13,8 @@ Chạy: /Users/Shared/Tools/VieNeu-TTS/.venv/bin/python scripts/voice.py [--only
   --calibrate a.wav:text ... : in hồ sơ giọng (chỉ dùng khi đổi chuẩn series)
 Đầu ra: audio/<id>.wav, audio/voice.wav, public/voice.wav, qa/timeline.json, qa/voice_report.json, src/data/words.json, src/data/cues.json
 """
+from __future__ import annotations
+
 import argparse
 import difflib
 import hashlib
@@ -20,16 +22,38 @@ import json
 import random
 import re
 import subprocess
+import sys
 import unicodedata
 from pathlib import Path
 
-import numpy as np
-import soundfile as sf
-from scipy.signal import resample_poly
+try:
+    import numpy as np
+    import soundfile as sf
+    from scipy.signal import resample_poly
+except ImportError:
+    np = None  # type: ignore[assignment]
+    sf = None  # type: ignore[assignment]
+    resample_poly = None  # type: ignore[assignment]
 
-ROOT = Path(__file__).resolve().parent.parent
+_SCRIPT_ROOT = Path(__file__).resolve().parent.parent
+ROOT = _SCRIPT_ROOT if (_SCRIPT_ROOT / "script.json").exists() else (
+    Path.cwd() if (Path.cwd() / "script.json").exists() else _SCRIPT_ROOT
+)
 SR = 48000
-STD = json.loads((ROOT / "standards/voice_standard.json").read_text())
+
+
+def _load_std() -> dict:
+    for cand in (
+        ROOT / "standards/voice_standard.json",
+        _SCRIPT_ROOT / "standards/voice_standard.json",
+        _SCRIPT_ROOT.parent / "standards/voice_standard.json",
+    ):
+        if cand.exists():
+            return json.loads(cand.read_text())
+    raise FileNotFoundError(f"standards/voice_standard.json not found from {ROOT}")
+
+
+STD = _load_std()
 EN_SPAN_RE = re.compile(r"<en>(.*?)</en>", re.I | re.S)
 TAG_RE = re.compile(r"\[([^\]]+)\]")
 SENT_SPLIT_RE = re.compile(r"(?<=[.!?…])\s+(?=[^\s])")
@@ -514,6 +538,195 @@ def voice_bus_between_words(words, cues):
             per[k] = round(val, 2)
     return total, dict(sorted(per.items(), key=lambda kv: -kv[1]))
 
+# Valid pure-ASCII (unaccented, thanh ngang) Vietnamese syllable pattern for --preflight English detection
+_VN_ONSET = r"(?:ngh|ng|nh|ch|gh|gi|kh|ph|qu|th|tr|[bcdghklmnprstvx])?"
+_VN_RHYME = (
+    r"(?:oai|oay|oao|oeo|uya|uyu|"
+    r"oa(?:ch|ng|nh|[cmnpt])?|oe[nt]?|uy(?:ch|nh|[npt])?|oo(?:ng|c)|"
+    r"a(?:ch|ng|nh|[cmnpt])|e(?:ng|[cmnpt])|i(?:ch|nh|[mnpt])|o(?:ng|[cmnpt])|u(?:ng|[cmnpt])|"
+    r"ai|ao|au|ay|eo|ia|iu|oi|ua|ui|[aeiouy])"
+)
+_VN_ASCII_SYL_RE = re.compile(r"^" + _VN_ONSET + _VN_RHYME + r"$")
+_VN_ASSIMILATED_LOANWORDS = {
+    "centimet", "milimet", "kilomet", "xentimet", "kilogam", "miligam", "mililit", "hecta", "cacao", "tivi",
+}
+_EN_VN_SHAPE_COLLISIONS = {
+    "chat", "hit", "hot", "kit", "map", "min", "net", "pay", "pop", "rap", "rich",
+    "set", "tap", "tip", "top", "trap", "trim", "trip", "vip",
+}
+
+
+def _looks_unwrapped_english(word: str) -> bool:
+    lw = word.lower()
+    if lw in _VN_ASSIMILATED_LOANWORDS:
+        return False
+    if lw in _EN_VN_SHAPE_COLLISIONS:
+        return True
+    return not bool(_VN_ASCII_SYL_RE.match(lw))
+
+
+def run_preflight(script: dict, voice: str, allow_voice: bool = False, as_json: bool = False) -> int:
+    """Zero-TTS deterministic preflight sanitizer for script.json (runs in <0.3s on system python3)."""
+    text_rules = STD.get("text", {})
+    allowed_tags = {x.lower() for x in text_rules.get("allowed_tags", [])}
+    max_words_seg = int(text_rules.get("max_words_per_call", 45))
+    global_english = list(script.get("english", []))
+    segments = script.get("segments", [])
+
+    errors: list[dict] = []
+    warnings: list[dict] = []
+    total_sentences = 0
+    unwrapped_en_all: set[str] = set()
+
+    if voice != "Hải Đăng" and not allow_voice:
+        errors.append({
+            "seg": "_episode",
+            "code": "invalid_voice",
+            "message": f"voice '{voice}' != 'Hải Đăng' (use --allow-voice only if requested by user)",
+        })
+
+    if not segments:
+        errors.append({"seg": "_episode", "code": "empty_segments", "message": "script.json has no segments"})
+
+    for idx, seg in enumerate(segments):
+        sid = str(seg.get("id") or f"#{idx + 1}")
+        raw_text = seg.get("text")
+        if not isinstance(raw_text, str) or not raw_text.strip():
+            errors.append({"seg": sid, "code": "missing_text", "message": "missing or empty 'text'"})
+            continue
+        if "tts_text" in seg and (not isinstance(seg.get("tts_text"), str) or not seg["tts_text"].strip()):
+            errors.append({"seg": sid, "code": "empty_tts_text", "message": "explicit 'tts_text' is empty"})
+
+        if "sentences" in seg:
+            for j, st in enumerate(seg.get("sentences", []), 1):
+                st_txt = st if isinstance(st, str) else (st.get("tts_text", st.get("text", "")) if isinstance(st, dict) else "")
+                if not isinstance(st_txt, str) or not st_txt.strip():
+                    errors.append({"seg": f"{sid}.{j}", "code": "empty_sentence", "message": f"sentence {j} has empty text/tts_text"})
+
+        seg_eng = global_english + list(seg.get("english", []))
+        # Also validate raw seg['text'] for unbalanced <en>, digits outside <en>, and unknown [tags],
+        # because full voice.py checks text_problems(s['text']) before synthesis.
+        text_masked_en = EN_SPAN_RE.sub(" ", raw_text)
+        if re.search(r"</?en\b", text_masked_en, flags=re.I):
+            errors.append({"seg": sid, "code": "unbalanced_en", "message": "unbalanced or nested <en>...</en> in text"})
+        text_no_en_no_tag = TAG_RE.sub(" ", text_masked_en)
+        if text_rules.get("no_digits", True) and "tts_text" not in seg and "sentences" not in seg:
+            # handled per-sentence below; if tts_text overrides text, still flag digits in raw text since voice.py rejects them
+            pass
+        elif text_rules.get("no_digits", True):
+            raw_text_digits = re.findall(r"\d+", text_no_en_no_tag)
+            if raw_text_digits:
+                errors.append({
+                    "seg": sid,
+                    "code": "raw_digits_in_text",
+                    "message": f"raw digits {raw_text_digits} in 'text' outside <en> (voice.py validates both text & tts_text — spell in Vietnamese words)",
+                })
+
+        sent_specs = resolve_segment_sentences(seg, global_english)
+        if not sent_specs:
+            errors.append({"seg": sid, "code": "no_sentences", "message": "resolved 0 spoken sentences"})
+            continue
+
+        seg_word_count = len(strip_markup(" ".join(sp["tts"] for sp in sent_specs)).split())
+        if seg_word_count > max_words_seg:
+            errors.append({
+                "seg": sid,
+                "code": "max_words_per_call",
+                "message": f"{seg_word_count} words > {max_words_seg} max_words_per_call in segment",
+            })
+
+        for sp in sent_specs:
+            total_sentences += 1
+            loc = f"{sid}.{sp['idx']}"
+            s_tts = sp["tts"]
+
+            # Check unbalanced <en>
+            masked_en = EN_SPAN_RE.sub(" ", s_tts)
+            if re.search(r"</?en\b", masked_en, flags=re.I):
+                errors.append({"seg": loc, "code": "unbalanced_en", "message": "unbalanced or nested <en>...</en> tag"})
+
+            # Check unknown [tag] emotion markers
+            tags = [t.strip() for t in TAG_RE.findall(s_tts)]
+            bad_tags = [t for t in tags if t.lower() not in allowed_tags]
+            if bad_tags:
+                errors.append({
+                    "seg": loc,
+                    "code": "unknown_tag",
+                    "message": f"unknown emotion tag(s) {bad_tags} (allowed: {sorted(allowed_tags)})",
+                })
+
+            # Strip <en>...</en> and [tag] to inspect Vietnamese spoken body
+            vn_body = TAG_RE.sub(" ", masked_en)
+
+            # 1. Raw ASCII digits outside <en>...</en>
+            digits = re.findall(r"\d+", vn_body)
+            if digits and text_rules.get("no_digits", True):
+                errors.append({
+                    "seg": loc,
+                    "code": "raw_digits",
+                    "message": f"raw digits {digits} outside <en> — write in Vietnamese words in tts_text",
+                })
+
+            # 2. Unwrapped ASCII English words ([A-Za-z]{3,} not in english list / <en> / [tag])
+            eng_lower = {e.strip().lower() for e in seg_eng if isinstance(e, str) and e.strip()}
+            en_hits = []
+            for tok in re.findall(r"[^\W_]+", vn_body, re.UNICODE):
+                if tok.isascii() and tok.isalpha() and len(tok) >= 3 and tok.lower() not in eng_lower:
+                    if _looks_unwrapped_english(tok):
+                        en_hits.append(tok)
+                        unwrapped_en_all.add(tok)
+            if en_hits:
+                uniq = sorted(set(en_hits), key=str.lower)
+                warnings.append({
+                    "seg": loc,
+                    "code": "unwrapped_english",
+                    "words": uniq,
+                    "message": f"unwrapped ASCII English word(s) {uniq} — add to 'english' list or wrap in <en>...</en>",
+                })
+
+            # 3. Overly long spoken sentence (> 26 words or > 34 syllable units)
+            clean_sent = strip_markup(s_tts)
+            w_cnt = len(clean_sent.split())
+            u_cnt = round(syllable_units(s_tts), 1)
+            if w_cnt > 26 or u_cnt > 34:
+                warnings.append({
+                    "seg": loc,
+                    "code": "long_sentence",
+                    "words": w_cnt,
+                    "units": u_cnt,
+                    "message": f"long spoken sentence ({w_cnt} words, {u_cnt} units; target <=26 words / <=34 units) — split sentence to avoid WSOLA retries",
+                })
+
+    payload = {
+        "ok": len(errors) == 0,
+        "voice": voice,
+        "segments": len(segments),
+        "sentences": total_sentences,
+        "error_count": len(errors),
+        "warning_count": len(warnings),
+        "unwrapped_english": sorted(unwrapped_en_all, key=str.lower),
+        "errors": errors,
+        "warnings": warnings,
+    }
+    if as_json:
+        print(json.dumps(payload, ensure_ascii=False, indent=1))
+    else:
+        status = "PASS" if payload["ok"] else "FAIL"
+        print(
+            f"voice preflight [{status}]: {len(segments)} segments, {total_sentences} sentences · "
+            f"{len(errors)} error(s), {len(warnings)} warning(s)"
+        )
+        for e in errors[:20]:
+            print(f"  ERROR [{e['seg']}] ({e['code']}): {e['message']}")
+        if len(errors) > 20:
+            print(f"  ... +{len(errors) - 20} more error(s)")
+        for w in warnings[:20]:
+            print(f"  WARN  [{w['seg']}] ({w['code']}): {w['message']}")
+        if len(warnings) > 20:
+            print(f"  ... +{len(warnings) - 20} more warning(s)")
+    return 0 if payload["ok"] else 1
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--voice", default=None)
@@ -522,10 +735,16 @@ def main():
     ap.add_argument("--missing", action="store_true", help="chỉ sinh các đoạn/câu chưa có audio")
     ap.add_argument("--only", default=None, help="sinh lại đoạn hoặc câu cụ thể (vd: s3,s7.2)")
     ap.add_argument("--allow-voice", action="store_true", help="cho phép giọng khác Hải Đăng (chỉ khi người dùng yêu cầu)")
+    ap.add_argument("--preflight", action="store_true", help="kiểm tra nhanh kịch bản trước khi gọi TTS (không tải VieNeu/Whisper)")
+    ap.add_argument("--json", action="store_true", help="xuất JSON (dùng cùng --preflight)")
     args = ap.parse_args()
 
     script = json.loads((ROOT / "script.json").read_text())
-    voice = args.voice or script["voice"]
+    voice = args.voice or script.get("voice", "")
+    if args.preflight:
+        raise SystemExit(run_preflight(script, voice, allow_voice=args.allow_voice, as_json=args.json))
+    if np is None or sf is None or resample_poly is None:
+        raise SystemExit("voice.py synthesis requires VieNeu venv (numpy/soundfile/scipy) — run with /Users/Shared/Tools/VieNeu-TTS/.venv/bin/python")
     if voice != "Hải Đăng" and not args.allow_voice:
         raise SystemExit(f"giọng '{voice}' không phải Hải Đăng — luật nhà. Dùng --allow-voice chỉ khi người dùng yêu cầu.")
     PA = json.loads((ROOT / "standards/pacing.json").read_text())

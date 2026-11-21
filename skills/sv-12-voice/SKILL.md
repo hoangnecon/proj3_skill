@@ -58,17 +58,19 @@ When a specific sentence needs slower emotional weight, a tighter pause, a custo
 
 ## Workflow
 1. G2 passed (`script_lint.py` clean).
-2. Run `/Users/Shared/Tools/VieNeu-TTS/.venv/bin/python scripts/voice.py` (run asynchronously for a full episode; prints progress per sentence `sN.j`).
-3. Inspect `qa/voice_report.json`:
+2. **Mandatory Zero-GPU Preflight (`voice.py --preflight`):** Run `/Users/Shared/Tools/VieNeu-TTS/.venv/bin/python scripts/voice.py --preflight` (takes `< 1 s`, zero GPU/TTS load) BEFORE synthesizing audio to verify every segment/sentence splits cleanly, has valid `<en>...</en>` & emotion tags, no digits/symbols that break VieNeu G2P, and sane per-sentence syllable budgets. Fix any flagged line in `script.json` first so you never waste a TTS pass.
+3. Run `/Users/Shared/Tools/VieNeu-TTS/.venv/bin/python scripts/voice.py` (run asynchronously for a full episode; prints progress per sentence `sN.j`).
+4. Inspect `qa/voice_report.json`:
    - `failed_lines`: listen to the offending segment/sentence, fix `tts_text` / `<en>...</en>` / `sentences` in `script.json` (remember editing `script.json` makes G2 stale → re-pass G2), then run `voice.py --only <sid>` or `--only <sid>.<j>`.
-   - `episode_checks`: if `voice_s` is outside `125–170 s`, tighten/expand beats in G2 rather than editing `standards/`.
-4. Listen to `audio/voice.wav` (extract `< 300 KB` `/tmp` clips if inspecting via multimodal tools — never load a 40+ MB WAV raw!). Fine-tune any sentence's `wps`, `pause_after`, `<en>...</en>`, or `[thở dài]`/`[cười]` and run `--reuse` (for rhythm/pause tweaks) or `--only sN.j` (for text/seed tweaks).
-5. Run `node scripts/times.mjs` and spot-check `src/data/words.json` (confirm zero `<en>` or `[...]` markup in `words.json`).
-6. Fill `gates/G3.review.md` and run `python3 scripts/sv_gate.py pass G3`.
+   - `episode_checks`: if `voice_s` is outside `125–170 s` (or `480–720 s` for `long_16x9`), tighten/expand beats in G2 rather than editing `standards/`.
+5. Listen to `audio/voice.wav` (extract `< 300 KB` `/tmp` clips if inspecting via multimodal tools — never load a 40+ MB WAV raw!). Fine-tune any sentence's `wps`, `pause_after`, `<en>...</en>`, or `[thở dài]`/`[cười]` and run `--reuse` (for rhythm/pause tweaks) or `--only sN.j` (for text/seed tweaks).
+6. Run `node scripts/times.mjs` and spot-check `src/data/words.json` (confirm zero `<en>` or `[...]` markup in `words.json`).
+7. Fill `gates/G3.review.md` and run `python3 scripts/sv_doctor.py --stage G3 && python3 scripts/sv_gate.py pass G3`.
 
 ## Options
 | Flag | Use |
 |---|---|
+| `--preflight` | zero-GPU text, `<en>`/emotion tag, and sentence-split sanity check BEFORE running VieNeu-TTS |
 | `--only s3,s7.2` | regenerate segment `s3` and sentence `2` of `s7` |
 | `--missing` | generate only segments/sentences missing raw audio |
 | `--reuse` | rebuild per-sentence tempo/pauses, `voice.wav`, `words.json`, `cues.json`, and `voice_report.json` from cached raw sentence WAVs |

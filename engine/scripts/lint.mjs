@@ -118,6 +118,28 @@ if (phase !== 'shots') {
       else if ((pl.measured ?? pl.mtime) * 1000 < fs.statSync('src/episode/sets.tsx').mtimeMs) err('SE-13', `${id}: plate is older than src/episode/sets.tsx — re-render with node scripts/design.mjs --only set:${id}`);
       else if (pl.empty_mid > 8) err('SE-13', `${id}: ${pl.empty_mid} empty 180-px cells in the visible middle of the plate (max 8; rows ${pl.rows}) — detail must be IN FRAME, not off-screen. Fill the wall band: notices, fixtures, clutter (sets.md §3)`);
       else if (pl.empty_mid > 5) warn('SE-13', `${id}: ${pl.empty_mid} empty cells in the middle of the plate (rows ${pl.rows}) — look for bare wall`);
+      // SE-16: Perceptual Visual Quality Gate from plate_stats.json (v4.3 fields; graceful no-op if absent)
+      if (pl && !lineWaived(setsSrc, 'SE-16', id)) {
+        if (typeof pl.clutter_max_3x3 === 'number' && Number.isFinite(pl.clutter_max_3x3)) {
+          if (pl.clutter_max_3x3 > 22.0) {
+            err('SE-16', `${id}: perceptual 3×3 clutter peak ${pl.clutter_max_3x3.toFixed(1)}% > 22.0% — extreme visual noise / chaotic spike walls; simplify background pattern`);
+          } else if (pl.clutter_max_3x3 > 16.5) {
+            warn('SE-16', `${id}: perceptual 3×3 clutter peak ${pl.clutter_max_3x3.toFixed(1)}% > 16.5% — busy background zone; verify subject readability`);
+          }
+        }
+        if (typeof pl.contrast_std === 'number' && Number.isFinite(pl.contrast_std)) {
+          if (pl.contrast_std < 18.0) {
+            err('SE-16', `${id}: perceptual luminance contrast_std ${pl.contrast_std.toFixed(1)} < 18.0 — severely flat/muddy plate; strengthen dark/light separation`);
+          } else if (pl.contrast_std < 22.0) {
+            warn('SE-16', `${id}: perceptual luminance contrast_std ${pl.contrast_std.toFixed(1)} < 22.0 — low-contrast plate; add tonal separation`);
+          }
+        }
+        if (typeof pl.lr_balance_delta === 'number' && Number.isFinite(pl.lr_balance_delta)) {
+          if (pl.lr_balance_delta > 9.5) {
+            warn('SE-16', `${id}: perceptual left/right balance delta ${pl.lr_balance_delta.toFixed(1)} > 9.5 — lopsided composition weight`);
+          }
+        }
+      }
       if (!st.moves) warn('SE-12', `${id}: nothing in the set changes over time — add life driven by o.t (LED pulse, fan, smoke, leaves, clock; sets.md §7)`);
       if (st.glow < TH.glow) err('SE-10', `${id}: no light source glow (url(#glowY)) — every location has a visible light source`);
       // SE-14: diegetic sign clipped on set plate camera
@@ -646,6 +668,26 @@ if (phase !== 'design') {
         warn('SH-17', `WORLD_PROP '${k}' appears in ${shotSet.size} shots with only ${variants.size} variant(s) (c) — add variant diversity or alternate props to prevent copy-paste sticker fatigue`);
       }
     }
+    // CA-07: Shot-size progression & variety rhythm for long_16x9
+    {
+      let estCount = 0, medCount = 0, closeInsertCount = 0;
+      for (const r of rows) {
+        const sd = P.SETS[r.set];
+        const sc = sd?.shotScale;
+        if (sc === 'establishing') estCount++;
+        else if (sc === 'medium') medCount++;
+        else if (sc === 'closeup' || sc === 'insert' || sd?.insert) closeInsertCount++;
+      }
+      const estPct = (estCount / totalShots) * 100;
+      const closeInsertPct = (closeInsertCount / totalShots) * 100;
+      const ca07Waived = /lint-ok:\s*CA-07\b/.test(shotSrc);
+      if (estPct > 65 && !ca07Waived) {
+        err('CA-07', `establishing sets occupy ${estPct.toFixed(1)}% of episode (${estCount}/${totalShots} shots; max 65%) — flat wide-shot monotony; cut to drawn medium/closeup/insert sub-scenes`);
+      }
+      if (closeInsertPct < 10 && !ca07Waived) {
+        warn('CA-07', `closeup + insert sets occupy only ${closeInsertPct.toFixed(1)}% of episode (${closeInsertCount}/${totalShots} shots; target ≥ 10%) — add drawn close-ups/inserts for emotional beats`);
+      }
+    }
   }
   // SH-18: Multi-pose Hero Creature enforcement
   {
@@ -699,6 +741,12 @@ if (phase !== 'design') {
     if (makeHot) markHot(r.i, rule);
   };
   const lastH = {};
+  const DIALOGUE_VIEWS = new Set(['front', '3q', 'side']);
+  const isNeutralAxisAngle = (sd) => {
+    const ang = sd?.angle;
+    return ang === 'high' || ang === 'wide' || ang === 'ots' || sd?.shotScale === 'establishing';
+  };
+  let prevAxis = null;
   const layoutReport = [];
   for (const r of rows) {
     let worstGrid = null;
@@ -834,6 +882,35 @@ if (phase !== 'design') {
           }
           lastH[x.id] = {h: x.h, set: r.set, i: r.i};
         }
+        // CA-06: 180-degree axis / eyeline continuity guard on consecutive cut shots in the same location/set
+        const curDefActors = shots[r.i]?.actors ?? [];
+        const curAxisActors = B
+          .filter((x) => {
+            if (x.fg || x.mountedOn) return false;
+            const da = curDefActors.find((q) => q.id === x.id);
+            if (da?.fg || da?.mount) return false;
+            return x.all.x1 > 0 && x.all.x0 < W && x.all.y1 > 0 && x.all.y0 < H;
+          })
+          .map((x) => ({id: x.id, sx: x.hc.x, view: x.view}))
+          .sort((a, b) => a.id.localeCompare(b.id));
+        const curSetDef = P.SETS[r.set];
+        const curLoc = typeof curSetDef?.location === 'string' && curSetDef.location.trim() ? curSetDef.location.trim() : null;
+        if (prevAxis && prevAxis.i === r.i - 1 && r.tr === 'cut') {
+          const sameLoc = (prevAxis.loc && curLoc) ? (prevAxis.loc === curLoc) : (prevAxis.set === r.set);
+          if (sameLoc && !prevAxis.neutral && !isNeutralAxisAngle(curSetDef)
+            && prevAxis.actors.length === 2 && curAxisActors.length === 2
+            && prevAxis.actors[0].id === curAxisActors[0].id && prevAxis.actors[1].id === curAxisActors[1].id) {
+            const [pA, pB] = prevAxis.actors;
+            const [cA, cB] = curAxisActors;
+            if (DIALOGUE_VIEWS.has(pA.view) && DIALOGUE_VIEWS.has(pB.view)
+              && DIALOGUE_VIEWS.has(cA.view) && DIALOGUE_VIEWS.has(cB.view)
+              && Math.abs(pA.sx - pB.sx) > 8 && Math.abs(cA.sx - cB.sx) > 8
+              && (pA.sx < pB.sx) !== (cA.sx < cB.sx)) {
+              flag(r, 'CA-06', `180° axis flip between #${prevAxis.i} and #${r.i}: ${cA.id} and ${cB.id} swapped left/right screen order without a neutral bridge shot`, `${cA.id}:${cB.id}`);
+            }
+          }
+        }
+        prevAxis = {i: r.i, set: r.set, loc: curLoc, neutral: isNeutralAxisAngle(curSetDef), actors: curAxisActors};
       }
     }
     layoutReport.push({
@@ -844,6 +921,8 @@ if (phase !== 'design') {
       gridLayout: worstGrid,
       scaleIssues: shotScaleIssues,
       creatureCutoffIssues: shotCutoffIssues,
+      ...(waived('LA-01', r.name) ? {la01Waived: true} : {}),
+      ...(waived('LA-02', r.name) ? {la02Waived: true} : {}),
     });
     if (r.reaches.length) (hot[r.i] ??= []).push('reach');
     if (r.keys.length) (hot[r.i] ??= []).push('key');

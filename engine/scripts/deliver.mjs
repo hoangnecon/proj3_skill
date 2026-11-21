@@ -2,14 +2,20 @@
 //   node scripts/deliver.mjs            -> out/final.mp4, qa/deliver_report.json, qa/final_check.jpg (no phone copy: the user does not want one)
 // Refuses to run when the mix is stale (shots or voice changed after scripts/mix.py ran).
 import {cachedBundle} from './bundle_cache.mjs';
-import {renderMedia, selectComposition} from '@remotion/renderer';
-import {execFileSync} from 'node:child_process';
+import {openBrowser, renderMedia, selectComposition} from '@remotion/renderer';
+import {execFile, execFileSync} from 'node:child_process';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
+import {promisify} from 'node:util';
 import {loadProject, writeTables} from './load.mjs';
 import {makeShotHash} from './deps.mjs';
+
+const execFileAsync = promisify(execFile);
+const tStartDeliver = Date.now();
+const imgFmt = process.env.SV_FRAME_FORMAT === 'png' ? 'png' : 'jpeg';
+const imgOpts = imgFmt === 'jpeg' ? {imageFormat: 'jpeg', jpegQuality: 95} : {imageFormat: 'png'};
 
 const P = await loadProject();
 const sha = (f) => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex').slice(0, 16);
@@ -24,14 +30,15 @@ if ((mr.inputs.timing ?? mr.inputs.shots) !== sha(mr.inputs.timing ? 'qa/timing.
 if (mr.inputs.voice !== sha('audio/voice.wav')) die('voice changed after the mix — re-run scripts/mix.py');
 
 fs.mkdirSync('out', {recursive: true});
-// Remotion writes every frame to the temp dir (~0.5 MB each) before encoding; ENOSPC at 44 % cost a 10-minute render once.
+// Remotion writes every frame to the temp dir before encoding; JPEG q=95 cuts temp footprint by ~70% vs PNG.
 {
-  const need = (P.DURATION * 30 * 0.6) / 1024 + 1.5; // GB
+  const need = (P.DURATION * 30 * (imgFmt === 'png' ? 0.6 : 0.18)) / 1024 + 1.2; // GB
   const free = +execFileSync('df', ['-k', '/private/var/folders']).toString().trim().split('\n').pop().split(/\s+/)[3] / 1024 / 1024;
   if (free < need) die(`only ${free.toFixed(1)} GB free, render needs ~${need.toFixed(1)} GB — free disk space first (ask the user before deleting their files)`);
 }
 const raw = 'out/_render.mp4';
 const final = 'out/final.mp4';
+let usedChunks = false;
 // SV_SKIP_RENDER=1 reuses out/_render.mp4 when it is newer than the shotlist and the mix (audio-only fixes, re-encodes)
 const fresh = fs.existsSync(raw) && ['src/episode/shotlist.ts', 'src/episode/sets.tsx', 'src/episode/cast.ts'].every((f) => fs.statSync(raw).mtimeMs > fs.statSync(f).mtimeMs);
 if (process.env.SV_SKIP_RENDER && fresh) {
@@ -59,7 +66,7 @@ if (process.env.SV_SKIP_RENDER && fresh) {
   })();
   const W = fmt === '16:9' ? 1920 : 1080;
   const H = fmt === '16:9' ? 1080 : 1920;
-  const globalKey = `crf21|${W}x${H}|30fps|${srcGlobalHash}`;
+  const globalKey = `crf21|${W}x${H}|30fps|${imgFmt}|${srcGlobalHash}`;
   const FPS = 30;
   const totalFrames = Math.max(1, Math.round(P.DURATION * FPS));
   const frameRanges = rows.map((r, idx) => {
@@ -83,32 +90,44 @@ if (process.env.SV_SKIP_RENDER && fresh) {
     return fs.existsSync(p) && fs.statSync(p).size > 0;
   };
   const cachedCount = rows.filter((_, i) => isCached(i)).length;
-  const useChunks = rows.length > 0 && (process.env.SV_CHUNK_RENDER === '1' || cachedCount >= Math.ceil(rows.length * 0.5));
-  const concurrency = Math.max(4, Math.min(10, os.cpus().length - 2));
+  const useChunks = rows.length > 0 && process.env.SV_CHUNK_RENDER !== '0' && (
+    P.DURATION >= 240
+    || process.env.SV_CHUNK_RENDER === '1'
+    || cachedCount >= Math.ceil(rows.length * 0.5)
+  );
+  usedChunks = useChunks;
+  const concurrency = Math.max(1, +(process.env.SV_RENDER_CONCURRENCY ?? Math.max(4, Math.min(12, os.cpus().length - 1))));
 
   if (useChunks) {
     const missing = rows.map((_, i) => i).filter((i) => !isCached(i));
-    console.log(`chunks: ${cachedCount}/${rows.length} cached, rendering ${missing.length} shot(s)`);
+    console.log(`chunks: ${cachedCount}/${rows.length} cached, rendering ${missing.length} shot(s) (${imgFmt}, concurrency=${concurrency})`);
     if (missing.length > 0) {
       const serveUrl = await cachedBundle('src/index.ts');
-      const comp = await selectComposition({serveUrl, id: 'Film', chromiumOptions: {gl: 'angle'}});
-      for (let idx = 0; idx < missing.length; idx++) {
-        const i = missing[idx];
-        const out = chunkPath(i);
-        const tmp = `${out}.tmp.${process.pid}.mp4`;
-        await renderMedia({
-          serveUrl,
-          composition: comp,
-          codec: 'h264',
-          crf: 21,
-          muted: true,
-          frameRange: frameRanges[i],
-          outputLocation: tmp,
-          chromiumOptions: {gl: 'angle'},
-          concurrency,
-        });
-        fs.renameSync(tmp, out);
-        console.log(`chunk ${idx + 1}/${missing.length}: shot #${rows[i].i} [${frameRanges[i][0]}..${frameRanges[i][1]}] -> ${out}`);
+      const browser = await openBrowser('chrome', {chromiumOptions: {gl: 'angle'}});
+      try {
+        const comp = await selectComposition({serveUrl, id: 'Film', puppeteerInstance: browser, chromiumOptions: {gl: 'angle'}});
+        for (let idx = 0; idx < missing.length; idx++) {
+          const i = missing[idx];
+          const out = chunkPath(i);
+          const tmp = `${out}.tmp.${process.pid}.mp4`;
+          await renderMedia({
+            serveUrl,
+            composition: comp,
+            codec: 'h264',
+            crf: 21,
+            muted: true,
+            frameRange: frameRanges[i],
+            outputLocation: tmp,
+            puppeteerInstance: browser,
+            chromiumOptions: {gl: 'angle'},
+            ...imgOpts,
+            concurrency,
+          });
+          fs.renameSync(tmp, out);
+          console.log(`chunk ${idx + 1}/${missing.length}: shot #${rows[i].i} [${frameRanges[i][0]}..${frameRanges[i][1]}] -> ${out}`);
+        }
+      } finally {
+        await browser.close({silent: true}).catch(() => {});
       }
     }
     const concatFile = path.join(chunkDir, 'concat.txt');
@@ -118,9 +137,25 @@ if (process.env.SV_SKIP_RENDER && fresh) {
   } else {
     const serveUrl = await cachedBundle('src/index.ts');
     const comp = await selectComposition({serveUrl, id: 'Film', chromiumOptions: {gl: 'angle'}});
-    let last = 0;
-    await renderMedia({serveUrl, composition: comp, codec: 'h264', crf: 21, outputLocation: raw, chromiumOptions: {gl: 'angle'}, concurrency,
-      onProgress: ({progress}) => { if (progress - last > 0.1) { last = progress; process.stdout.write(`\rrender ${(progress * 100).toFixed(0)}%`); } }});
+    let last = 0, lastLogMs = Date.now();
+    await renderMedia({
+      serveUrl,
+      composition: comp,
+      codec: 'h264',
+      crf: 21,
+      outputLocation: raw,
+      chromiumOptions: {gl: 'angle'},
+      ...imgOpts,
+      concurrency,
+      onProgress: ({progress}) => {
+        const now = Date.now();
+        if (progress - last > 0.1 || now - lastLogMs >= 15000) {
+          last = progress;
+          lastLogMs = now;
+          process.stdout.write(`\rrender ${(progress * 100).toFixed(0)}%`);
+        }
+      },
+    });
     console.log('\nok', raw);
   }
 }
@@ -140,6 +175,8 @@ const dur = +pf.format.duration;
 const report = {
   final, duration: +dur.toFixed(2), expected: +P.DURATION.toFixed(2), width: v.width, height: v.height, fps: fn / fd,
   audio: !!a, audio_rate: a ? +a.sample_rate : 0, size_mb: +(fs.statSync(final).size / 1e6).toFixed(1),
+  render_seconds: +((Date.now() - tStartDeliver) / 1000).toFixed(2),
+  frame_format: imgFmt, chunked: usedChunks,
   final_sha: sha(final), shots_sha: sha('qa/shots.json'),
 };
 fs.writeFileSync('qa/deliver_report.json', JSON.stringify(report, null, 1));
@@ -150,14 +187,14 @@ for (const f of [final]) {
   try { execFileSync(PY, ['scripts/audio_qa.py', '--video', f], {stdio: 'inherit'}); }
   catch { console.error(`WARN audio check failed for ${f} — see qa/video_audio.json (gate G7 will refuse)`); }
 }
-// spot-check frames straight from the encoded file (catches encode/audio-sync issues the stills cannot)
-const cells = [];
-for (let i = 0; i < 12; i++) {
+// spot-check frames straight from the encoded file in parallel (catches encode/audio-sync issues the stills cannot)
+fs.mkdirSync('qa/_f', {recursive: true});
+const cells = await Promise.all(Array.from({length: 12}, async (_, i) => {
   const t = (dur * (i + 0.5)) / 12;
   const f = `qa/_f/final_${i}.jpg`;
-  execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-ss', t.toFixed(2), '-i', final, '-frames:v', '1', '-q:v', '3', f]);
-  cells.push({img: f, label: t.toFixed(1) + 's', sub: ''});
-}
+  await execFileAsync('ffmpeg', ['-y', '-loglevel', 'error', '-ss', t.toFixed(2), '-i', final, '-frames:v', '1', '-q:v', '3', f]);
+  return {img: f, label: t.toFixed(1) + 's', sub: ''};
+}));
 fs.writeFileSync('qa/_f/tile.json', JSON.stringify({out: 'qa/final_check.jpg', cols: report.width > report.height ? 4 : 6, w: report.width > report.height ? 380 : 300, fmt: 'jpg', title: `FINAL · ${report.duration}s · ${report.width}x${report.height} · ${report.fps} fps`, cells}));
 execFileSync(PY, ['scripts/tile.py', 'qa/_f/tile.json'], {stdio: 'inherit'});
 console.log(JSON.stringify(report));

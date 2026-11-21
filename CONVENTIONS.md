@@ -1,4 +1,4 @@
-# Conventions (`v4.2.0`)
+# Conventions (`v4.3.0`)
 
 Enforced by `tools/validate_skills.py`.
 
@@ -34,13 +34,13 @@ pin `standards/` by hash.
 | SC-01..27, SC-29..31 | script, words budget, voice text rules, 5-Knot spine, Long-Form 5-Chapter/3+ Plants/Anti-Padding (`SC-27`, `SC-29..31`) | `scripts/script_lint.py` |
 | CH-01..10 | characters (format-aware cast richness `CH-09`, no hand-drawn characters outside `<Person>` `CH-10`) | `scripts/lint.mjs design` |
 | TK-01..03 | tokens (no raw colours, one font) | `lint.mjs design` |
-| SE-01..15 | sets: density, text, halftone, glow, bounds, life, plate emptiness, plate sign clipping, Long-Form ≥15 sets, ≥4 angles & drawn sub-scenes (`SE-15`) | `lint.mjs design` |
+| SE-01..16 | sets: density, text, halftone, glow, bounds, life, plate emptiness, plate sign clipping, Long-Form ≥15 sets, ≥4 angles & drawn sub-scenes (`SE-15`), perceptual plate clutter/contrast/balance gate (`SE-16`) | `lint.mjs design` |
 | PR-01..06 | props & Hero Subjects: human-scale proportions & origin, internal text collision, no disembodied `*Head`, grip distance, giant partial-body continuity (`PR-05`), multi-pose Hero Subjects (`PR-06`) | `lint.mjs design` |
 | SH-01..18 | shot table, Long-Form set-fatigue streak/share (`SH-16`), cinematic view/prop diversity (`SH-17`), multi-pose Hero Creature enforcement (`SH-18`) | `lint.mjs shots` |
 | LA-01..04 | layout & scale CI: set `actorScale`/`shotScale`/`location` & `relToActor` ratios (`LA-01`), 3×3 spatial grid & union occupancy clutter budget (`LA-02`), ban fake close-up camera zoom on establishing/wide sets (`LA-03`), z-aware occlusion & awkward hero creature frame-edge cut-off (`LA-04`) | `lint.mjs design` & `shots` |
 | AN-01..02 | anchors | `lint.mjs shots` |
 | OV-01..04 | overlays | `lint.mjs shots` |
-| CA-01..05 | camera | `lint.mjs shots` |
+| CA-01..07 | camera: zoom, move jolt, ratio, establish, world bounds (`CA-01..05`), 180° axis/eyeline continuity (`CA-06`), Long-Form shot-size progression & variety rhythm (`CA-07`) | `lint.mjs shots` |
 | SZ-01..02 | on-screen size and framing | `lint.mjs shots` |
 | MO-01..12 | motion (turnaround-squash, reach-across-face / raised-arms walk, floating `seatH`) | `lint.mjs shots` |
 | KY-01 | animated set keys | `lint.mjs shots` |
@@ -52,7 +52,7 @@ A rule documented in a skill must name its lint ID when one exists. A waiver is
 `// lint-ok: <ID> <reason>` on the shot's line, and it must be justified in the G5 review.
 
 ## Gates
-- There are seven gates, G1 to G7 (see sv-00).
+- There are seven gates, G1 to G7 (see sv-00). Run `scripts/sv_doctor.py --stage G#` for fast zero-cost preflight before checking or passing a gate.
 - `scripts/sv_gate.py` writes `gates/log.jsonl` with hashes of each gate's inputs. When an input changes, that gate and every later gate become STALE.
 - Review files must name every evidence file with a remark of at least 4 words, and must be newer than the evidence.
 - G1, G2 and G4 need `approval: user` (with `user_quote`) or `approval: delegated`.

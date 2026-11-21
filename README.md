@@ -1,13 +1,13 @@
-# story-video-skills (`v4.2.0`)
+# story-video-skills (`v4.3.0`)
 
-A gated production suite for **Vietnamese 2D story videos**: vertical 1080×1920 Shorts (2–3 min) and opt-in widescreen 1920×1080 Long-Form (8–12 min) at 30 fps,
+A gated production suite for **Vietnamese 2D story videos**: vertical 1080×1920 Shorts (2–3 min, **15-min SLA**) and opt-in widescreen 1920×1080 Long-Form (8–12 min, **45-min SLA**) at 30 fps,
 narrated by the northern male voice Hải Đăng, drawn in a flat "riso ink" style (with 4-view articulated rigs, multi-pose Hero Subjects, and Botanical Kit), and animated in Remotion
 with every shot anchored to a narration word.
 
 The suite packages the process that produced the reference episode *Thang máy ăn bí mật* (153 s, 26 segments,
 67 shots). Each phase ships with:
 - exact specs: design tokens, rig numbers, detail budgets, shot grammar and rhythm benchmarks;
-- machine checks: 60+ lint rules, plus pixel checks on rendered plates;
+- machine checks: 120+ lint rules (including perceptual plate quality `SE-16`, 3×3 spatial layout/scale `LA-01..04`, and camera grammar `CA-06..07`), zero-cost preflight doctor (`scripts/sv_doctor.py`), and zero-rework placement solver (`qa.mjs place`);
 - rendered evidence the agent must open and remark on;
 - a gate log that goes stale when its inputs change.
 
@@ -58,7 +58,7 @@ the read-only suite copy (`scripts/`, engine `src/`, `src/exemplar/`, `standards
 ## Why the gates measure quality, not quantity
 v1 was rejected because agents could satisfy counters without good work (`docs/review-2026-11-15.md`).
 Every count is backed by something that has to be looked at:
-- Set density is measured on the **rendered** plate (SE-13), so detail hidden off-frame does not count.
+- Set density and perceptual quality are measured on the **rendered** plate (`SE-13`, `SE-16`), so detail hidden off-frame or chaotic background noise never slip through.
 - Reaches are checked for distance, depth and framing (MO-05/06/09, SZ-02), and every action gets a frame strip.
 - Each evidence image needs a written remark, and the review must be newer than the evidence.
 - G1, G2 and G4 need the user's quoted approval.

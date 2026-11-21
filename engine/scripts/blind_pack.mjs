@@ -56,6 +56,14 @@ if (!Array.isArray(shots)) {
 const qaStatus = readJson('qa/qa_status.json', {hashes: {}});
 const hot = readJson('qa/hot.json', {});
 const stripsNeeded = readJson('qa/strips_needed.json', []);
+const layoutReport = readJson('qa/layout_report.json', null);
+const plateStats = readJson('qa/design/plate_stats.json', null);
+const layoutByShot = new Map();
+if (Array.isArray(layoutReport)) {
+  for (const item of layoutReport) {
+    if (item && Number.isInteger(item.i)) layoutByShot.set(item.i, item);
+  }
+}
 const script = readJson('script.json', {});
 const isLong16x9 = script?.format === '16:9' || script?.length === 'long_16x9';
 const format = isLong16x9 ? '16:9' : '9:16';
@@ -91,6 +99,17 @@ const entries = orderedShots.map((r) => {
   const cardSha = sha256File(cardPath);
   const cropSha = cropPath ? sha256File(cropPath) : '';
   const blindSha = sha256Hex(`${hash}|${narration}|${cardSha}|${cropSha}`).slice(0, 12);
+  const lr = layoutByShot.get(i) ?? null;
+  const ps = plateStats && typeof plateStats === 'object' ? (plateStats[r.set] ?? null) : null;
+  const layout = lr
+    ? {
+        max_cell: lr.gridLayout?.maxCellCount ?? 0,
+        occ_pct: Math.round((lr.gridLayout?.occupancyFrac ?? 0) * 100),
+        scale_err: Array.isArray(lr.scaleIssues) ? lr.scaleIssues.length : 0,
+        cutoff_err: Array.isArray(lr.creatureCutoffIssues) ? lr.creatureCutoffIssues.length : 0,
+        ...(ps && typeof ps.empty_mid === 'number' ? {plate_empty_mid: ps.empty_mid, plate_edge_pct: ps.edge_pct} : {}),
+      }
+    : null;
 
   return {
     shot: i,
@@ -104,6 +123,7 @@ const entries = orderedShots.map((r) => {
     narration,
     is_hot: hotReasons.length > 0,
     hot_reasons: hotReasons,
+    layout,
     images: {
       card: cardPath,
       crop: cropPath,
@@ -171,6 +191,7 @@ const formatSliceShot = (e) => ({
   narration: e.narration,
   is_hot: e.is_hot,
   hot_reasons: e.hot_reasons,
+  layout: e.layout,
   images: e.is_hot
     ? e.images
     : {
@@ -229,16 +250,16 @@ const rubric = isLong16x9
    - In \`looked\`, include \`"contact"\` (or \`"card"\`) for every shot, plus \`"crops"\` for HOT shots.
 4. **Include \`"blind_sha"\`** from the slice entry verbatim in each JSONL review line.
 5. **Check ALL 10 criteria** (\`acting\`, \`contact\`, \`overlap\`, \`set\`, \`text\`, \`caption\`, \`beat\`, \`model\`, \`framing\`, \`variety\`) formatted as \`"ok — ..."\` or \`"fix — ..."\`, with a \`note\` of >= 6 words describing what you actually saw:
-   - \`acting\`: expression, gesture, posture, and gaze match the narration beat.
-   - \`contact\`: feet planted on ground/floor, hands actually meet props/targets, seated bodies rest on seats.
+   - \`acting\`: expression, gesture, posture, and gaze match the narration beat; **verify articulated bent knees/elbows and dynamic physics** (no stiff, board-like standing on mounts or mid-action!).
+   - \`contact\`: feet planted on ground/floor, hands actually meet props/targets, seated bodies rest on seats; **verify mounted riders sit physically on their mount facing the travel direction, and verify non-OTS creatures are not half-sliced off the frame edge**.
    - \`overlap\`: no unintended character/prop collisions or faces hidden behind props/overlays.
    - \`set\`: environment reads clearly, clean perspective, no stray/clipped set geometry.
    - \`text\`: every sign, label, and overlay is legible, unclipped, and unoccluded.
    - \`caption\`: caption band is clear of faces, hands, and hero props.
    - \`beat\`: visual action and timing match the spoken \`narration\` for this shot.
    - \`model\`: character proportions, outfits, and identity stay on-model.
-   - \`framing\` (**16:9 cinematic framing — MANDATORY \`fix\` trigger**): check depth, angle, and frame edges. **Any severed or floating giant limb** (arm, hand, leg, tentacle, creature appendage) terminating mid-air inside the frame is an automatic \`fix\` — giant limbs MUST bleed off the frame edge, never end floating in mid-air!
-   - \`variety\` (**visual freshness — MANDATORY \`fix\` trigger**): inspect \`set_streak\` and \`prev_set\` on each shot entry alongside the rendered contact page. **Same-wall / same-prop copy-paste fatigue** or repeating the same static wall framing, pose, or prop layout across consecutive shots is an automatic \`fix\`!
+   - \`framing\` (**16:9 cinematic framing — MANDATORY \`fix\` trigger**): check depth, angle, frame edges, and the shot's \`layout\` telemetry (\`layout.occ_pct\`, \`layout.scale_err\`, \`layout.cutoff_err\`, \`layout.max_cell\`) alongside the rendered frame. Flag **cluttered/chaotic cells ("rối mắt / búa xua")**, **fake over-zoomed low-detail backgrounds**, and **any severed or floating giant limb** (arm, hand, leg, tentacle, creature appendage) terminating mid-air inside the frame — all are automatic \`fix\`!
+   - \`variety\` (**visual freshness — MANDATORY \`fix\` trigger**): inspect \`set_streak\` and \`prev_set\` on each shot entry alongside the rendered contact page. **Same-wall / same-prop copy-paste fatigue**, repeating the same static wall framing/pose/prop layout across consecutive shots, or **recurring hero creatures/subjects failing to vary their poses/expressions across shots (copy-pasted static stickers!)** is an automatic \`fix\`!
 6. Submit reviews via \`node scripts/qa.mjs review --batch <file.jsonl>\`.
 `
   : `# Blind Visual QA Rubric (Contact-First)

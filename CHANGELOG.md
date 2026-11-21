@@ -1,5 +1,21 @@
 # Changelog
 
+## `v4.3.0` — 2026-11-22 · Dual-Standard 15-Min Short / 45-Min Long-Form SLA, Perceptual Plate Quality CI (`SE-16`), Camera Grammar CI (`CA-06..07`), Placement Solver (`qa.mjs place`) & Preflight Doctor (`sv_doctor.py`)
+- **Pillar 1 — Perceptual Plate Quality, Preflight Doctor & Voice Sanity (`plate_check.py`, `sv_doctor.py`, `voice.py`):**
+  - `plate_check.py`: measures perceptual 3×3 clutter peak (`clutter_max_3x3`), luminance contrast std (`contrast_std`), and left/right visual weight delta (`lr_balance_delta`) into `qa/design/plate_stats.json`.
+  - `sv_doctor.py`: zero-cost stage preflight doctor (`python3 scripts/sv_doctor.py --stage G#`) catching missing files, broken config, and stale inputs before launching GPU or browser passes.
+  - `voice.py`: adds `--preflight` zero-GPU text/tag/sentence sanity check before running VieNeu-TTS.
+- **Pillar 2 — Zero-Rework Placement Solver, Enriched Blind Review & Single-Browser Chunk Delivery (`qa.mjs`, `blind_pack.mjs`, `deliver.mjs`):**
+  - `qa.mjs place <setId>`: zero-browser coordinate & scale solver outputting `LA-01`/`LA-02`/caption-safe actor/prop floor slots before blocking `shotlist.ts`.
+  - `blind_pack.mjs`: enriches `qa/blind_review/slice_*.json` with layout occupancy, scale/cutoff flags, and `shotScale` metadata for high-signal blind review.
+  - `deliver.mjs`: faster cached chunked single-browser rendering for 10-minute 16:9 delivery within the 45-minute SLA.
+- **Pillar 3 — Camera Grammar CI, Perceptual Plate Gate, Gate Integration & Dual-Standard SLA Docs (`lint.mjs`, `sv_gate.py`, Skills & Docs):**
+  - `SE-16` (`lint.mjs design` ERROR/WARN, waivable via `lint-ok: SE-16`): enforces perceptual visual quality from `qa/design/plate_stats.json` (`clutter_max_3x3 > 22.0` ERROR / `> 16.5` WARN; `contrast_std < 18.0` ERROR / `< 22.0` WARN; `lr_balance_delta > 9.5` WARN), gracefully no-oping on legacy `plate_stats.json` files without `v4.3` fields.
+  - `CA-06` (`lint.mjs shots` WARN + HOT, waivable via `lint-ok: CA-06`): 180-degree axis / eyeline continuity guard flagging consecutive same-location/same-set cuts where the exact same 2 on-screen non-`fg`/non-mounted dialogue actors swap horizontal screen order without a neutral `wide`/`high`/`ots`/establishing bridge shot.
+  - `CA-07` (`lint.mjs shots` ERROR/WARN, waivable via `lint-ok: CA-07`): `long_16x9` shot-size progression & variety guard banning `> 65%` `establishing` set monotony (ERROR) and warning when `closeup + insert` share is `< 10%`.
+  - `sv_gate.py`: integrates `scripts/sv_doctor.py --stage <G>` guidance in docstring & `status --brief` `next:` output, and double-verifies `qa/layout_report.json` has `overcrowded == 0` and `scale_errors == 0` in `checks("G5")`.
+  - Updated `sv-00-pipeline` (Dual-Standard 15-min Short / 45-min Long-Form SLA table + `sv_doctor.py` workflow), `sv-02-long-form`, `sv-12-voice` (`voice.py --preflight`), `sv-22-shots-camera` (`qa.mjs place`, `CA-06`, `CA-07`, enriched `blind_pack.mjs`), `CONVENTIONS.md`, `README.md`, and `.claude-plugin/plugin.json` (`4.3.0`).
+
 ## `v4.2.0` — 2026-11-22 · Articulated Character Physics, Multi-Pose Hero Subjects, Botanical Kit & Mandatory Scale / 3×3 Layout / Anti-Fake-Zoom CI
 - **Pillar A — Articulated 4-View Character Physics (`chars.tsx`, `side.tsx`, `back.tsx`, `threeq.tsx`):**
   - Added full articulated knee/elbow joint bending across all 4 views (`front`, `side`, `back`, `3q`) and expanded dynamic `legs`/`arms` action modes (`run`, `crouch`, `jump`, `fall`, `push`, `climb`, `cheer`).
