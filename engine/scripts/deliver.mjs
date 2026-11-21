@@ -38,7 +38,43 @@ fs.mkdirSync('out', {recursive: true});
 }
 const raw = 'out/_render.mp4';
 const final = 'out/final.mp4';
+const FPS = 30;
+const totalFrames = Math.max(1, Math.round(P.DURATION * FPS));
+const x264Preset = process.env.SV_X264_PRESET || 'veryfast';
+const targetBlockFrames = Math.max(1, +(process.env.SV_CHUNK_FRAMES || 1050));
 let usedChunks = false;
+
+// Build contiguous per-shot frame ranges and group them into shot-aligned macro-blocks (~35s each).
+const frameRanges = rows.map((r, idx) => {
+  const f0 = idx === 0 ? 0 : Math.max(0, Math.min(totalFrames - 1, Math.round(r.t0 * FPS)));
+  return [f0, totalFrames - 1];
+});
+for (let i = 1; i < frameRanges.length; i++) {
+  if (frameRanges[i][0] <= frameRanges[i - 1][0]) {
+    frameRanges[i][0] = Math.min(totalFrames - 1, frameRanges[i - 1][0] + 1);
+  }
+  frameRanges[i - 1][1] = frameRanges[i][0] - 1;
+}
+const blocks = [];
+let curBlock = null;
+for (let i = 0; i < rows.length; i++) {
+  const [f0, f1] = frameRanges[i];
+  if (!curBlock) {
+    curBlock = {shots: [i], f0, f1};
+    continue;
+  }
+  const curFrames = curBlock.f1 - curBlock.f0 + 1;
+  const nextFrames = f1 - curBlock.f0 + 1;
+  if (curFrames >= targetBlockFrames || (nextFrames > targetBlockFrames && (nextFrames - targetBlockFrames) > (targetBlockFrames - curFrames))) {
+    blocks.push(curBlock);
+    curBlock = {shots: [i], f0, f1};
+  } else {
+    curBlock.shots.push(i);
+    curBlock.f1 = f1;
+  }
+}
+if (curBlock) blocks.push(curBlock);
+
 // SV_SKIP_RENDER=1 reuses out/_render.mp4 when it is newer than the shotlist and the mix (audio-only fixes, re-encodes)
 const fresh = fs.existsSync(raw) && ['src/episode/shotlist.ts', 'src/episode/sets.tsx', 'src/episode/cast.ts'].every((f) => fs.statSync(raw).mtimeMs > fs.statSync(f).mtimeMs);
 if (process.env.SV_SKIP_RENDER && fresh) {
@@ -66,74 +102,75 @@ if (process.env.SV_SKIP_RENDER && fresh) {
   })();
   const W = fmt === '16:9' ? 1920 : 1080;
   const H = fmt === '16:9' ? 1080 : 1920;
-  const globalKey = `crf21|${W}x${H}|30fps|${imgFmt}|${srcGlobalHash}`;
-  const FPS = 30;
-  const totalFrames = Math.max(1, Math.round(P.DURATION * FPS));
-  const frameRanges = rows.map((r, idx) => {
-    const f0 = idx === 0 ? 0 : Math.max(0, Math.min(totalFrames - 1, Math.round(r.t0 * FPS)));
-    return [f0, totalFrames - 1];
-  });
-  for (let i = 1; i < frameRanges.length; i++) {
-    if (frameRanges[i][0] <= frameRanges[i - 1][0]) {
-      frameRanges[i][0] = Math.min(totalFrames - 1, frameRanges[i - 1][0] + 1);
-    }
-    frameRanges[i - 1][1] = frameRanges[i][0] - 1;
-  }
-  const chunkKeys = rows.map((_, i) =>
-    sha1(`${globalKey}|${hashes[i]}|${frameRanges[i][0]}:${frameRanges[i][1]}`).slice(0, 14)
+  const globalKey = `crf21|${x264Preset}|${W}x${H}|30fps|${imgFmt}|${srcGlobalHash}`;
+  const blockKeys = blocks.map((b) =>
+    sha1(`${globalKey}|${b.shots.map((i) => hashes[i]).join(',')}|${b.f0}:${b.f1}`).slice(0, 14)
   );
   const chunkDir = 'out/_chunks';
   fs.mkdirSync(chunkDir, {recursive: true});
-  const chunkPath = (i) => path.join(chunkDir, `${chunkKeys[i]}.mp4`);
-  const isCached = (i) => {
-    const p = chunkPath(i);
+  const blockPath = (bi) => path.join(chunkDir, `${blockKeys[bi]}.mp4`);
+  const isCached = (bi) => {
+    const p = blockPath(bi);
     return fs.existsSync(p) && fs.statSync(p).size > 0;
   };
-  const cachedCount = rows.filter((_, i) => isCached(i)).length;
-  const useChunks = rows.length > 0 && process.env.SV_CHUNK_RENDER !== '0' && (
-    P.DURATION >= 240
+  const cachedCount = blocks.filter((_, bi) => isCached(bi)).length;
+  const useChunks = blocks.length > 0 && process.env.SV_CHUNK_RENDER !== '0' && (
+    (blocks.length > 1 && P.DURATION >= 240)
     || process.env.SV_CHUNK_RENDER === '1'
-    || cachedCount >= Math.ceil(rows.length * 0.5)
+    || (blocks.length > 1 && cachedCount >= Math.ceil(blocks.length * 0.5))
   );
   usedChunks = useChunks;
   const concurrency = Math.max(1, +(process.env.SV_RENDER_CONCURRENCY ?? Math.max(4, Math.min(12, os.cpus().length - 1))));
 
   if (useChunks) {
-    const missing = rows.map((_, i) => i).filter((i) => !isCached(i));
-    console.log(`chunks: ${cachedCount}/${rows.length} cached, rendering ${missing.length} shot(s) (${imgFmt}, concurrency=${concurrency})`);
+    const missing = blocks.map((_, bi) => bi).filter((bi) => !isCached(bi));
+    console.log(`macro-blocks: ${cachedCount}/${blocks.length} cached, rendering ${missing.length} block(s) (~${targetBlockFrames}f/block, ${imgFmt}, preset=${x264Preset}, concurrency=${concurrency})`);
     if (missing.length > 0) {
       const serveUrl = await cachedBundle('src/index.ts');
       const browser = await openBrowser('chrome', {chromiumOptions: {gl: 'angle'}});
       try {
         const comp = await selectComposition({serveUrl, id: 'Film', puppeteerInstance: browser, chromiumOptions: {gl: 'angle'}});
         for (let idx = 0; idx < missing.length; idx++) {
-          const i = missing[idx];
-          const out = chunkPath(i);
+          const bi = missing[idx];
+          const b = blocks[bi];
+          const out = blockPath(bi);
           const tmp = `${out}.tmp.${process.pid}.mp4`;
+          let last = 0, lastLogMs = Date.now();
           await renderMedia({
             serveUrl,
             composition: comp,
             codec: 'h264',
             crf: 21,
+            x264Preset,
             muted: true,
-            frameRange: frameRanges[i],
+            frameRange: [b.f0, b.f1],
             outputLocation: tmp,
             puppeteerInstance: browser,
             chromiumOptions: {gl: 'angle'},
             ...imgOpts,
             concurrency,
+            onProgress: ({progress}) => {
+              const now = Date.now();
+              if (progress - last > 0.25 || now - lastLogMs >= 15000) {
+                last = progress;
+                lastLogMs = now;
+                process.stdout.write(`\rblock ${idx + 1}/${missing.length} ${(progress * 100).toFixed(0)}%`);
+              }
+            },
           });
           fs.renameSync(tmp, out);
-          console.log(`chunk ${idx + 1}/${missing.length}: shot #${rows[i].i} [${frameRanges[i][0]}..${frameRanges[i][1]}] -> ${out}`);
+          const firstShot = rows[b.shots[0]].i;
+          const lastShot = rows[b.shots[b.shots.length - 1]].i;
+          console.log(`\nmacro-block ${idx + 1}/${missing.length}: shots #${firstShot}..#${lastShot} [${b.f0}..${b.f1}] (${b.f1 - b.f0 + 1}f) -> ${out}`);
         }
       } finally {
         await browser.close({silent: true}).catch(() => {});
       }
     }
     const concatFile = path.join(chunkDir, 'concat.txt');
-    fs.writeFileSync(concatFile, chunkKeys.map((k) => `file '${k}.mp4'`).join('\n') + '\n');
+    fs.writeFileSync(concatFile, blockKeys.map((k) => `file '${k}.mp4'`).join('\n') + '\n');
     execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', concatFile, '-c:v', 'copy', '-an', raw]);
-    console.log('ok (chunk concat)', raw);
+    console.log('ok (macro-block concat)', raw);
   } else {
     const serveUrl = await cachedBundle('src/index.ts');
     const comp = await selectComposition({serveUrl, id: 'Film', chromiumOptions: {gl: 'angle'}});
@@ -143,6 +180,7 @@ if (process.env.SV_SKIP_RENDER && fresh) {
       composition: comp,
       codec: 'h264',
       crf: 21,
+      x264Preset,
       outputLocation: raw,
       chromiumOptions: {gl: 'angle'},
       ...imgOpts,
@@ -172,11 +210,13 @@ const v = pf.streams.find((s) => s.codec_type === 'video');
 const a = pf.streams.find((s) => s.codec_type === 'audio');
 const [fn, fd] = v.r_frame_rate.split('/').map(Number);
 const dur = +pf.format.duration;
+const renderSec = Math.max(0.01, (Date.now() - tStartDeliver) / 1000);
 const report = {
   final, duration: +dur.toFixed(2), expected: +P.DURATION.toFixed(2), width: v.width, height: v.height, fps: fn / fd,
   audio: !!a, audio_rate: a ? +a.sample_rate : 0, size_mb: +(fs.statSync(final).size / 1e6).toFixed(1),
-  render_seconds: +((Date.now() - tStartDeliver) / 1000).toFixed(2),
-  frame_format: imgFmt, chunked: usedChunks,
+  render_seconds: +renderSec.toFixed(2),
+  fps_effective: +(totalFrames / renderSec).toFixed(2),
+  frame_format: imgFmt, x264_preset: x264Preset, chunked: usedChunks, macro_blocks: blocks.length,
   final_sha: sha(final), shots_sha: sha('qa/shots.json'),
 };
 fs.writeFileSync('qa/deliver_report.json', JSON.stringify(report, null, 1));

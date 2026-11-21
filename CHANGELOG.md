@@ -1,5 +1,15 @@
 # Changelog
 
+## `v4.4.0` — 2026-11-22 · Studio Atmospheric Mood & Depth (`ShotDef.mood`/`dof`), Static Riso Grain (`url(#grainPat)`), Macro-Block Delivery, `SH-19` Mood Lint & Unified Dual-Format Benchmark Suite (`tools/benchmark_suite.py`)
+- **Pillar 1 — Studio Lighting, Depth Separation, Static Riso Grain & Macro-Block Render (`kit.tsx`, `engine.ts`, `Film.tsx`, `Sheets.tsx`, `deliver.mjs`):**
+  - `engine.ts` & `Film.tsx`: added `ShotDef.mood` (`'default' | 'morning' | 'golden' | 'danger' | 'lab' | 'flashback' | 'dramatic'`) PAL-token atmospheric lighting grade overlay and `ShotDef.dof` subtle depth-separation haze between far (`d = 0.5`) and midground (`d = 1`) layers.
+  - `kit.tsx` & `Film.tsx`: replaced per-frame SVG `<feTurbulence>` filter overhead with deterministic static riso paper grain `<pattern id="grainPat">` (`url(#grainPat)`).
+  - `deliver.mjs`: upgraded chunked delivery to shot-aligned macro-blocks (`SV_CHUNK_FRAMES`, default `1050` frames ≈ 35 s, `SV_X264_PRESET=veryfast`, JPEG q=95 frame intermediates) to cut FFmpeg startup overhead on 10-minute 16:9 renders.
+- **Pillar 2 — `SH-19` Mood Lint, Unified Dual-Format Benchmark CLI & `v4.4.0` Docs (`lint.mjs`, `tools/benchmark_suite.py`, Skills & Docs):**
+  - `SH-19` (`lint.mjs shots` ERROR/WARN, warning waivable via `lint-ok: SH-19`): validates `ShotDef.mood` against `default|morning|golden|danger|lab|flashback|dramatic` (ERROR on unknown mood) and warns when `mood: 'danger'` is combined with `night > 0.7` (double dark overlay crushing visibility).
+  - `tools/benchmark_suite.py`: read-only automated dual-format regression & speed benchmark CLI running `tools/validate_skills.py`, `node --check` + `py_compile` across `engine/scripts/`, isolated-sandbox 9:16 Short (`lint.mjs all`, `qa.mjs layout`, `voice.py --preflight`, `sv_doctor.py --stage all`) and 16:9 Long-Form (`lint.mjs shots`, `qa.mjs layout`, `qa.mjs place`, `sv_doctor.py --stage G5`) checks, plus optional `--render-frames N` and `--json` output.
+  - Updated `sv-22-shots-camera`, `sv-02-long-form`, `CONVENTIONS.md`, `README.md`, and `.claude-plugin/plugin.json` (`4.4.0`); `validate_skills.py` reports **11 skills, 132 lint rules implemented, 0 errors, 0 warnings**.
+
 ## `v4.3.0` — 2026-11-22 · Dual-Standard 15-Min Short / 45-Min Long-Form SLA, Perceptual Plate Quality CI (`SE-16`), Camera Grammar CI (`CA-06..07`), Placement Solver (`qa.mjs place`) & Preflight Doctor (`sv_doctor.py`)
 - **Pillar 1 — Perceptual Plate Quality, Preflight Doctor & Voice Sanity (`plate_check.py`, `sv_doctor.py`, `voice.py`):**
   - `plate_check.py`: measures perceptual 3×3 clutter peak (`clutter_max_3x3`), luminance contrast std (`contrast_std`), and left/right visual weight delta (`lr_balance_delta`) into `qa/design/plate_stats.json`.

@@ -264,7 +264,7 @@ export const SetPlate: React.FC<{id: string; grid?: boolean}> = ({id, grid}) => 
             )}
           </LayerG>
         )}
-        {!grid && <rect width={FRAME_W} height={FRAME_H} filter="url(#grain)" style={{mixBlendMode: 'multiply'}} />}
+        {!grid && <rect width={FRAME_W} height={FRAME_H} fill="url(#grainPat)" />}
         {!grid && <rect width={FRAME_W} height={FRAME_H} fill="url(#vig)" />}
         <rect x={0} y={FRAME_H - 120} width={FRAME_W} height={120} fill={PAL.ink} opacity={0.75} />
         {grid ? (

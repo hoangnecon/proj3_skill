@@ -1,4 +1,4 @@
-# Conventions (`v4.3.0`)
+# Conventions (`v4.4.0`)
 
 Enforced by `tools/validate_skills.py`.
 
@@ -10,7 +10,7 @@ Enforced by `tools/validate_skills.py`.
 | `engine/` | code every episode shares: `scripts/` (tools), `src/` (Remotion engine), `package.json`, `tsconfig.json`, `remotion.config.ts` | episode content, standards, examples |
 | `starter/` | the blank episode files an agent fills in: `brief.md`, `beats.md`, `script.json`, `audio.json`, `src/episode/*`, empty `src/data/*`, `gates/*.review.md`, `README.md` | demo or reference content |
 | `examples/` | `thang-may/` (reference episode: geo, looks, sets, shotlist), `demo/` (4-shot engine demo, an overlay on a new episode) | anything a real episode needs to run |
-| `tools/` | suite tooling: `new_episode.sh` (assembles an episode), `validate_skills.py` | episode tools (those live in `engine/scripts/`) |
+| `tools/` | suite tooling: `new_episode.sh` (assembles an episode), `validate_skills.py`, `benchmark_suite.py` (dual-format quality & speed regression CLI) | episode tools (those live in `engine/scripts/`) |
 | `docs/` | reviews and research notes about the suite | instructions (those are skills) |
 
 An episode is assembled, never edited in place in the suite: `engine/` → episode root, `standards/` →
@@ -36,7 +36,7 @@ pin `standards/` by hash.
 | TK-01..03 | tokens (no raw colours, one font) | `lint.mjs design` |
 | SE-01..16 | sets: density, text, halftone, glow, bounds, life, plate emptiness, plate sign clipping, Long-Form ≥15 sets, ≥4 angles & drawn sub-scenes (`SE-15`), perceptual plate clutter/contrast/balance gate (`SE-16`) | `lint.mjs design` |
 | PR-01..06 | props & Hero Subjects: human-scale proportions & origin, internal text collision, no disembodied `*Head`, grip distance, giant partial-body continuity (`PR-05`), multi-pose Hero Subjects (`PR-06`) | `lint.mjs design` |
-| SH-01..18 | shot table, Long-Form set-fatigue streak/share (`SH-16`), cinematic view/prop diversity (`SH-17`), multi-pose Hero Creature enforcement (`SH-18`) | `lint.mjs shots` |
+| SH-01..19 | shot table, Long-Form set-fatigue streak/share (`SH-16`), cinematic view/prop diversity (`SH-17`), multi-pose Hero Creature enforcement (`SH-18`), atmospheric `ShotDef.mood` enum & over-dark `danger` + `night > 0.7` guard (`SH-19`) | `lint.mjs shots` |
 | LA-01..04 | layout & scale CI: set `actorScale`/`shotScale`/`location` & `relToActor` ratios (`LA-01`), 3×3 spatial grid & union occupancy clutter budget (`LA-02`), ban fake close-up camera zoom on establishing/wide sets (`LA-03`), z-aware occlusion & awkward hero creature frame-edge cut-off (`LA-04`) | `lint.mjs design` & `shots` |
 | AN-01..02 | anchors | `lint.mjs shots` |
 | OV-01..04 | overlays | `lint.mjs shots` |

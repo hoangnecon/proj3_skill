@@ -1,13 +1,13 @@
 ---
 name: sv-02-long-form
-description: Complete cinematic production standard (v4.3) for 10-minute (8–12 min, 2,200–3,600 words, 75–160 segments) 16:9 widescreen (1920×1080) Vietnamese animated story videos under a 45-minute parallel SLA — opt-in flags, 5-chapter Story Doctor gate (SC-29..31), 15+ drawn multi-angle sets with perceptual plate quality CI (SE-15..16, CH-09), 4-view articulated rigs, multi-pose Hero Subjects (PR-06, SH-18), camera grammar and layout CI (CA-06..07, LA-01..04, GE-19, SH-16..17), zero-rework placement solver (qa.mjs place), sv_doctor.py preflight, true 16:9 QA, and 10-check blind review. Use whenever creating, pitching, scripting, designing, blocking, rendering, or delivering a 10-minute 16:9 episode.
+description: Complete cinematic production standard (v4.4) for 10-minute (8–12 min, 2,200–3,600 words, 75–160 segments) 16:9 widescreen (1920×1080) Vietnamese animated story videos under a 45-minute parallel SLA — opt-in flags, 5-chapter Story Doctor gate (SC-29..31), 15+ drawn multi-angle sets with perceptual plate quality CI (SE-15..16, CH-09), 4-view articulated rigs, multi-pose Hero Subjects (PR-06, SH-18), atmospheric mood/dof grading (SH-19), camera grammar and layout CI (CA-06..07, LA-01..04, GE-19, SH-16..19), zero-rework placement solver (qa.mjs place), sv_doctor.py preflight, macro-block chunk render, benchmark_suite.py, true 16:9 QA, and 10-check blind review. Use whenever creating, pitching, scripting, designing, blocking, rendering, or delivering a 10-minute 16:9 episode.
 ---
 
-# sv-02 · Long-Form 16:9 Cinematic Production Standard (`v4.3.0`)
+# sv-02 · Long-Form 16:9 Cinematic Production Standard (`v4.4.0`)
 
 This skill extends the core `sv-00`–`sv-42` suite to **true cinematic 10-minute (`8–12 min`) 16:9 widescreen (`1920×1080`)** animated story videos for the `Nhím Là Lốp` audience, targeting a **45-minute cold `G1 → out/final.mp4` SLA**.
 
-**Hard lesson from `v4.0.0` (`docs/rsi-forensics-v4.0-2026-11-22.md`) – `v4.2.0`:** A 10-minute 16:9 movie is **NEVER** a 2.5-minute Short stretched 4× across flat walls, noisy spike patterns, fake zoomed establishing plates, axis-flipping cuts, or static copy-pasted creature stickers. `v4.3.0` enforces genuine long-form story density, **≥ 15 distinct sets / drawn sub-scenes** verified by perceptual visual quality CI (`SE-16`), **≥ 10 cast looks**, **4-view articulated physics rigs (`front`, `side`, `back`, `3q` + OTS `fg` + `Actor.mount`)**, **multi-pose Hero Subjects (`PR-06`, `SH-18`)**, **camera grammar & layout CI (`CA-06`, `CA-07`, `LA-01..04`)**, **zero-rework placement solving (`qa.mjs place`)**, **`sv_doctor.py` preflight**, and a **10-check true-16:9 Blind Review**.
+**Hard lesson from `v4.0.0` (`docs/rsi-forensics-v4.0-2026-11-22.md`) – `v4.4.0`:** A 10-minute 16:9 movie is **NEVER** a 2.5-minute Short stretched 4× across flat walls, noisy spike patterns, fake zoomed establishing plates, axis-flipping cuts, or static copy-pasted creature stickers. `v4.4.0` enforces genuine long-form story density, **≥ 15 distinct sets / drawn sub-scenes** verified by perceptual visual quality CI (`SE-16`), **≥ 10 cast looks**, **4-view articulated physics rigs (`front`, `side`, `back`, `3q` + OTS `fg` + `Actor.mount`)**, **multi-pose Hero Subjects (`PR-06`, `SH-18`)**, **studio mood lighting & depth separation (`ShotDef.mood`, `ShotDef.dof`, `SH-19`, static `url(#grainPat)`)**, **camera grammar & layout CI (`CA-06`, `CA-07`, `LA-01..04`)**, **zero-rework placement solving (`qa.mjs place`)**, **`sv_doctor.py` preflight**, **shot-aligned macro-block chunk rendering (`deliver.mjs`)**, **automated dual-format regression (`tools/benchmark_suite.py`)**, and a **10-check true-16:9 Blind Review**.
 
 ## Read first
 1. `references/ideation-system-prompt.md` — reusable **4-Agent Pitch → Cross-Critique → Blind Reviewer** system prompt, `Nhím Là Lốp` Winning DNA, Mandatory Inductive Hook (`Hook Quy Nạp`), and **100-Point Blind Judge Scorecard** for **G1**.
@@ -22,7 +22,7 @@ A long-form 16:9 episode is an **explicit opt-in** (never the default 2–3 min 
 - **`script.json`**: Set both `"format": "16:9"` and `"length": "long_16x9"` at the top level.
 - **`brief.md`**: Include `## Length override` with `user_quote: "<exact user instruction>"` (`SC-27`; never edit `standards/pacing.json` per episode).
 
-| Metric | 16:9 Long-Form Standard (`v4.3.0`) | Machine Guard |
+| Metric | 16:9 Long-Form Standard (`v4.4.0`) | Machine Guard |
 |---|---|---|
 | Runtime | **8–12 min** (`480–720 s`, target ~`600 s`) | `SC-05`, `voice.py` (`episode_long_16x9`) |
 | Spoken words | **2,200–3,600 words** (~440–720 words/chapter) | `SC-05` |
@@ -38,6 +38,7 @@ A long-form 16:9 episode is an **explicit opt-in** (never the default 2–3 min 
 | Set-Fatigue Ceiling | Max **`≤ 10` consecutive shots** on the same set (WARN `> 7`), max **`≤ 18%`** single-set share (WARN `> 14%`) | `SH-16` |
 | Cinematic View Mix | **`front ≤ 70%`** (WARN `> 60%`), **`back + 3q ≥ 15%`** (WARN `< 25%`), avoid static prop copy-paste `> 15` shots | `SH-17` |
 | Limb Continuity | Giant partial-body props (`Shoe|Foot|Leg|Hand|Arm|Paw`) MUST bleed off frame top/side (`sy0 ≤ 24`); NEVER float severed mid-frame! | `PR-05`, `GE-19` |
+| Atmospheric Mood & Depth | Optional `ShotDef.mood` (`default\|morning\|golden\|danger\|lab\|flashback\|dramatic`) + `ShotDef.dof: true` far-layer haze + static riso grain (`url(#grainPat)`); avoid `mood: 'danger'` + `night > 0.7` double dark crush | `SH-19` |
 
 ---
 
@@ -80,11 +81,11 @@ Use all 4 engine views (`Actor.view`: `'front' | 'side' | 'back' | '3q'`) plus f
 - Every recurring hero creature/boss/vehicle MUST be registered in `src/episode/subjects.tsx` (`PR-06`, `SH-18`, `≥ 4` distinct poses, verified on `qa/design/subject_<id>.png`) and ridden via `Actor.mount` rather than floating manually over props.
 - Run `node scripts/qa.mjs place <setId>` before blocking shots to obtain guaranteed `LA-01`/`LA-02`/caption-safe floor coordinates on the first try, then run `node scripts/qa.mjs layout` before any render to verify 3×3 grid balance (`LA-02`), actor/subject scale ratios (`LA-01`), zero fake close-up zooms on establishing sets (`LA-03`), zero awkward hero creature frame-edge cut-offs (`LA-04`), and camera grammar continuity (`CA-06`, `CA-07`).
 - Keep caption band `y = 880..1000` clear of heads, hands, hero props, and signs (`OV-03`, `GE-04`, `GE-11`).
-- Keep `PR-01..06`, `CH-01..10`, `TK-01..03`, `SE-01..16`, `CA-01..07`, `SH-01..18`, `LA-01..04`, `MO-01..12`, `GE-01`, `GE-04`, `GE-07`, `GE-10`, `GE-11`, `GE-15..19` at 0 errors.
+- Keep `PR-01..06`, `CH-01..10`, `TK-01..03`, `SE-01..16`, `CA-01..07`, `SH-01..19`, `LA-01..04`, `MO-01..12`, `GE-01`, `GE-04`, `GE-07`, `GE-10`, `GE-11`, `GE-15..19` at 0 errors.
 
 ---
 
-## 4. True-16:9 QA, 10-Check Blind Review & Chunked Delivery (`G5`–`G7`)
+## 4. True-16:9 QA, 10-Check Blind Review & Macro-Block Delivery (`G5`–`G7`)
 
 1. **True-16:9 Contact Sheets & Crops (`tile.py`, `crops.py`, `qa.mjs`):**
    - `tile.py` preserves exact `16:9` aspect ratio (`4×3` wide grid per 12-shot contact page, zero vertical squashing).
@@ -92,8 +93,9 @@ Use all 4 engine views (`Actor.view`: `'front' | 'side' | 'back' | '3q'`) plus f
 2. **10-Check Anti-Bypass Blind Review (`blind_pack.mjs`, `qa.mjs`, `sv_gate.py`):**
    - `blind_pack.mjs` attaches `format`, `set_streak`, and `prev_set` to every slice entry and emits a 10-check `RUBRIC.md`: the 8 base checks (`acting`, `contact`, `overlap`, `set`, `text`, `caption`, `beat`, `model`) **PLUS** **`framing`** (severed/floating limbs, 16:9 depth/angle believability) and **`variety`** (no copy-paste static wall/prop repetition across consecutive shots).
    - Independent reviewers submit via `node scripts/qa.mjs review --batch <file.jsonl>` with verbatim `blind_sha`; `sv_gate.py check G5` enforces all 10 checks (`ok`) and `blind_sha`.
-3. **Chunked Delivery (`G7`):**
-   - Run `SV_CHUNK_RENDER=1 node scripts/deliver.mjs` (`bundle_cache.mjs` + per-shot `out/_chunks/` + 4×3 true-16:9 `qa/final_check.jpg` + `qa/video_audio.json`), pass G7, and send `out/final.mp4`.
+3. **Macro-Block Chunked Delivery & Regression Suite (`G7`, `tools/benchmark_suite.py`):**
+   - Run `SV_CHUNK_RENDER=1 node scripts/deliver.mjs` (`bundle_cache.mjs` + shot-aligned macro-blocks via `SV_CHUNK_FRAMES` default `1050` frames ≈ 35 s + static `url(#grainPat)` + JPEG q=95 intermediates + `SV_X264_PRESET=veryfast` + 4×3 true-16:9 `qa/final_check.jpg` + `qa/video_audio.json`), pass G7, and send `out/final.mp4`.
+   - Verify dual-format suite health and timing regressions anytime via `python3 tools/benchmark_suite.py`.
 
 ---
 
@@ -103,5 +105,5 @@ Use all 4 engine views (`Actor.view`: `'front' | 'side' | 'back' | '3q'`) plus f
 - **Conductor (main session):** Owns `sv_doctor.py`, `sv_gate.py`, user approvals, `qa/.render.lock` (one render at a time), and `qa/state.json`.
 - **G1–G3 (`~10 min` overlapping G4):** Brief (`3–4 min`) → Script + G2 Adversarial Story Doctor (`5–6 min`, `qa/story_doctor.json`) → `voice.py --preflight` zero-GPU sanity check → G3 voice (`6–8 min` in parallel with G4).
 - **G4 Builders (`8–10 min`, 4–5 parallel):** 1 `cast (10+ looks) + props + subjects` builder ∥ 3–4 `sets` builders (4–5 multi-angle/sub-scene sets each → **15–18 sets** passing `SE-15` & `SE-16` perceptual plate CI on the first render).
-- **G5 Builders + Blind QA (`12–15 min`, parallel by chapter):** 3–5 builders partitioned cleanly by chapter (`Ch 1`..`Ch 5` segment ranges) using `node scripts/qa.mjs place <setId>` for first-try clean `LA-01..04` / `CA-06..07` / `SH-16..18` blocking, followed by 3-way parallel blind reviewers on enriched `slice_1..3.json` (`+ framing`, `+ variety`). Run G6 mix (`~2 min`) concurrently once `qa/timing.json` is stable.
-- **G7 Chunked Single-Browser Render (`8–10 min`):** Run `SV_CHUNK_RENDER=1 node scripts/deliver.mjs` (cached single-browser per-shot chunks in `out/_chunks/` + `qa/final_check.jpg` + `qa/video_audio.json`).
+- **G5 Builders + Blind QA (`12–15 min`, parallel by chapter):** 3–5 builders partitioned cleanly by chapter (`Ch 1`..`Ch 5` segment ranges) using `node scripts/qa.mjs place <setId>` for first-try clean `LA-01..04` / `CA-06..07` / `SH-16..19` blocking (plus atmospheric `mood`/`dof` passes), followed by 3-way parallel blind reviewers on enriched `slice_1..3.json` (`+ framing`, `+ variety`). Run G6 mix (`~2 min`) concurrently once `qa/timing.json` is stable.
+- **G7 Macro-Block Single-Browser Render (`6–8 min`):** Run `SV_CHUNK_RENDER=1 node scripts/deliver.mjs` (cached single-browser shot-aligned macro-blocks in `out/_chunks/` with static `url(#grainPat)` + `qa/final_check.jpg` + `qa/video_audio.json`).

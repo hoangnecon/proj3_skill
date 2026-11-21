@@ -44,6 +44,7 @@ const ROLES = new Set(['principal', 'support', 'extra']);
 const BEDS = new Set(['room', 'hum', 'quiet', 'echo', 'outdoor', 'fan', 'motor', 'basement', 'paper', 'street', 'market', 'kitchen', 'rain', 'night']);
 const VALID_ANGLES = new Set(['wide', 'low', 'high', 'ots', 'reverse', 'closeup', 'pov']);
 const VALID_SHOT_SCALES = new Set(['establishing', 'medium', 'closeup', 'insert']);
+const VALID_MOODS = new Set(['default', 'morning', 'golden', 'danger', 'lab', 'flashback', 'dramatic']);
 const EXPRS = new Set(['neutral', 'smug', 'angry', 'shock', 'sad', 'cry', 'joy', 'stern', 'sly', 'deadpan', 'eager', 'shh']);
 const SIDE_ARMS = new Set(['swing', 'down', 'hold', 'phone', 'cane', 'carry', 'ride', 'shh', 'raise', 'pocket', 'run', 'crouch', 'jump', 'fall', 'push', 'climb', 'cheer']);
 const OVER = new Set(['tag', 'bubble', 'label', 'stamp', 'score', 'pin', 'title', 'card', 'arrow']);
@@ -375,6 +376,12 @@ if (phase !== 'design') {
     if (/^DEMO/.test(s.name)) err('SH-04', `${tag}: demo shot still in the shotlist`);
     if (!P.SETS[s.set]) err('SH-05', `${tag}: unknown set ${s.set}`);
     if (s.set.startsWith('ex-')) err('SH-06', `${tag}: exemplar set ${s.set} used in an episode shot`);
+    if (s.mood !== undefined && !VALID_MOODS.has(s.mood)) {
+      err('SH-19', `${tag}: unknown mood '${s.mood}' (expected ${[...VALID_MOODS].join('|')})`);
+    }
+    if (s.mood === 'danger' && s.night && s.night > 0.7 && !waived('SH-19', s.name)) {
+      warn('SH-19', `${tag}: mood 'danger' combined with night=${s.night} (> 0.7) stacks double dark overlays and may crush visibility — lower night <= 0.7 or use mood 'dramatic'`);
+    }
     usedSets.add(s.set);
     for (const [k, tr] of Object.entries(s.keys ?? {})) tr.forEach(([, tt]) => visitTT(tt, `${tag}.keys.${k}`));
     for (const o of s.over ?? []) {

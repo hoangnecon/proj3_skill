@@ -1,13 +1,13 @@
-# story-video-skills (`v4.3.0`)
+# story-video-skills (`v4.4.0`)
 
 A gated production suite for **Vietnamese 2D story videos**: vertical 1080×1920 Shorts (2–3 min, **15-min SLA**) and opt-in widescreen 1920×1080 Long-Form (8–12 min, **45-min SLA**) at 30 fps,
-narrated by the northern male voice Hải Đăng, drawn in a flat "riso ink" style (with 4-view articulated rigs, multi-pose Hero Subjects, and Botanical Kit), and animated in Remotion
+narrated by the northern male voice Hải Đăng, drawn in a flat "riso ink" style (with 4-view articulated rigs, multi-pose Hero Subjects, Botanical Kit, atmospheric `mood`/`dof` passes, and static `url(#grainPat)` texture), and animated in Remotion
 with every shot anchored to a narration word.
 
 The suite packages the process that produced the reference episode *Thang máy ăn bí mật* (153 s, 26 segments,
 67 shots). Each phase ships with:
 - exact specs: design tokens, rig numbers, detail budgets, shot grammar and rhythm benchmarks;
-- machine checks: 120+ lint rules (including perceptual plate quality `SE-16`, 3×3 spatial layout/scale `LA-01..04`, and camera grammar `CA-06..07`), zero-cost preflight doctor (`scripts/sv_doctor.py`), and zero-rework placement solver (`qa.mjs place`);
+- machine checks: 132 lint rules (including perceptual plate quality `SE-16`, 3×3 spatial layout/scale `LA-01..04`, camera grammar `CA-06..07`, and mood grading `SH-19`), zero-cost preflight doctor (`scripts/sv_doctor.py`), zero-rework placement solver (`qa.mjs place`), and dual-format benchmark CLI (`tools/benchmark_suite.py`);
 - rendered evidence the agent must open and remark on;
 - a gate log that goes stale when its inputs change.
 
@@ -47,7 +47,7 @@ story-video-skills/
 ├── examples/
 │   ├── thang-may/ reference episode (cast looks, sets, geometry, shotlist) — the quality bar
 │   └── demo/      4-shot engine demo, layered on a new episode with --demo
-├── tools/         new_episode.sh (assembles an episode) · validate_skills.py
+├── tools/         new_episode.sh (assembles an episode) · validate_skills.py · benchmark_suite.py
 └── docs/          reviews of the suite
 ```
 A new episode is assembled from these parts (see `CONVENTIONS.md`), and its `README.md` marks three zones:
@@ -63,7 +63,8 @@ Every count is backed by something that has to be looked at:
 - Each evidence image needs a written remark, and the review must be newer than the evidence.
 - G1, G2 and G4 need the user's quoted approval.
 
-## Validate the suite
+## Validate & benchmark the suite
 ```bash
 python3 tools/validate_skills.py
+python3 tools/benchmark_suite.py
 ```

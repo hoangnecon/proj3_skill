@@ -108,6 +108,8 @@ export type ExtraDef = {
   path?: [number, number, TT][]; // optional animated motion path for creatures/vehicles
 };
 
+export type Mood = 'default' | 'morning' | 'golden' | 'danger' | 'lab' | 'flashback' | 'dramatic';
+
 export type ShotDef = {
   at: string; // word anchor where this shot starts (first shot: 's1')
   name: string; // short human description, shown in QA sheets
@@ -126,6 +128,8 @@ export type ShotDef = {
   tilt?: number; // subtle Dutch/cinematic camera roll in degrees (e.g. -4..+4)
   angle?: 'wide' | 'low' | 'high' | 'ots' | 'reverse' | 'closeup' | 'pov'; // optional cinematic shot grammar metadata
   night?: number; // 0..1 night grade
+  mood?: Mood; // studio atmospheric lighting grade (strictly PAL tokens, lightweight GPU-friendly gradient overlay)
+  dof?: boolean; // subtle atmospheric depth separation haze between d=0.5 far layer and d=1 midground
   tr?: 'cut' | 'flash' | 'wipe';
   bg?: string; // background token for the 'solid' set
 };

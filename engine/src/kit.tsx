@@ -51,40 +51,106 @@ export const Txt: React.FC<{x: number; y: number; s: number; c?: string; w?: num
     transform={r ? `rotate(${r} ${x} ${y})` : undefined}>{children}</text>
 );
 
+type GrainSpeck = {x: number; y: number; r: number; w: number; h: number; rect: boolean; fill: string; o: number};
+const makeGrainSpeckles = (seed: number, count = 72): GrainSpeck[] => {
+  let st = ((Math.abs(Math.floor(seed)) || 1) * 1664525 + 1013904223) >>> 0;
+  const next = () => {
+    st = (Math.imul(st, 1664525) + 1013904223) >>> 0;
+    return st / 4294967296;
+  };
+  const out: GrainSpeck[] = [];
+  for (let i = 0; i < count; i++) {
+    const x = +(next() * 94 + 1).toFixed(1);
+    const y = +(next() * 94 + 1).toFixed(1);
+    const r = +(0.6 + next() * 0.7).toFixed(2);
+    const isLight = next() < 0.32;
+    const fill = isLight ? PAL.paper : PAL.ink;
+    const o = isLight ? +(0.04 + next() * 0.03).toFixed(3) : +(0.04 + next() * 0.07).toFixed(3);
+    const rect = next() < 0.35;
+    const w = +(r * (1.2 + next() * 0.7)).toFixed(2);
+    const h = +(r * (0.9 + next() * 0.6)).toFixed(2);
+    out.push({x, y, r, w, h, rect, fill, o});
+  }
+  return out;
+};
+const DEFAULT_GRAIN_SPECKLES = makeGrainSpeckles(1, 72);
+
 /** defs dùng chung toàn phim (đặt một lần trong mỗi svg gốc) */
-export const Defs: React.FC<{seed?: number}> = ({seed = 1}) => (
-  <defs>
-    <pattern id="dots" width="11" height="11" patternUnits="userSpaceOnUse" patternTransform="rotate(30)">
-      <circle cx="5.5" cy="5.5" r="2.7" fill={PAL.shade} />
-    </pattern>
-    <pattern id="dotsR" width="11" height="11" patternUnits="userSpaceOnUse" patternTransform="rotate(30)">
-      <circle cx="5.5" cy="5.5" r="2.7" fill={PAL.redDark} />
-    </pattern>
-    <pattern id="dotsW" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(30)">
-      <circle cx="6" cy="6" r="2.4" fill={PAL.white} />
-    </pattern>
-    <pattern id="dotsBig" width="22" height="22" patternUnits="userSpaceOnUse" patternTransform="rotate(30)">
-      <circle cx="11" cy="11" r="5" fill={PAL.shade} />
-    </pattern>
-    <filter id="grain" x="0" y="0" width="100%" height="100%">
-      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed={seed} />
-      <feColorMatrix type="matrix" values="0 0 0 0 0.12  0 0 0 0 0.18  0 0 0 0 0.43  0 0 0 0.14 0" />
-      <feComposite in2="SourceGraphic" operator="in" />
-    </filter>
-    <radialGradient id="vig" cx="0.5" cy="0.5" r="0.75">
-      <stop offset="0.6" stopColor={PAL.navy} stopOpacity={0} />
-      <stop offset="1" stopColor={PAL.navy} stopOpacity={0.18} />
-    </radialGradient>
-    <radialGradient id="glowY">
-      <stop offset="0" stopColor="#fff2b8" stopOpacity={0.9} />
-      <stop offset="1" stopColor="#fff2b8" stopOpacity={0} />
-    </radialGradient>
-    <radialGradient id="glowG">
-      <stop offset="0" stopColor={PAL.ghost} stopOpacity={0.85} />
-      <stop offset="1" stopColor={PAL.ghost} stopOpacity={0} />
-    </radialGradient>
-  </defs>
-);
+export const Defs: React.FC<{seed?: number}> = ({seed = 1}) => {
+  const speckles = seed === 1 ? DEFAULT_GRAIN_SPECKLES : makeGrainSpeckles(seed, 72);
+  return (
+    <defs>
+      <pattern id="dots" width="11" height="11" patternUnits="userSpaceOnUse" patternTransform="rotate(30)">
+        <circle cx="5.5" cy="5.5" r="2.7" fill={PAL.shade} />
+      </pattern>
+      <pattern id="dotsR" width="11" height="11" patternUnits="userSpaceOnUse" patternTransform="rotate(30)">
+        <circle cx="5.5" cy="5.5" r="2.7" fill={PAL.redDark} />
+      </pattern>
+      <pattern id="dotsW" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(30)">
+        <circle cx="6" cy="6" r="2.4" fill={PAL.white} />
+      </pattern>
+      <pattern id="dotsBig" width="22" height="22" patternUnits="userSpaceOnUse" patternTransform="rotate(30)">
+        <circle cx="11" cy="11" r="5" fill={PAL.shade} />
+      </pattern>
+      <pattern id="grainPat" width="96" height="96" patternUnits="userSpaceOnUse">
+        {speckles.map((sp, i) =>
+          sp.rect ? (
+            <rect key={i} x={sp.x} y={sp.y} width={sp.w} height={sp.h} fill={sp.fill} opacity={sp.o} />
+          ) : (
+            <circle key={i} cx={sp.x} cy={sp.y} r={sp.r} fill={sp.fill} opacity={sp.o} />
+          ),
+        )}
+      </pattern>
+      <filter id="grain" x="0" y="0" width="100%" height="100%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed={seed} />
+        <feColorMatrix type="matrix" values="0 0 0 0 0.12  0 0 0 0 0.18  0 0 0 0 0.43  0 0 0 0.14 0" />
+        <feComposite in2="SourceGraphic" operator="in" />
+      </filter>
+      <radialGradient id="vig" cx="0.5" cy="0.5" r="0.75">
+        <stop offset="0.6" stopColor={PAL.navy} stopOpacity={0} />
+        <stop offset="1" stopColor={PAL.navy} stopOpacity={0.18} />
+      </radialGradient>
+      <radialGradient id="glowY">
+        <stop offset="0" stopColor="#fff2b8" stopOpacity={0.9} />
+        <stop offset="1" stopColor="#fff2b8" stopOpacity={0} />
+      </radialGradient>
+      <radialGradient id="glowG">
+        <stop offset="0" stopColor={PAL.ghost} stopOpacity={0.85} />
+        <stop offset="1" stopColor={PAL.ghost} stopOpacity={0} />
+      </radialGradient>
+      <linearGradient id="moodGolden" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stopColor={PAL.yellow} stopOpacity={0.95} />
+        <stop offset="0.55" stopColor={PAL.orange} stopOpacity={0.65} />
+        <stop offset="1" stopColor={PAL.goldDark} stopOpacity={0.45} />
+      </linearGradient>
+      <radialGradient id="moodDanger" cx="0.5" cy="0.5" r="0.72">
+        <stop offset="0.35" stopColor={PAL.red} stopOpacity={0} />
+        <stop offset="0.78" stopColor={PAL.red} stopOpacity={0.55} />
+        <stop offset="1" stopColor={PAL.navy} stopOpacity={0.95} />
+      </radialGradient>
+      <radialGradient id="moodLab" cx="0.5" cy="0.12" r="0.85">
+        <stop offset="0" stopColor={PAL.ghost} stopOpacity={0.95} />
+        <stop offset="0.55" stopColor={PAL.teal} stopOpacity={0.45} />
+        <stop offset="1" stopColor={PAL.navy} stopOpacity={0.25} />
+      </radialGradient>
+      <linearGradient id="moodMorning" x1="0.2" y1="0" x2="0.8" y2="1">
+        <stop offset="0" stopColor={PAL.white} stopOpacity={0.95} />
+        <stop offset="0.5" stopColor={PAL.sky2} stopOpacity={0.65} />
+        <stop offset="1" stopColor={PAL.sky2} stopOpacity={0} />
+      </linearGradient>
+      <radialGradient id="moodFlashback" cx="0.5" cy="0.48" r="0.78">
+        <stop offset="0.15" stopColor={PAL.paper} stopOpacity={0.35} />
+        <stop offset="0.7" stopColor={PAL.goldDark} stopOpacity={0.55} />
+        <stop offset="1" stopColor={PAL.goldDark} stopOpacity={0.92} />
+      </radialGradient>
+      <radialGradient id="moodDramatic" cx="0.5" cy="0.45" r="0.72">
+        <stop offset="0" stopColor={PAL.yellow} stopOpacity={0.35} />
+        <stop offset="0.48" stopColor={PAL.navy} stopOpacity={0.12} />
+        <stop offset="1" stopColor={PAL.navy} stopOpacity={0.95} />
+      </radialGradient>
+    </defs>
+  );
+};
 
 /** khói hương: một dải cong lượn theo thời gian */
 export const Smoke: React.FC<{x: number; y: number; t: number; h?: number; w?: number; o?: number; ph?: number}> = ({x, y, t, h = 220, w = 6, o = 0.75, ph = 0}) => {

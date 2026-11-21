@@ -466,6 +466,7 @@ export const Film: React.FC = () => {
   const worldLayers = (
     <>
       {layers.far && <LayerG d={0.5} cam={cam}>{layers.far}</LayerG>}
+      {shot.dof === true && layers.far && <rect width={FRAME_W} height={FRAME_H} fill={PAL.paper} opacity={0.14} />}
       <LayerG d={1} cam={cam}>{layers.back}</LayerG>
       <LayerG d={1} cam={cam}>{midItems.map((m) => <g key={m.key}>{m.node}</g>)}</LayerG>
       {fgItems.length > 0 && <LayerG d={1.2} cam={cam}>{fgItems.map((m) => <g key={m.key}>{m.node}</g>)}</LayerG>}
@@ -475,6 +476,7 @@ export const Film: React.FC = () => {
   const world = shot.tilt ? <g transform={`rotate(${shot.tilt} ${FRAME_W / 2} ${FRAME_H / 2})`}>{worldLayers}</g> : worldLayers;
 
   const night = shot.night ?? 0;
+  const mood = shot.mood && shot.mood !== 'default' ? shot.mood : undefined;
   const overs = (shot.over ?? []).map((o, i) => {
     const t0 = o.at !== undefined ? abs(o.at, shot) : shot.t0 + 0.05;
     if (o.until !== undefined && t > abs(o.until, shot)) return null;
@@ -498,8 +500,19 @@ export const Film: React.FC = () => {
         {wipe < 1 && <rect x={FRAME_W * wipe - 40} y={0} width={40} height={FRAME_H} fill={PAL.yellow} />}
         {night > 0 && <rect width={FRAME_W} height={FRAME_H} fill={PAL.navy} opacity={0.55 * night} style={{mixBlendMode: 'multiply'}} />}
         {night > 0 && <circle cx={FRAME_W / 2} cy={FRAME_H / 2} r={700} fill="url(#glowY)" opacity={0.45 * night} style={{mixBlendMode: 'screen'}} />}
+        {mood === 'morning' && <rect width={FRAME_W} height={FRAME_H} fill="url(#moodMorning)" opacity={0.22} />}
+        {mood === 'golden' && (
+          <>
+            <rect width={FRAME_W} height={FRAME_H} fill="url(#moodGolden)" opacity={0.24} style={{mixBlendMode: 'multiply'}} />
+            <rect width={FRAME_W} height={FRAME_H} fill="url(#glowY)" opacity={0.18} />
+          </>
+        )}
+        {mood === 'danger' && <rect width={FRAME_W} height={FRAME_H} fill="url(#moodDanger)" opacity={0.34 + Math.sin(t * 5) * 0.05} />}
+        {mood === 'lab' && <rect width={FRAME_W} height={FRAME_H} fill="url(#moodLab)" opacity={0.20} />}
+        {mood === 'flashback' && <rect width={FRAME_W} height={FRAME_H} fill="url(#moodFlashback)" opacity={0.28} />}
+        {mood === 'dramatic' && <rect width={FRAME_W} height={FRAME_H} fill="url(#moodDramatic)" opacity={0.38} />}
         {overs}
-        <rect width={FRAME_W} height={FRAME_H} filter="url(#grain)" style={{mixBlendMode: 'multiply'}} />
+        <rect width={FRAME_W} height={FRAME_H} fill="url(#grainPat)" />
         <rect width={FRAME_W} height={FRAME_H} fill="url(#vig)" />
         <Captions t={t} />
         {flash > 0 && <rect width={FRAME_W} height={FRAME_H} fill={PAL.white} opacity={flash} />}
