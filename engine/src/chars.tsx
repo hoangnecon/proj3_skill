@@ -38,7 +38,8 @@ export type Look = {
 };
 
 export type Arm = [number, number] | string | {x: number; y: number}; // [góc vai, góc khuỷu] độ (0 = buông, + = ra ngoài/lên) hoặc tên điểm đích IK: mouth, eye, chest, hip, head, over, ear, front
-export type Pose = {la: Arm; ra: Arm; legs?: 'stand' | 'sit' | 'walk' | 'none'; lean?: number; hop?: number};
+export type LegMode = 'stand' | 'sit' | 'walk' | 'run' | 'crouch' | 'ride' | 'jump' | 'fall' | 'push' | 'climb' | 'none';
+export type Pose = {la: Arm; ra: Arm; legs?: LegMode; lean?: number; hop?: number; squash?: number; pitch?: number};
 export type Expr = 'neutral' | 'smug' | 'angry' | 'shock' | 'sad' | 'cry' | 'joy' | 'stern' | 'sly' | 'deadpan' | 'eager' | 'shh';
 
 export const POSES: Record<string, Pose> = {
@@ -79,6 +80,17 @@ export const POSES: Record<string, Pose> = {
   sitHold: {la: [14, -95], ra: [14, -95], legs: 'sit'},
   hands: {la: 'mouth', ra: 'mouth'},
   sitHands: {la: 'mouth', ra: 'mouth', legs: 'sit'},
+  // --- RSI v4.2.0 expressive physics poses ---
+  run: {la: [48, -68], ra: [32, -88], legs: 'run', lean: 10, hop: 12},
+  crouch: {la: [28, -55], ra: [28, -55], legs: 'crouch', lean: 8, squash: 0.92},
+  brace: {la: [42, -95], ra: [42, -95], legs: 'crouch', lean: -6, squash: 0.90},
+  ride: {la: [34, -82], ra: [34, -82], legs: 'ride', lean: 14, squash: 0.96},
+  rideCheer: {la: [142, 22], ra: [34, -82], legs: 'ride', lean: 10, squash: 0.97},
+  jump: {la: [135, -24], ra: [135, -24], legs: 'jump', hop: 56, squash: 1.08},
+  fall: {la: [115, -20], ra: [132, -15], legs: 'fall', pitch: -64, hop: 24, squash: 0.94},
+  trip: {la: [105, -30], ra: [122, -25], legs: 'fall', pitch: 52, hop: 18, squash: 0.94},
+  push: {la: [78, -18], ra: [78, -18], legs: 'push', lean: 24, squash: 0.95},
+  climb: {la: [148, -42], ra: [62, -74], legs: 'climb', lean: 6},
 };
 
 const mixArm = (a: Arm, b: Arm, u: number): Arm => (!Array.isArray(a) || !Array.isArray(b) ? (u < 0.5 ? a : b) : [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u]);
@@ -88,6 +100,8 @@ export const poseMix = (a: Pose, b: Pose, u: number): Pose => ({
   legs: u < 0.5 ? a.legs : b.legs,
   lean: (a.lean ?? 0) + ((b.lean ?? 0) - (a.lean ?? 0)) * u,
   hop: (a.hop ?? 0) + ((b.hop ?? 0) - (a.hop ?? 0)) * u,
+  squash: (a.squash ?? 1) + ((b.squash ?? 1) - (a.squash ?? 1)) * u,
+  pitch: (a.pitch ?? 0) + ((b.pitch ?? 0) - (a.pitch ?? 0)) * u,
 });
 
 const rad = (d: number) => (d * Math.PI) / 180;
@@ -129,17 +143,16 @@ export const Person: React.FC<PersonProps> = ({look, pose, expr = 'neutral', tal
   const HR = 100 * (look.head ?? 1); // bán kính đầu — đầu ≈ 1/2.6 chiều cao
   const hy = shY - 8 - HR * 0.9;
   const legs = g ? 'none' : pose.legs ?? 'stand';
-  const sitDrop = legs === 'sit' ? 70 : 0;
+  const bodyDrop = legs === 'sit' ? 70 : legs === 'crouch' ? 62 * H : legs === 'ride' ? 68 * H : legs === 'push' ? 24 * H : 0;
+  const bY = legY + bodyDrop;
+  const sY = shY + bodyDrop;
 
   // --- tay ---
   const armW = 30 * Math.min(1.25, W);
   const ua = 104 * H, fa = 96 * H;
-  const shoulder = (sg: number): [number, number] => [sg * (sw - 14), shY + 18 + sitDrop];
-  const shY0 = shY, legY0 = legY;
+  const shoulder = (sg: number): [number, number] => [sg * (sw - 14), sY + 18];
   const target = (sg: number, n: string): [number, number] => {
-    const hyy = hy + sitDrop;
-    const shY = shY0 + sitDrop;
-    const legY = legY0 + sitDrop;
+    const hyy = hy + bodyDrop;
     switch (n) {
       case 'mouth': return [sg * HR * 0.32, hyy + HR * 0.6];
       // tay cầm thìa: thìa dài ~96 px nghiêng -20°, nên bàn tay ở dưới cằm để đầu thìa chạm miệng
@@ -148,14 +161,14 @@ export const Person: React.FC<PersonProps> = ({look, pose, expr = 'neutral', tal
       case 'ear': return [sg * HR * 0.95, hyy + HR * 0.1];
       case 'head': return [sg * HR * 0.7, hyy - HR * 0.6];
       case 'over': return [sg * 40, hyy - HR * 1.6];
-      case 'chest': return [sg * 10, shY + 90];
-      case 'pray': return [0, shY + 40];
-      case 'crossL': return [sw * 0.45, shY + 120];
-      case 'crossR': return [-sw * 0.45, shY + 104];
-      case 'hip': return [sg * (ww + 8), legY - 10];
-      case 'front': return [sg * 26, shY + 150];
+      case 'chest': return [sg * 10, sY + 90];
+      case 'pray': return [0, sY + 40];
+      case 'crossL': return [sw * 0.45, sY + 120];
+      case 'crossR': return [-sw * 0.45, sY + 104];
+      case 'hip': return [sg * (ww + 8), bY - 10];
+      case 'front': return [sg * 26, sY + 150];
     }
-    return [sg * sw, shY + 200];
+    return [sg * sw, sY + 200];
   };
   const armPts = (sg: number, a: Arm): [number, number][] => {
     const [x0, y0] = shoulder(sg);
@@ -177,8 +190,20 @@ export const Person: React.FC<PersonProps> = ({look, pose, expr = 'neutral', tal
       if (sg * ex3 > sg * ex2) { ex2 = ex3; ey2 = ey3; }
       return [[x0, y0], [ex2, ey2], [tx, ty]];
     }
-    const t1 = rad(a[0]);
-    const t2 = rad(a[0] + a[1]);
+    let a0 = a[0], a1 = a[1];
+    if (legs === 'run') {
+      const swRun = Math.sin(t * 14) * sg;
+      a0 += swRun * 24;
+      a1 -= Math.max(0, swRun) * 14;
+    } else if (legs === 'climb') {
+      const swClimb = Math.sin(t * 7) * sg;
+      a0 += swClimb * 26;
+      a1 -= swClimb * 10;
+    } else if (legs === 'fall') {
+      a0 += Math.sin(t * 20 + (sg > 0 ? 1.8 : 0)) * 16;
+    }
+    const t1 = rad(a0);
+    const t2 = rad(a0 + a1);
     const x1 = x0 + sg * Math.sin(t1) * ua, y1 = y0 + Math.cos(t1) * ua;
     const x2 = x1 + sg * Math.sin(t2) * fa, y2 = y1 + Math.cos(t2) * fa;
     return [[x0, y0], [x1, y1], [x2, y2]];
@@ -196,28 +221,116 @@ export const Person: React.FC<PersonProps> = ({look, pose, expr = 'neutral', tal
   );
   const drawHand = (p: [number, number], k: string) => <S key={k} d={E(p[0], p[1], 17, 17)} f={skin} />;
 
-  // --- chân ---
+  // --- chân khớp gối 2 khúc [hip, knee, ankle] ---
   const legX = 34 * W + belly * 10;
   const legW = 40 * Math.min(1.2, W);
   const legEls: React.ReactNode[] = [];
   const shoe = look.shoes ?? 'red';
-  if (legs === 'stand' || legs === 'walk') {
-    const sw2 = legs === 'walk' ? Math.sin(t * 9) * 16 : 0;
+  const drawShoe = (ax: number, ay: number, sg: number, k: string, rot = 0) => (
+    <g key={k} transform={`translate(${ax.toFixed(1)} ${ay.toFixed(1)}) rotate(${rot.toFixed(1)})`}>
+      <S d={Rr(-30 + sg * 8, -6, 60, 24, 11)} f={shoe} />
+    </g>
+  );
+
+  if (legs === 'stand') {
     for (const sg of [-1, 1]) {
-      const fx = sg * legX + sg * sw2 * (sg > 0 ? 1 : -1);
-      legEls.push(limb([[sg * legX, legY + 10], [fx, -18]], legW, look.pants, 'leg' + sg));
-      legEls.push(<S key={'sh' + sg} d={Rr(fx - 30 + sg * 8, -24, 60, 24, 11)} f={shoe} />);
+      const hip: [number, number] = [sg * legX, bY + 10];
+      const knee: [number, number] = [sg * (legX + 2), bY * 0.5];
+      const ankle: [number, number] = [sg * legX, -18];
+      legEls.push(limb([hip, knee, ankle], legW, look.pants, 'leg' + sg));
+      legEls.push(drawShoe(ankle[0], ankle[1], sg, 'sh' + sg));
+    }
+  } else if (legs === 'walk') {
+    for (const sg of [-1, 1]) {
+      const stride = Math.sin(t * 9) * sg;
+      const lift = Math.max(0, stride) * 20;
+      const hip: [number, number] = [sg * legX, bY + 10];
+      const knee: [number, number] = [sg * (legX + 5 + Math.max(0, stride) * 9), bY * 0.5 - lift * 0.65];
+      const ankle: [number, number] = [sg * (legX + stride * 10), -18 - lift];
+      legEls.push(limb([hip, knee, ankle], legW, look.pants, 'leg' + sg));
+      legEls.push(drawShoe(ankle[0], ankle[1], sg, 'sh' + sg, stride > 0 ? sg * stride * 14 : 0));
+    }
+  } else if (legs === 'run') {
+    for (const sg of [-1, 1]) {
+      const stride = Math.sin(t * 14) * sg;
+      const lift = Math.max(0, stride) * 44;
+      const trail = Math.max(0, -stride) * 18;
+      const hip: [number, number] = [sg * legX, bY + 10];
+      const knee: [number, number] = [sg * (legX + 10 + Math.max(0, stride) * 14), bY * 0.44 - lift * 0.85];
+      const ankle: [number, number] = [sg * (legX + stride * 16), -18 - lift - trail * 0.5];
+      legEls.push(limb([hip, knee, ankle], legW, look.pants, 'leg' + sg));
+      legEls.push(drawShoe(ankle[0], ankle[1], sg, 'sh' + sg, sg * (stride > 0 ? 18 : -10)));
     }
   } else if (legs === 'sit') {
     for (const sg of [-1, 1]) {
-      legEls.push(limb([[sg * legX, legY + sitDrop], [sg * (legX + 14), legY + sitDrop + 20], [sg * (legX + 10), -18]], legW, look.pants, 'leg' + sg));
-      legEls.push(<S key={'sh' + sg} d={Rr(sg * (legX + 10) - 30 + sg * 8, -24, 60, 24, 11)} f={shoe} />);
+      legEls.push(limb([[sg * legX, bY], [sg * (legX + 14), bY + 20], [sg * (legX + 10), -18]], legW, look.pants, 'leg' + sg));
+      legEls.push(drawShoe(sg * (legX + 10), -18, sg, 'sh' + sg));
+    }
+  } else if (legs === 'crouch') {
+    for (const sg of [-1, 1]) {
+      const hip: [number, number] = [sg * legX, bY + 6];
+      const knee: [number, number] = [sg * (legX + 24), bY + 46 * H];
+      const ankle: [number, number] = [sg * (legX + 16), -18];
+      legEls.push(limb([hip, knee, ankle], legW, look.pants, 'leg' + sg));
+      legEls.push(drawShoe(ankle[0], ankle[1], sg, 'sh' + sg, sg * 6));
+    }
+  } else if (legs === 'ride') {
+    for (const sg of [-1, 1]) {
+      const hip: [number, number] = [sg * legX, bY + 6];
+      const knee: [number, number] = [sg * (legX + 32), bY + 34 * H];
+      const ankle: [number, number] = [sg * (legX + 20), -26 * H];
+      legEls.push(limb([hip, knee, ankle], legW, look.pants, 'leg' + sg));
+      legEls.push(drawShoe(ankle[0], ankle[1], sg, 'sh' + sg, sg * 16));
+    }
+  } else if (legs === 'jump') {
+    for (const sg of [-1, 1]) {
+      const hip: [number, number] = [sg * legX, bY + 8];
+      const knee: [number, number] = [sg * (legX + 18), bY + 26 * H];
+      const ankle: [number, number] = [sg * (legX + 6), bY + 76 * H];
+      legEls.push(limb([hip, knee, ankle], legW, look.pants, 'leg' + sg));
+      legEls.push(drawShoe(ankle[0], ankle[1], sg, 'sh' + sg, sg * 20));
+    }
+  } else if (legs === 'fall') {
+    for (const sg of [-1, 1]) {
+      const kick = Math.sin(t * 18 + (sg > 0 ? 1.4 : 0)) * 14;
+      const asym = sg > 0 ? -16 : 12;
+      const hip: [number, number] = [sg * legX, bY + 8];
+      const knee: [number, number] = [sg * (legX + 26) + sg * kick * 0.5, bY + 28 * H + asym * 0.8 + kick * 0.4];
+      const ankle: [number, number] = [sg * (legX + 46) + sg * kick, bY + 74 * H + asym * 1.4 + kick];
+      legEls.push(limb([hip, knee, ankle], legW, look.pants, 'leg' + sg));
+      legEls.push(drawShoe(ankle[0], ankle[1], sg, 'sh' + sg, sg * (30 + kick)));
+    }
+    // subtle comic tumble motion arcs
+    legEls.push(
+      <L key="fm1" d={`M${-legX - 72} ${bY + 30}q-18 24 4 46`} w={4} o={0.35} />,
+      <L key="fm2" d={`M${legX + 74} ${bY + 12}q18 22 -4 44`} w={4} o={0.35} />,
+      <L key="fm3" d={`M${-sw - 28} ${sY + 30}q-16 26 8 44`} w={3.5} o={0.3} />,
+    );
+  } else if (legs === 'push') {
+    // wide staggered bracing stance: right (+1) bent forward, left (-1) braced straight back
+    const fHip: [number, number] = [legX, bY + 8];
+    const fKnee: [number, number] = [legX + 24, bY + 52 * H];
+    const fAnkle: [number, number] = [legX + 14, -18];
+    const bHip: [number, number] = [-legX, bY + 8];
+    const bKnee: [number, number] = [-legX - 32, bY + 74 * H];
+    const bAnkle: [number, number] = [-legX - 58, -18];
+    legEls.push(limb([bHip, bKnee, bAnkle], legW, look.pants, 'leg-1'));
+    legEls.push(drawShoe(bAnkle[0], bAnkle[1], -1, 'sh-1', -12));
+    legEls.push(limb([fHip, fKnee, fAnkle], legW, look.pants, 'leg1'));
+    legEls.push(drawShoe(fAnkle[0], fAnkle[1], 1, 'sh1', 4));
+  } else if (legs === 'climb') {
+    for (const sg of [-1, 1]) {
+      const cyc = Math.sin(t * 7) * sg;
+      const lift = (cyc * 0.5 + 0.5) * 56 * H;
+      const hip: [number, number] = [sg * legX, bY + 8];
+      const knee: [number, number] = [sg * (legX + 16 + (cyc > 0 ? 10 : 0)), bY + 42 * H - lift * 0.55];
+      const ankle: [number, number] = [sg * (legX + 8), -18 - lift * 0.75];
+      legEls.push(limb([hip, knee, ankle], legW, look.pants, 'leg' + sg));
+      legEls.push(drawShoe(ankle[0], ankle[1], sg, 'sh' + sg, sg * (cyc > 0 ? 14 : -4)));
     }
   }
 
   // --- thân ---
-  const bY = legY + sitDrop;
-  const sY = shY + sitDrop;
   const long = look.top === 'robe' || look.top === 'aothe' || g;
   const hemY = long ? (g ? bY + 40 : -40) : bY + 26;
   const hemW = long ? ww + 36 : ww + 4;
@@ -286,10 +399,20 @@ export const Person: React.FC<PersonProps> = ({look, pose, expr = 'neutral', tal
   }
 
   // --- đầu ---
-  const head = <Head look={look} hy={hy + sitDrop} R={HR} expr={expr} talk={talk} t={t} gaze={gaze} blinkPh={blinkPh} />;
+  const head = <Head look={look} hy={hy + bodyDrop} R={HR} expr={expr} talk={talk} t={t} gaze={gaze} blinkPh={blinkPh} />;
 
-  // ma: đuôi khói thay cho chân, cơ thể trôi bồng bềnh
-  const bob = g ? Math.sin(t * 2.2 + blinkPh) * 10 : (pose.hop ?? 0);
+  // ma: đuôi khói thay cho chân, cơ thể trôi bồng bềnh; người thường: nhịp bước + nhún nhảy + thở nhẹ
+  const modeBob =
+    legs === 'walk' ? Math.abs(Math.sin(t * 9)) * 7 :
+    legs === 'run' ? Math.abs(Math.sin(t * 14)) * 16 :
+    legs === 'ride' ? Math.sin(t * 6) * 4 :
+    legs === 'jump' ? Math.sin(t * 8) * 5 :
+    legs === 'climb' ? Math.abs(Math.sin(t * 7)) * 6 : 0;
+  const bob = g ? Math.sin(t * 2.2 + blinkPh) * 10 : (pose.hop ?? 0) + modeBob;
+  const breath = Math.sin(t * 2.5 + blinkPh) * 0.008;
+  const sq = Math.max(0.5, (pose.squash ?? 1) + breath);
+  const sxSq = 1 / Math.sqrt(sq);
+  const totalRot = (pose.lean ?? 0) + (pose.pitch ?? 0);
   const tail = g ? (
     <g>
       <path d={`M${-hemW} ${hemY - 4}C${-hemW + 20} ${hemY + 60} ${-30} ${hemY + 40} ${-10 + Math.sin(t * 2) * 14} ${hemY + 130}C${40} ${hemY + 60} ${hemW - 10} ${hemY + 50} ${hemW} ${hemY - 4}Z`} fill={PAL.ghost} stroke={PAL.ink} strokeWidth={LINE} opacity={0.85} />
@@ -298,8 +421,8 @@ export const Person: React.FC<PersonProps> = ({look, pose, expr = 'neutral', tal
   ) : null;
 
   return (
-    <g transform={`translate(0 ${-bob}) rotate(${pose.lean ?? 0} 0 ${legY})`} opacity={g ? 0.93 : 1}>
-      {g && <ellipse cx={0} cy={hy} rx={HR * 3.2} ry={HR * 4} fill="url(#glowG)" />}
+    <g transform={`translate(0 ${(-bob).toFixed(1)}) rotate(${totalRot.toFixed(2)} 0 ${bY.toFixed(1)}) scale(${sxSq.toFixed(4)} ${sq.toFixed(4)})`} opacity={g ? 0.93 : 1}>
+      {g && <ellipse cx={0} cy={hy + bodyDrop} rx={HR * 3.2} ry={HR * 4} fill="url(#glowG)" />}
       {propBack?.(hands)}
       {legEls}
       {tail}

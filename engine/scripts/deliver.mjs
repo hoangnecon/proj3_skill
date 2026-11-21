@@ -41,8 +41,8 @@ if (process.env.SV_SKIP_RENDER && fresh) {
   const hashes = rows.map((r) => DEPS.hashOf(r));
   const globalFiles = [
     'src/Film.tsx', 'src/Root.tsx', 'src/format.ts', 'src/kit.tsx', 'src/chars.tsx',
-    'src/side.tsx', 'src/back.tsx', 'src/threeq.tsx', 'src/overlays.tsx', 'src/data/words.json',
-    'src/data/cues.json', 'src/episode/cast.ts', 'src/props.tsx',
+    'src/side.tsx', 'src/back.tsx', 'src/threeq.tsx', 'src/subjects.ts', 'src/overlays.tsx', 'src/data/words.json',
+    'src/data/cues.json', 'src/episode/cast.ts', 'src/episode/subjects.tsx', 'src/props.tsx',
   ];
   const gh = crypto.createHash('sha1');
   for (const gf of globalFiles) {

@@ -13,7 +13,11 @@ export const SIDE_CYCLE = SIDE_STRIDE / STANCE;
 
 type P = [number, number];
 type Target = {x: number; y: number};
-export type SideArms = 'swing' | 'down' | 'hold' | 'phone' | 'cane' | 'carry' | {near?: Target; far?: Target};
+export type SideLegs = 'walk' | 'run' | 'sit' | 'carried' | 'ride' | 'crouch' | 'jump' | 'fall' | 'push' | 'climb';
+export type SideArms =
+  | 'swing' | 'down' | 'hold' | 'phone' | 'cane' | 'carry'
+  | 'run' | 'ride' | 'crouch' | 'jump' | 'fall' | 'push' | 'climb' | 'cheer'
+  | {near?: Target; far?: Target};
 
 export type SideProps = {
   look: Look;
@@ -21,7 +25,7 @@ export type SideProps = {
   phase?: number; // số chu kỳ bước (liên tục)
   speed?: number; // 0 đứng .. 1 đi
   slope?: number; // độ dốc mặt đất dy/dx (âm = đi lên)
-  legs?: 'walk' | 'sit' | 'carried';
+  legs?: SideLegs;
   seatH?: number;
   arms?: SideArms;
   expr?: Expr;
@@ -29,6 +33,8 @@ export type SideProps = {
   blinkPh?: number;
   lean?: number;
   look2?: number; // nghiêng đầu: + nhìn lên
+  squash?: number;
+  pitch?: number;
   prop?: (h: {near: P; far: P}) => React.ReactNode;
 };
 
@@ -58,7 +64,7 @@ const ik = (a: P, b: P, l1: number, l2: number, bend: number): P => {
 
 const smooth = (u: number) => u * u * (3 - 2 * u);
 
-export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, slope = 0, legs = 'walk', seatH = 120, arms = 'swing', expr = 'neutral', talk = 0, blinkPh = 0, lean = 0, look2 = 0, prop}) => {
+export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, slope = 0, legs = 'walk', seatH = 120, arms = 'swing', expr = 'neutral', talk = 0, blinkPh = 0, lean = 0, look2 = 0, squash, pitch, prop}) => {
   const W = look.w ?? 1;
   const H = look.h ?? 1;
   const belly = look.belly ?? 0;
@@ -71,10 +77,17 @@ export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, 
   const S0 = SIDE_STRIDE * Math.min(1.15, H) * speed;
   const ground = (x: number) => x * slope;
 
-  // ---- chân ----
-  const feet: {p: P; lift: number}[] = [];
+  const runPhase = phase !== 0 ? phase : t * 2.1;
+  const runSpd = speed > 0.05 ? Math.min(1.3, speed) : 1;
+
+  // ---- chân (2-segment biomechanical IK) ----
+  const feet: {p: P; lift: number; rot: number}[] = [];
   let hipY = -178 * H;
   let hipX = 0;
+  let autoLean = 0;
+  let autoPitch = 0;
+  let autoSquash = 1;
+
   if (legs === 'walk') {
     for (const i of [0, 1]) {
       const q = (((phase + i * 0.5) % 1) + 1) % 1;
@@ -90,35 +103,135 @@ export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, 
       }
       x += (i ? -1 : 1) * 14 * (1 - Math.min(1, speed * 2));
       y = ground(x) - lift;
-      feet.push({p: [x, y], lift});
+      feet.push({p: [x, y], lift, rot: lift > 1 ? -10 : 0});
     }
     // nhún: thấp nhất lúc hai chân chạm đất
     hipY += 7 * speed * Math.cos(4 * Math.PI * phase) + ground(0) * 0.5;
+    autoLean = 3 * speed;
+  } else if (legs === 'run') {
+    const SRun = SIDE_STRIDE * 1.45 * Math.min(1.15, H) * runSpd;
+    const runStance = 0.42;
+    for (const i of [0, 1]) {
+      const q = (((runPhase + i * 0.5) % 1) + 1) % 1;
+      let x: number, y: number, lift = 0, rot = 0;
+      if (q < runStance) {
+        x = SRun * (0.5 - q / runStance);
+        y = ground(x);
+        rot = (q / runStance) * 16;
+      } else {
+        const r = (q - runStance) / (1 - runStance);
+        x = -SRun / 2 + SRun * smooth(r);
+        lift = Math.sin(Math.PI * r) * (54 + 28 * Math.abs(slope)) * Math.min(1.1, runSpd);
+        y = ground(x) - lift;
+        rot = r < 0.45 ? 18 : -14;
+      }
+      feet.push({p: [x, y], lift, rot});
+    }
+    // stronger vertical flight bounce + forward sprint lean
+    hipY = -178 * H - 14 * runSpd + 16 * runSpd * Math.cos(4 * Math.PI * runPhase) + ground(0) * 0.5;
+    autoLean = 12;
   } else if (legs === 'sit') {
     hipY = -seatH;
     hipX = -10;
+  } else if (legs === 'ride') {
+    hipY = -112 * H + Math.sin(t * 6) * 4;
+    hipX = -8;
+    autoLean = 18;
+    autoSquash = 0.96;
+  } else if (legs === 'crouch') {
+    hipY = -118 * H;
+    hipX = -16;
+    autoLean = 14;
+    autoSquash = 0.92;
+  } else if (legs === 'jump') {
+    hipY = -178 * H - 55 + Math.sin(t * 8) * 5;
+    autoLean = 6;
+    autoSquash = 1.07;
+  } else if (legs === 'fall') {
+    hipY = -148 * H;
+    autoPitch = -65;
+    autoSquash = 0.94;
+  } else if (legs === 'push') {
+    hipY = -152 * H;
+    hipX = -10;
+    autoLean = 26;
+    autoSquash = 0.95;
+  } else if (legs === 'climb') {
+    hipY = -168 * H + Math.abs(Math.sin(t * 7)) * 8;
+    autoLean = 8;
   } else {
+    // 'carried'
     hipY = 0;
   }
+
   const lowered = hipY - -178 * H; // thân tụt xuống bao nhiêu so với đứng
   const shY = -178 * H - 196 * H + lowered;
   const hip: P = [hipX, hipY];
 
-  const legEls: React.ReactNode[] = [];
   const shoe = look.shoes ?? 'red';
   const pants = look.pants;
   const drawLeg = (i: number, shadeO: number) => {
     let knee: P, ankle: P, toeRot = 0;
-    if (legs === 'walk') {
+    if (legs === 'walk' || legs === 'run') {
       const f = feet[i];
       ankle = [f.p[0], f.p[1] - 14];
       knee = ik(hip, ankle, thigh, shin, +1);
-      toeRot = f.lift > 1 ? -10 : 0;
+      toeRot = f.rot;
     } else if (legs === 'sit') {
       // bàn chân đặt trước; đầu gối tự gập theo độ cao hông (ngồi xuống mượt khi seatH giảm dần)
       ankle = [hip[0] + thigh * 0.95 - i * 12, -14];
       knee = ik(hip, ankle, thigh, shin, +1);
+    } else if (legs === 'ride') {
+      // thigh forward-down gripping mount, knee bent ~105°, ankle tucked beneath hip
+      ankle = [hip[0] + (i === 0 ? 10 : -4) * H, hip[1] + 98 * H];
+      knee = ik(hip, ankle, thigh, shin, +1);
+      toeRot = 18;
+    } else if (legs === 'crouch') {
+      // feet braced flat on ground, deep athletic knee bend
+      ankle = [hip[0] + (i === 0 ? 34 : -10) * H, -14];
+      knee = ik(hip, ankle, thigh, shin, +1);
+      toeRot = 0;
+    } else if (legs === 'jump') {
+      if (i === 0) {
+        // front knee tucked high
+        ankle = [hip[0] + 24 * H, hip[1] + 94 * H];
+        toeRot = 24;
+      } else {
+        // back leg trailing bent
+        ankle = [hip[0] - 66 * H, hip[1] + 116 * H];
+        toeRot = 32;
+      }
+      knee = ik(hip, ankle, thigh, shin, +1);
+    } else if (legs === 'fall') {
+      // legs kicked up asynchronously during backward tumble
+      const kick = Math.sin(t * 18 + i * 2.1) * 18;
+      if (i === 0) {
+        ankle = [hip[0] + 86 * H + kick, hip[1] + 72 * H - kick * 0.6];
+        toeRot = -22 + kick * 0.5;
+      } else {
+        ankle = [hip[0] + 54 * H - kick, hip[1] + 104 * H + kick * 0.5];
+        toeRot = -12 - kick * 0.5;
+      }
+      knee = ik(hip, ankle, thigh, shin, +1);
+    } else if (legs === 'push') {
+      if (i === 0) {
+        // front foot planted forward with bent knee
+        ankle = [hip[0] + 46 * H, -14];
+        toeRot = 0;
+      } else {
+        // back leg braced far behind (-thigh * 0.95)
+        ankle = [hip[0] - thigh * 0.95, -14];
+        toeRot = 18;
+      }
+      knee = ik(hip, ankle, thigh, shin, +1);
+    } else if (legs === 'climb') {
+      const cyc = Math.sin(t * 7 + i * Math.PI);
+      const lift = (cyc * 0.5 + 0.5) * 78 * H;
+      ankle = [hip[0] + 26 * H + cyc * 14, -16 - lift];
+      knee = ik(hip, ankle, thigh, shin, +1);
+      toeRot = cyc > 0 ? -12 : 10;
     } else {
+      // 'carried'
       knee = [hip[0] + thigh * 0.85, hip[1] + 30];
       ankle = [knee[0] - 10, knee[1] + shin * 0.9];
     }
@@ -126,35 +239,73 @@ export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, 
     return (
       <g key={k}>
         {limb([hip, knee, ankle], legW, pants, k + 'l')}
-        <g transform={`translate(${ankle[0]} ${ankle[1]}) rotate(${toeRot})`}>
+        <g transform={`translate(${ankle[0].toFixed(1)} ${ankle[1].toFixed(1)}) rotate(${toeRot.toFixed(1)})`}>
           <S d={Rr(-18, -6, 62, 26, 12)} f={shoe} />
         </g>
-        {shadeO > 0 && <path d={`M${hip[0]} ${hip[1]}L${knee[0]} ${knee[1]}L${ankle[0]} ${ankle[1]}`} stroke={PAL.ink} strokeWidth={legW} strokeLinecap="round" strokeLinejoin="round" fill="none" opacity={shadeO} />}
+        {shadeO > 0 && <path d={`M${hip[0].toFixed(1)} ${hip[1].toFixed(1)}L${knee[0].toFixed(1)} ${knee[1].toFixed(1)}L${ankle[0].toFixed(1)} ${ankle[1].toFixed(1)}`} stroke={PAL.ink} strokeWidth={legW} strokeLinecap="round" strokeLinejoin="round" fill="none" opacity={shadeO} />}
       </g>
     );
   };
 
   // ---- tay ----
-  const shoulder: P = [4 * W, shY + 26];
+  const shoulder: P = [hipX + 4 * W, shY + 26];
+  const resolvedArms =
+    arms === 'swing' && (legs === 'run' || legs === 'ride' || legs === 'crouch' || legs === 'jump' || legs === 'fall' || legs === 'push' || legs === 'climb')
+      ? legs
+      : arms;
   const armPts = (near: boolean): P[] => {
     let tgt: Target | undefined;
-    if (typeof arms === 'object') tgt = near ? arms.near : arms.far;
+    if (typeof resolvedArms === 'object') tgt = near ? resolvedArms.near : resolvedArms.far;
     if (tgt) {
       const el = ik(shoulder, [tgt.x, tgt.y], ua, fa, -1);
       return [shoulder, el, [tgt.x, tgt.y]];
     }
     let a = 6, e = 10; // độ: + = về phía trước
-    if (arms === 'swing') {
+    if (resolvedArms === 'swing') {
       const sw = 26 * speed * Math.cos(2 * Math.PI * phase) * (near ? -1 : 1);
       a = 4 + sw;
       e = 14 + Math.max(0, sw) * 0.9;
-    } else if (arms === 'hold') {
+    } else if (resolvedArms === 'run') {
+      // pumping bent elbows (65°–95° flexion)
+      const sw = 48 * Math.cos(2 * Math.PI * runPhase) * (near ? -1 : 1);
+      a = 6 + sw;
+      e = 75 + Math.max(0, sw) * 0.42;
+    } else if (resolvedArms === 'ride') {
+      // hands gripping forward-down on reins/shell
+      a = near ? 38 : 48;
+      e = near ? 56 : 48;
+    } else if (resolvedArms === 'crouch') {
+      a = near ? 26 : 36;
+      e = near ? 68 : 60;
+    } else if (resolvedArms === 'jump') {
+      // arms swept up/forward
+      a = near ? 128 : 142;
+      e = near ? 26 : 18;
+    } else if (resolvedArms === 'fall') {
+      // arms flailing up/back
+      const fl = Math.sin(t * 20 + (near ? 0 : 2.3)) * 22;
+      a = (near ? 132 : 152) + fl;
+      e = (near ? 24 : 18) - fl * 0.4;
+    } else if (resolvedArms === 'push') {
+      // both arms extended forward pushing
+      a = near ? 82 : 90;
+      e = near ? 14 : 10;
+    } else if (resolvedArms === 'climb') {
+      // alternating overhead reaching arms
+      const cyc = Math.sin(t * 7 + (near ? 0 : Math.PI));
+      a = 112 + cyc * 46;
+      e = 38 - cyc * 18;
+    } else if (resolvedArms === 'cheer') {
+      const wave = Math.sin(t * 10) * 10;
+      a = (near ? 148 : 138) + (near ? wave : -wave);
+      e = near ? 24 : 30;
+    } else if (resolvedArms === 'hold') {
       a = 20; e = 80;
-    } else if (arms === 'phone') {
+    } else if (resolvedArms === 'phone') {
       if (near) { a = 30; e = 150; } else { a = 4; e = 8; }
-    } else if (arms === 'cane') {
+    } else if (resolvedArms === 'cane') {
       if (near) { a = 28; e = 20; } else { a = 4; e = 8; }
-    } else if (arms === 'carry') {
+    } else if (resolvedArms === 'carry') {
       a = -30; e = 70; // vòng ra sau đỡ người cõng
     }
     const t1 = rad(a), t2 = rad(a + e);
@@ -171,18 +322,18 @@ export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, 
       {limb(p, armW, fullSleeve ? sleeveC : skin, k + 'a')}
       {!fullSleeve && limb([p[0], [p[0][0] + (p[1][0] - p[0][0]) * 0.5, p[0][1] + (p[1][1] - p[0][1]) * 0.5]], armW + 6, sleeveC, k + 's')}
       <S d={E(p[2][0], p[2][1], 16, 16)} f={skin} />
-      {dim && <path d={`M${p[0][0]} ${p[0][1]}L${p[1][0]} ${p[1][1]}L${p[2][0]} ${p[2][1]}`} stroke={PAL.ink} strokeWidth={armW} strokeLinecap="round" strokeLinejoin="round" fill="none" opacity={0.22} />}
+      {dim && <path d={`M${p[0][0].toFixed(1)} ${p[0][1].toFixed(1)}L${p[1][0].toFixed(1)} ${p[1][1].toFixed(1)}L${p[2][0].toFixed(1)} ${p[2][1].toFixed(1)}`} stroke={PAL.ink} strokeWidth={armW} strokeLinecap="round" strokeLinejoin="round" fill="none" opacity={0.22} />}
     </g>
   );
 
   // ---- thân ----
   const sY = shY;
   const bY = hipY;
-  const fr = 54 * W + belly * 34; // bụng phía trước
-  const bk = -52 * W;
+  const fr = hipX + 54 * W + belly * 34; // bụng phía trước
+  const bk = hipX - 52 * W;
   const long = look.top === 'robe' || look.top === 'aothe';
-  const hem = long ? -60 : bY + 26;
-  const torso = `M${bk + 4} ${sY - 10}C${bk - 6} ${sY + 40} ${bk - 4} ${(sY + bY) / 2} ${bk + 2} ${hem}L${fr - 8} ${hem}C${fr + belly * 16} ${hem - 40} ${fr + belly * 20} ${(sY + bY) / 2} ${fr - 6} ${sY + 60}C${fr - 4} ${sY + 10} ${30 * W} ${sY - 16} ${8} ${sY - 18}C${-10} ${sY - 18} ${bk + 10} ${sY - 18} ${bk + 4} ${sY - 10}Z`;
+  const hem = long ? bY + 118 * H : bY + 26;
+  const torso = `M${bk + 4} ${sY - 10}C${bk - 6} ${sY + 40} ${bk - 4} ${(sY + bY) / 2} ${bk + 2} ${hem}L${fr - 8} ${hem}C${fr + belly * 16} ${hem - 40} ${fr + belly * 20} ${(sY + bY) / 2} ${fr - 6} ${sY + 60}C${fr - 4} ${sY + 10} ${hipX + 30 * W} ${sY - 16} ${hipX + 8} ${sY - 18}C${hipX - 10} ${sY - 18} ${bk + 10} ${sY - 18} ${bk + 4} ${sY - 10}Z`;
   const pat: React.ReactNode[] = [];
   if (look.pattern === 'dots' || look.pattern === 'flowers') {
     for (let r = 0; r < 9; r++) for (let c = 0; c < 4; c++) pat.push(<circle key={r + '-' + c} cx={bk + 12 + c * 26 + (r % 2) * 12} cy={sY + 4 + r * 26} r={5} fill={col(look.patC ?? 'yellow')} />);
@@ -191,29 +342,39 @@ export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, 
   }
   const det: React.ReactNode[] = [];
   if (look.top === 'shirt' || look.top === 'polo' || look.top === 'uniform') {
-    det.push(<S key="col" d={`M8 ${sY - 18}L${30 * W} ${sY + 4}L${18} ${sY + 14}Z`} f={look.top === 'polo' ? look.topC2 ?? 'trim' : look.topC} />);
+    det.push(<S key="col" d={`M${hipX + 8} ${sY - 18}L${hipX + 30 * W} ${sY + 4}L${hipX + 18} ${sY + 14}Z`} f={look.top === 'polo' ? look.topC2 ?? 'trim' : look.topC} />);
     for (let i = 0; i < (look.top === 'polo' ? 2 : 5); i++) det.push(<circle key={'b' + i} cx={fr - 14 + (i > 2 ? belly * 10 : 0)} cy={sY + 40 + i * 34} r={4} fill={PAL.ink} />);
-    if (look.top === 'uniform') det.push(<S key="pk" d={Rr(4, sY + 50, 34, 34, 6)} f={look.topC} />);
+    if (look.top === 'uniform') det.push(<S key="pk" d={Rr(hipX + 4, sY + 50, 34, 34, 6)} f={look.topC} />);
   } else if (look.top === 'suit') {
     det.push(<S key="tie" d={`M${fr - 22} ${sY - 6}l12 0l6 110l-14 18Z`} f={look.topC2 ?? 'red'} />);
-    det.push(<S key="lap" d={`M8 ${sY - 18}L${fr - 8} ${sY + 120}L${fr - 30} ${sY + 20}Z`} f={look.topC} />);
+    det.push(<S key="lap" d={`M${hipX + 8} ${sY - 18}L${fr - 8} ${sY + 120}L${fr - 30} ${sY + 20}Z`} f={look.topC} />);
   }
   if (look.vest) det.push(<S key="vs" d={`M${bk + 2} ${sY + 4}L${fr - 8} ${sY + 4}L${fr - 4} ${bY + 20}L${bk} ${bY + 20}Z`} f="orange" />, <rect key="vs2" x={bk} y={bY - 60} width={fr - bk} height={14} fill={PAL.trim} stroke={PAL.ink} strokeWidth={3} />);
-  if (look.chain) det.push(<path key="ch" d={`M6 ${sY - 14}Q${fr} ${sY + 40} ${fr - 6} ${sY - 2}`} fill="none" stroke={PAL.gold} strokeWidth={7} strokeDasharray="2 9" strokeLinecap="round" />);
+  if (look.chain) det.push(<path key="ch" d={`M${hipX + 6} ${sY - 14}Q${fr} ${sY + 40} ${fr - 6} ${sY - 2}`} fill="none" stroke={PAL.gold} strokeWidth={7} strokeDasharray="2 9" strokeLinecap="round" />);
 
   // ---- đầu ----
   const hy = sY - 8 - HR * 0.9;
-  const hx = 12;
+  const hx = hipX + 12;
   const head = <HeadSide look={look} x={hx} y={hy} r={HR} expr={expr} talk={talk} t={t} blinkPh={blinkPh} tilt={look2} />;
 
   const legBack = drawLeg(1, 0.18);
   const legFront = drawLeg(0, 0);
   const hands = {near: nearA[2], far: farA[2]};
+  const breath = Math.sin(t * 2.5 + blinkPh) * 0.008;
+  const sq = Math.max(0.5, (squash ?? autoSquash) + breath);
+  const sxSq = 1 / Math.sqrt(sq);
+  const totalRot = lean + autoLean + (pitch ?? autoPitch);
+
   return (
-    <g transform={`rotate(${lean + (legs === 'walk' ? 3 * speed : 0)} 0 ${hipY})`}>
+    <g transform={`rotate(${totalRot.toFixed(2)} ${hipX.toFixed(1)} ${hipY.toFixed(1)}) scale(${sxSq.toFixed(4)} ${sq.toFixed(4)})`}>
+      {legs === 'fall' && (
+        <g>
+          <L d={`M${bk - 26} ${sY + 40}q-20 30 6 54`} w={4} o={0.35} />
+          <L d={`M${hipX + 104} ${hipY + 34}q20 18 4 44`} w={4} o={0.35} />
+        </g>
+      )}
       {drawArm(farA, 'fa', true)}
-      {legs !== 'sit' && legBack}
-      {legs === 'sit' && legBack}
+      {legBack}
       <S d={torso} f={look.topC} />
       <clipPath id={`ts-${look.name}`}><path d={torso} /></clipPath>
       <g clipPath={`url(#ts-${look.name})`}>
@@ -221,7 +382,7 @@ export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, 
         <Sh d={`M${bk - 10} ${sY - 30}L${bk + 26} ${sY - 30}L${bk + 26} ${hem + 10}L${bk - 10} ${hem + 10}Z`} o={0.55} />
       </g>
       {det}
-      <S d={R(-4, sY - 40, 34, 30)} f="skinShade" />
+      <S d={R(hipX - 4, sY - 40, 34, 30)} f="skinShade" />
       {legFront}
       {head}
       {prop?.(hands)}

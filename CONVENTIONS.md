@@ -1,4 +1,4 @@
-# Conventions (`v4.1.0`)
+# Conventions (`v4.2.0`)
 
 Enforced by `tools/validate_skills.py`.
 
@@ -34,9 +34,10 @@ pin `standards/` by hash.
 | SC-01..27, SC-29..31 | script, words budget, voice text rules, 5-Knot spine, Long-Form 5-Chapter/3+ Plants/Anti-Padding (`SC-27`, `SC-29..31`) | `scripts/script_lint.py` |
 | CH-01..10 | characters (format-aware cast richness `CH-09`, no hand-drawn characters outside `<Person>` `CH-10`) | `scripts/lint.mjs design` |
 | TK-01..03 | tokens (no raw colours, one font) | `lint.mjs design` |
-| SE-01..15 | sets: density, text, halftone, glow, bounds, life, plate emptiness, plate sign clipping, Long-Form ≥15 sets & ≥4 angles (`SE-15`) | `lint.mjs design` |
-| PR-01..05 | props: human-scale proportions & origin, internal text collision, no disembodied `*Head`, grip distance, giant partial-body continuity (`PR-05`) | `lint.mjs design` |
-| SH-01..17 | shot table, Long-Form set-fatigue streak/share (`SH-16`) & cinematic view/prop diversity (`SH-17`) | `lint.mjs shots` |
+| SE-01..15 | sets: density, text, halftone, glow, bounds, life, plate emptiness, plate sign clipping, Long-Form ≥15 sets, ≥4 angles & drawn sub-scenes (`SE-15`) | `lint.mjs design` |
+| PR-01..06 | props & Hero Subjects: human-scale proportions & origin, internal text collision, no disembodied `*Head`, grip distance, giant partial-body continuity (`PR-05`), multi-pose Hero Subjects (`PR-06`) | `lint.mjs design` |
+| SH-01..18 | shot table, Long-Form set-fatigue streak/share (`SH-16`), cinematic view/prop diversity (`SH-17`), multi-pose Hero Creature enforcement (`SH-18`) | `lint.mjs shots` |
+| LA-01..04 | layout & scale CI: set `actorScale`/`shotScale`/`location` & `relToActor` ratios (`LA-01`), 3×3 spatial grid & union occupancy clutter budget (`LA-02`), ban fake close-up camera zoom on establishing/wide sets (`LA-03`), z-aware occlusion & awkward hero creature frame-edge cut-off (`LA-04`) | `lint.mjs design` & `shots` |
 | AN-01..02 | anchors | `lint.mjs shots` |
 | OV-01..04 | overlays | `lint.mjs shots` |
 | CA-01..05 | camera | `lint.mjs shots` |

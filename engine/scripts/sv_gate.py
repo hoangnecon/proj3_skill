@@ -65,7 +65,7 @@ INPUTS = {
     "G1": ["brief.md"],
     "G2": ["script.json", "beats.md", "standards/pacing.json", "standards/voice_standard.json"],
     "G3": ["script.json", "audio/voice.wav", "src/data/words.json", "standards/voice_standard.json", "standards/pacing.json"],
-    "G4": ["src/episode/cast.ts", "src/episode/sets.tsx", "src/episode/geo.ts", "src/props.tsx", "src/sets"],
+    "G4": ["src/episode/cast.ts", "src/episode/sets.tsx", "src/episode/geo.ts", "src/props.tsx", "src/sets", "src/episode/subjects.tsx", "src/subjects.ts"],
     "G5": ["src/episode/shotlist.ts", "src/episode/cast.ts", "src/episode/sets.tsx", "src/data/words.json", "standards/pacing.json"],
     "G6": ["audio.json", "audio/voice.wav", "qa/timing.json", "standards/mix_targets.json", "scripts/theme.py"],
     "G7": ["out/final.mp4"],
@@ -183,6 +183,12 @@ def checks(g):
             bad.append(f"design sheets out of date: {stale[:6]}{'...' if len(stale) > 6 else ''} — node scripts/design.mjs --changed")
         if not any("set_" in f and "_grid" in f for f in evidence("G4")):
             bad.append("no episode set plates rendered")
+        vs = jload("qa/design/visual_spec.json") or {}
+        subjects_spec = vs.get("subjects")
+        if isinstance(subjects_spec, dict) and subjects_spec:
+            for sid in sorted(subjects_spec.keys()):
+                if not (ROOT / f"qa/design/subject_{sid}.png").exists():
+                    bad.append(f"qa/design/subject_{sid}.png missing — node scripts/design.mjs")
         # CH-10 waivers (a character that cannot be a <Person>: animal, food-bodied citizen, printed photo) are on no
         # design sheet: the G4 review must name each and say it was compared with the cast sheet (>= 6 words)
         rv = (ROOT / "gates/G4.review.md").read_text() if (ROOT / "gates/G4.review.md").exists() else ""

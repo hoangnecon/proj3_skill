@@ -1,12 +1,13 @@
 // Render the design evidence for gate G4 into qa/design/:
-//   cast_episode_p<N>.png      every look in src/episode/cast.ts (front + side, role, description)
+//   cast_episode_p<N>.png      every look in src/episode/cast.ts (front + 3/4 + back, role, description)
 //   props_episode_p<N>.png     every custom episode WORLD_PROP next to 575 px adult + 435 px child ruler
-//   expr_<look>.png            per principal/support: 12 expressions, 6 poses, walk cycle, sitting
-//   set_<id>.png / _grid.png   every episode set (clean plate + world-coordinate grid)
+//   subject_<id>.png           every hero subject in src/episode/subjects.tsx (poses, ruler, mount pins, exprs)
+//   expr_<look>.png            per principal/support: 12 expressions, 6 poses, 6 3/4 physics poses, walk cycle, sitting
+//   set_<id>.png / _grid.png   every episode set (clean plate + world/thirds/depth/scale layout grid)
 //   every sheet also gets a light <name>_v.jpg to LOOK at (≤ 1600 px, JPEG); every set plate a set_<id>_zoom.jpg
 //   (3×3 full-resolution ninths); `--changed` re-renders only changed sheets; `--status` lists stale sheets (G4)
 //   --exemplar                 also render the exemplar cast + ex-* plates for side-by-side comparison
-// Usage: node scripts/design.mjs [--exemplar] [--only set:<id>|look:<key>]
+// Usage: node scripts/design.mjs [--exemplar] [--only set:<id>|look:<key>|subject:<id>|subjects|props]
 import {cachedBundle} from './bundle_cache.mjs';
 import {renderStill, selectComposition, openBrowser} from '@remotion/renderer';
 import crypto from 'node:crypto';
@@ -26,6 +27,7 @@ const CHANGED = args.includes('--changed');
 const P = await loadProject();
 const castKeys = Object.keys(P.CAST);
 const setIds = Object.keys(P.EPISODE_SETS);
+const subjectKeys = Object.keys(P.SUBJECTS ?? {});
 const BUILTIN_PROPS = new Set(['stool', 'cone', 'lamp', 'gladiolus', 'cat', 'chicken', 'xoi', 'lobster', 'wagyu', 'tofu']);
 const propKeys = Object.keys(P.WORLD_PROPS ?? {}).filter((k) => !BUILTIN_PROPS.has(k));
 fs.mkdirSync('qa/design', {recursive: true});
@@ -65,7 +67,11 @@ const shared = sha(readAll(walk('src').filter((f) => SRC_RE.test(f) && !/episode
   + (fs.existsSync('public') ? walk('public').filter((f) => /\.(png|jpe?g|webp|svg)$/.test(f)).sort().map((f) => f + fs.statSync(f).size + ':' + fs.statSync(f).mtimeMs).join('\n') : ''));
 // a set plate is drawn by its render() AND the helpers beside it: hash the whole set source, not String(render)
 const setSrc = sha(readAll([...(fs.existsSync('src/sets') ? walk('src/sets') : []), ...(fs.existsSync('src/episode') ? walk('src/episode') : []).filter((f) => /episode[\\/]sets/.test(f))].filter((f) => SRC_RE.test(f))));
-const jobKey = ([id, props]) => sha(shared + id + JSON.stringify(props) + (props.id ? setSrc + String(P.SETS[props.id]?.render) : ''));
+const jobKey = ([id, props]) => sha(
+  shared + id + JSON.stringify(props)
+  + (id === 'SetPlate' && props.id ? setSrc + String(P.SETS[props.id]?.render) : '')
+  + (id === 'SubjectSheet' && props.id ? String(P.SUBJECTS?.[props.id]?.render) : ''),
+);
 const CACHE = 'qa/design/cache.json';
 const cache = (() => { try { return JSON.parse(fs.readFileSync(CACHE, 'utf8')); } catch { return {}; } })();
 
@@ -86,6 +92,21 @@ if ((!only || only === 'props') && propKeys.length) {
   for (let p = 0; p < pPages; p++) {
     const pageSizes = Object.fromEntries(propKeys.slice(p * 6, (p + 1) * 6).map((k) => [k, sizes[k]]).filter(([, v]) => v));
     jobs.push(['PropSheet', {page: p, sizes: pageSizes}, `qa/design/props_episode_p${p + 1}.png`]);
+  }
+}
+const subjectPoseSizes = {};
+for (const id of subjectKeys) {
+  const def = P.SUBJECTS[id];
+  const sizes = {};
+  for (const pose of def?.poses ?? []) {
+    try {
+      const b = measurePropBox((_, t) => def.render(pose, {t, expr: def.exprs?.[0]}), P);
+      sizes[pose] = {w: Math.round(b.width), h: Math.round(b.height), minX: Math.round(b.minX), minY: Math.round(b.minY), maxX: Math.round(b.maxX), maxY: Math.round(b.maxY)};
+    } catch {}
+  }
+  subjectPoseSizes[id] = sizes;
+  if (!only || only === 'subject:' + id || only === 'subjects') {
+    jobs.push(['SubjectSheet', {id, sizes}, `qa/design/subject_${id}.png`]);
   }
 }
 for (const k of castKeys) {
@@ -128,7 +149,30 @@ if (args.includes('--status')) { // no browser: which sheets no longer match the
   }));
   const setsSpec = Object.fromEntries(setIds.map((id) => {
     const d = P.EPISODE_SETS[id];
-    return [id, {title: d.title ?? null, bed: d.bed ?? null, bounds: d.bounds ?? null, plateCam: d.plateCam ?? (is16x9 ? [960, 540, 1] : [540, 1150, 1])}];
+    return [id, {
+      title: d.title ?? null,
+      bed: d.bed ?? null,
+      bounds: d.bounds ?? null,
+      plateCam: d.plateCam ?? (is16x9 ? [960, 540, 1] : [540, 1150, 1]),
+      location: d.location ?? null,
+      shotScale: d.shotScale ?? null,
+      angle: d.angle ?? null,
+      actorScale: d.actorScale ?? null,
+      zones: d.zones ?? null,
+    }];
+  }));
+  const subjectsSpec = Object.fromEntries(subjectKeys.map((id) => {
+    const d = P.SUBJECTS[id];
+    const seatsCount = Object.values(d.seats ?? {}).reduce((n, arr) => n + (Array.isArray(arr) ? arr.length : 0), 0);
+    return [id, {
+      title: d.title ?? null,
+      kind: d.kind ?? null,
+      relToActor: d.relToActor ?? null,
+      poses: d.poses ?? [],
+      exprs: d.exprs ?? [],
+      seatsCount,
+      poseBoxes: subjectPoseSizes[id] ?? {},
+    }];
   }));
   const worldPropsSpec = {};
   for (const k of propKeys) {
@@ -145,7 +189,7 @@ if (args.includes('--status')) { // no browser: which sheets no longer match the
       handPropsSpec[k] = {w: Math.round(b.width), h: Math.round(b.height), minX: Math.round(b.minX), minY: Math.round(b.minY), maxX: Math.round(b.maxX), maxY: Math.round(b.maxY), gripDist: Math.round(b.gripDist)};
     } catch {}
   }
-  fs.writeFileSync('qa/design/visual_spec.json', JSON.stringify({cast: castSpec, sets: setsSpec, world_props: worldPropsSpec, hand_props: handPropsSpec}, null, 2));
+  fs.writeFileSync('qa/design/visual_spec.json', JSON.stringify({cast: castSpec, sets: setsSpec, subjects: subjectsSpec, world_props: worldPropsSpec, hand_props: handPropsSpec}, null, 2));
 }
 if (todo.length) { serveUrl = await cachedBundle('src/index.ts'); browser = await openBrowser('chrome', {chromiumOptions: {gl: 'angle'}}); }
 let k = 0;

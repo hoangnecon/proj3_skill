@@ -1,7 +1,7 @@
-# story-video-skills (`v4.1.0`)
+# story-video-skills (`v4.2.0`)
 
-A gated production suite for **Vietnamese 2D story videos**: vertical 1080×1920 at 30 fps, 2–3 minutes,
-narrated by the northern male voice Hải Đăng, drawn in a flat "riso ink" style, and animated in Remotion
+A gated production suite for **Vietnamese 2D story videos**: vertical 1080×1920 Shorts (2–3 min) and opt-in widescreen 1920×1080 Long-Form (8–12 min) at 30 fps,
+narrated by the northern male voice Hải Đăng, drawn in a flat "riso ink" style (with 4-view articulated rigs, multi-pose Hero Subjects, and Botanical Kit), and animated in Remotion
 with every shot anchored to a narration word.
 
 The suite packages the process that produced the reference episode *Thang máy ăn bí mật* (153 s, 26 segments,

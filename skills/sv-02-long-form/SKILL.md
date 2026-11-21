@@ -1,13 +1,13 @@
 ---
 name: sv-02-long-form
-description: Complete cinematic production standard (v4.1) for 10-minute (8–12 min, 2,200–3,600 words, 75–160 segments) 16:9 widescreen (1920×1080) Vietnamese animated story videos — opt-in script/brief flags, 5-chapter narrative depth with Adversarial Story Doctor gate (SC-29..31), minimum 15 sets/angle-plates and 10+ cast (SE-15, CH-09), 4-view cinematic rigs (front/side/back/3q + OTS fg plane + camera tilt), severed-limb and set-fatigue CI (PR-05, GE-19, SH-16, SH-17), true 16:9 QA tiles/crops, 10-check blind_sha review, and lean swarm orchestration. Use whenever creating, pitching, scripting, designing, blocking, rendering, or delivering a 10-minute 16:9 episode.
+description: Complete cinematic production standard (v4.2) for 10-minute (8–12 min, 2,200–3,600 words, 75–160 segments) 16:9 widescreen (1920×1080) Vietnamese animated story videos — opt-in script/brief flags, 5-chapter narrative depth with Adversarial Story Doctor gate (SC-29..31), minimum 15 drawn multi-angle/sub-scene sets and 10+ cast (SE-15, CH-09), 4-view articulated rigs (front/side/back/3q + OTS fg plane + Actor.mount), multi-pose Hero Subjects and Botanical Kit (PR-06, SH-18), mandatory scale, 3×3 clutter grid, anti-fake-zoom and creature-cutoff CI (LA-01..04, PR-05, GE-19, SH-16, SH-17), true 16:9 QA tiles/crops, 10-check blind_sha review, and lean swarm orchestration. Use whenever creating, pitching, scripting, designing, blocking, rendering, or delivering a 10-minute 16:9 episode.
 ---
 
-# sv-02 · Long-Form 16:9 Cinematic Production Standard (`v4.1.0`)
+# sv-02 · Long-Form 16:9 Cinematic Production Standard (`v4.2.0`)
 
 This skill extends the core `sv-00`–`sv-42` suite to **true cinematic 10-minute (`8–12 min`) 16:9 widescreen (`1920×1080`)** animated story videos for the `Nhím Là Lốp` audience.
 
-**Hard lesson from `v4.0.0` (`docs/rsi-forensics-v4.0-2026-11-22.md`):** A 10-minute 16:9 movie is **NEVER** a 2.5-minute Short stretched 4× across 6 flat walls and 4 characters. `v4.1.0` enforces genuine long-form story density, **≥ 15 distinct sets / camera-angle plates**, **≥ 10 cast looks**, **4-view cinematic framing (`front`, `side`, `back`, `3q` + OTS foreground plane)**, **zero severed mid-air giant limbs**, and a **10-check true-16:9 Blind Review**.
+**Hard lesson from `v4.0.0` (`docs/rsi-forensics-v4.0-2026-11-22.md`) & `v4.1.0`:** A 10-minute 16:9 movie is **NEVER** a 2.5-minute Short stretched 4× across flat walls, fake zoomed establishing plates, or static copy-pasted creature stickers. `v4.2.0` enforces genuine long-form story density, **≥ 15 distinct sets / drawn sub-scenes**, **≥ 10 cast looks**, **4-view articulated physics rigs (`front`, `side`, `back`, `3q` + OTS `fg` + `Actor.mount`)**, **multi-pose Hero Subjects (`PR-06`, `SH-18`)**, **mandatory scale, 3×3 clutter grid, anti-fake-zoom, and z-aware occlusion CI (`LA-01..04`)**, **zero severed mid-air giant limbs**, and a **10-check true-16:9 Blind Review**.
 
 ## Read first
 1. `references/ideation-system-prompt.md` — reusable **4-Agent Pitch → Cross-Critique → Blind Reviewer** system prompt, `Nhím Là Lốp` Winning DNA, Mandatory Inductive Hook (`Hook Quy Nạp`), and **100-Point Blind Judge Scorecard** for **G1**.
@@ -22,7 +22,7 @@ A long-form 16:9 episode is an **explicit opt-in** (never the default 2–3 min 
 - **`script.json`**: Set both `"format": "16:9"` and `"length": "long_16x9"` at the top level.
 - **`brief.md`**: Include `## Length override` with `user_quote: "<exact user instruction>"` (`SC-27`; never edit `standards/pacing.json` per episode).
 
-| Metric | 16:9 Long-Form Standard (`v4.1.0`) | Machine Guard |
+| Metric | 16:9 Long-Form Standard (`v4.2.0`) | Machine Guard |
 |---|---|---|
 | Runtime | **8–12 min** (`480–720 s`, target ~`600 s`) | `SC-05`, `voice.py` (`episode_long_16x9`) |
 | Spoken words | **2,200–3,600 words** (~440–720 words/chapter) | `SC-05` |
@@ -30,8 +30,10 @@ A long-form 16:9 episode is an **explicit opt-in** (never the default 2–3 min 
 | Causal plot turns | **≥ 12 causal Spine links**, max 15-seg gap, 5 structured Chapters (`Goal/Obstacle/Turn/Cliffhanger`), **≥ 3 Plants → Payoffs** | `SC-29`, `SC-30`, `SC-31` |
 | G2 Story Audit | Independent Adversarial Story Doctor (`score ≥ 80`, `0` meandering stretches) | `sv_gate.py check G2` (`qa/story_doctor.json`) |
 | Cast | **≥ 10 distinct cast looks** (ERROR `< 8`, WARN `< 10`), rendered in Front + 3/4 + Back turnarounds | `CH-09`, `Sheets.tsx` |
-| Sets / Angle Plates | **≥ 15 distinct sets / angle plates** across **≥ 4 camera angle types** (`wide`, `low`, `high`, `ots`, `reverse`, `closeup`, `pov`) | `SE-15` (`SetDef.angle`) |
+| Sets / Drawn Sub-Scenes | **≥ 15 distinct sets / angle plates** across **≥ 4 angle types**, with `actorScale`, `shotScale`, `location` (`≥ 3` locations having `≥ 2` drawn `shotScale` types) | `SE-15`, `LA-01` |
+| Hero Subjects | Recurring creatures/bosses/vehicles registered in `SUBJECTS` with `relToActor` & **`≥ 4` distinct poses** (`qa/design/subject_<id>.png`); poses varied across shots | `PR-06`, `SH-18`, `sv_gate.py check G4` |
 | Shots & Pacing | **200–360 shots** (`PC-01..03`: 2.0–3.0 s mean, 20–28 shots/min) | `PC-01..03` |
+| Scale, 3×3 Grid & Anti-Zoom | Actor/Subject scale ratios enforced (`LA-01`); 3×3 grid `< 4` clusters/cell & `≤ 78%` occupancy (`LA-02`); no fake close-up zoom `> 1.35×` (`cam2 > 1.45×`) on establishing/wide sets (`LA-03`); no awkward `> 35%` creature edge cut-offs (`LA-04`) | `LA-01`, `LA-02`, `LA-03`, `LA-04`, `qa.mjs layout` |
 | Set-Fatigue Ceiling | Max **`≤ 10` consecutive shots** on the same set (WARN `> 7`), max **`≤ 18%`** single-set share (WARN `> 14%`) | `SH-16` |
 | Cinematic View Mix | **`front ≤ 70%`** (WARN `> 60%`), **`back + 3q ≥ 15%`** (WARN `< 25%`), avoid static prop copy-paste `> 15` shots | `SH-17` |
 | Limb Continuity | Giant partial-body props (`Shoe|Foot|Leg|Hand|Arm|Paw`) MUST bleed off frame top/side (`sy0 ≤ 24`); NEVER float severed mid-frame! | `PR-05`, `GE-19` |
@@ -72,10 +74,12 @@ Use all 4 engine views (`Actor.view`: `'front' | 'side' | 'back' | '3q'`) plus f
 - **`view: 'front'` (`Person`):** Direct reactions and comedic deadpan beats — capped at **`≤ 70%`** of actor placements (`SH-17`).
 - **G4 Turnaround Verification:** `CastSheet` automatically renders **Front + 3/4 + Back** for every character look; inspect every angle before passing G4.
 
-### 3.3 Giant Body-Part Continuity & Anti-Patchiness (`PR-05`, `GE-19`)
+### 3.3 Giant Body-Part Continuity, Layout Grid & Multi-Pose Subjects (`PR-05..06`, `GE-19`, `LA-01..04`, `SH-18`)
 - Any giant partial body part (`thayHaiShoe`, giant leg, giant hand, giant cat paw) MUST be designed tall/wide enough (`≥ 720 px`, `PR-05`) and positioned so its severed top/side edge **exits cleanly past the frame boundary (`sy0 ≤ 24` or `sx0 ≤ 24` / `sx1 ≥ 1896`)** — NEVER floating amputated mid-air inside the frame (`GE-19` hard ERROR + HOT)!
+- Every recurring hero creature/boss/vehicle MUST be registered in `src/episode/subjects.tsx` (`PR-06`, `SH-18`, `≥ 4` distinct poses, verified on `qa/design/subject_<id>.png`) and ridden via `Actor.mount` rather than floating manually over props.
+- Run `node scripts/qa.mjs layout` before any render to verify 3×3 grid balance (`LA-02`), actor/subject scale ratios (`LA-01`), zero fake close-up zooms on establishing sets (`LA-03`), and zero awkward hero creature frame-edge cut-offs (`LA-04`).
 - Keep caption band `y = 880..1000` clear of heads, hands, hero props, and signs (`OV-03`, `GE-04`, `GE-11`).
-- Keep `PR-01..05`, `CH-01..10`, `TK-01..03`, `SE-01..15`, `SH-01..17`, `MO-01..12`, `GE-01`, `GE-04`, `GE-07`, `GE-10`, `GE-11`, `GE-15..19` at 0 errors.
+- Keep `PR-01..06`, `CH-01..10`, `TK-01..03`, `SE-01..15`, `SH-01..18`, `LA-01..04`, `MO-01..12`, `GE-01`, `GE-04`, `GE-07`, `GE-10`, `GE-11`, `GE-15..19` at 0 errors.
 
 ---
 

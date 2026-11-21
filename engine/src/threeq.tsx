@@ -46,7 +46,7 @@ export const Person3Q: React.FC<ThreeQProps> = ({look, pose, expr = 'neutral', t
   const HR = 100 * (look.head ?? 1);
   const hy = shY - 8 - HR * 0.9;
   const legs = g ? 'none' : pose.legs ?? 'stand';
-  const sitDrop = legs === 'sit' ? 70 : 0;
+  const bodyDrop = legs === 'sit' ? 70 : legs === 'crouch' ? 62 * H : legs === 'ride' ? 68 * H : legs === 'push' ? 24 * H : 0;
 
   // Độ lệch phối cảnh 3/4 (hướng mặt +x): vai gần rộng (-x), vai xa thu hẹp (+x), trục ngực lệch +x
   const nearShX = -sw * 0.88;
@@ -55,9 +55,9 @@ export const Person3Q: React.FC<ThreeQProps> = ({look, pose, expr = 'neutral', t
   const nearHemX = -ww * 0.88;
   const farHemX = ww * 0.78 + belly * 24;
 
-  const bY = legY + sitDrop;
-  const sY = shY + sitDrop;
-  const hyy = hy + sitDrop;
+  const bY = legY + bodyDrop;
+  const sY = shY + bodyDrop;
+  const hyy = hy + bodyDrop;
 
   // --- tay (IK + góc khớp đồng bộ POSES) ---
   const armW = 30 * Math.min(1.25, W);
@@ -103,8 +103,41 @@ export const Person3Q: React.FC<ThreeQProps> = ({look, pose, expr = 'neutral', t
       if (sg * ex3 > sg * ex2) { ex2 = ex3; ey2 = ey3; }
       return [[x0, y0], [ex2, ey2], [tx, ty]];
     }
-    const t1 = rad(a[0]);
-    const t2 = rad(a[0] + a[1]);
+    // 3/4 forward-facing orientation for athletic riding, pushing, and running arm mechanics
+    if (legs === 'ride' && a[0] < 90) {
+      const x1 = x0 + (sg < 0 ? ua * 0.24 : ua * 0.56);
+      const y1 = y0 + (sg < 0 ? ua * 0.84 : ua * 0.68);
+      const x2 = x1 + (sg < 0 ? fa * 0.86 : fa * 0.72);
+      const y2 = y1 + (sg < 0 ? fa * 0.20 : fa * 0.28);
+      return [[x0, y0], [x1, y1], [x2, y2]];
+    }
+    if (legs === 'push' && a[0] < 95) {
+      const x1 = x0 + (sg < 0 ? ua * 0.72 : ua * 0.80);
+      const y1 = y0 + (sg < 0 ? ua * 0.44 : ua * 0.36);
+      const x2 = x1 + (sg < 0 ? fa * 0.90 : fa * 0.92);
+      const y2 = y1 - (sg < 0 ? fa * 0.14 : fa * 0.18);
+      return [[x0, y0], [x1, y1], [x2, y2]];
+    }
+    if (legs === 'run') {
+      const swRun = Math.sin(t * 14) * (sg < 0 ? -1 : 1);
+      const aRun = 14 + swRun * 44;
+      const eRun = 74 + Math.max(0, swRun) * 18;
+      const t1 = rad(aRun);
+      const t2 = rad(aRun + eRun);
+      const x1 = x0 + Math.sin(t1) * ua, y1 = y0 + Math.cos(t1) * ua;
+      const x2 = x1 + Math.sin(t2) * fa, y2 = y1 + Math.cos(t2) * fa;
+      return [[x0, y0], [x1, y1], [x2, y2]];
+    }
+    let a0 = a[0], a1 = a[1];
+    if (legs === 'climb') {
+      const swClimb = Math.sin(t * 7) * sg;
+      a0 += swClimb * 24;
+      a1 -= swClimb * 10;
+    } else if (legs === 'fall') {
+      a0 += Math.sin(t * 20 + (sg > 0 ? 1.8 : 0)) * 16;
+    }
+    const t1 = rad(a0);
+    const t2 = rad(a0 + a1);
     const x1 = x0 + sg * Math.sin(t1) * ua, y1 = y0 + Math.cos(t1) * ua;
     const x2 = x1 + sg * Math.sin(t2) * fa, y2 = y1 + Math.cos(t2) * fa;
     return [[x0, y0], [x1, y1], [x2, y2]];
@@ -121,7 +154,7 @@ export const Person3Q: React.FC<ThreeQProps> = ({look, pose, expr = 'neutral', t
     <g key={k}>
       {limb(p, armW, fullSleeve ? sleeveC : skin, k + 'a')}
       {!fullSleeve && limb([p[0], [p[0][0] + (p[1][0] - p[0][0]) * 0.5, p[0][1] + (p[1][1] - p[0][1]) * 0.5]], armW + 6, sleeveC, k + 's')}
-      {dim && <path d={`M${p[0][0]} ${p[0][1]}L${p[1][0]} ${p[1][1]}L${p[2][0]} ${p[2][1]}`} stroke={PAL.ink} strokeWidth={armW} strokeLinecap="round" strokeLinejoin="round" fill="none" opacity={0.18} />}
+      {dim && <path d={`M${p[0][0].toFixed(1)} ${p[0][1].toFixed(1)}L${p[1][0].toFixed(1)} ${p[1][1].toFixed(1)}L${p[2][0].toFixed(1)} ${p[2][1].toFixed(1)}`} stroke={PAL.ink} strokeWidth={armW} strokeLinecap="round" strokeLinejoin="round" fill="none" opacity={0.18} />}
     </g>
   );
   const drawHand = (p: [number, number], k: string, dim = false) => (
@@ -131,51 +164,117 @@ export const Person3Q: React.FC<ThreeQProps> = ({look, pose, expr = 'neutral', t
     </g>
   );
 
-  // --- chân & giày so le 3/4 (chân gần bước nhẹ trước, chân xa thu sâu hơn) ---
+  // --- chân & giày khớp gối 2 khúc [hip, knee, ankle] góc 3/4 ---
   const legX = 34 * W + belly * 10;
   const legW = 40 * Math.min(1.2, W);
   const shoe = look.shoes ?? 'red';
+  const farHipX = legX * 0.68;
+  const nearHipX = -legX * 0.82;
   let farLegNode: React.ReactNode = null;
   let nearLegNode: React.ReactNode = null;
+  let motionLines: React.ReactNode = null;
 
-  if (legs === 'stand' || legs === 'walk') {
-    const sw2 = legs === 'walk' ? Math.sin(t * 9) * 18 : 0;
-    const farHipX = legX * 0.68;
-    const nearHipX = -legX * 0.82;
-    const farFootX = farHipX + 10 - sw2;
-    const nearFootX = nearHipX + 10 + sw2;
-    const farLift = legs === 'walk' ? Math.max(0, -Math.sin(t * 9)) * 10 : 0;
-    const nearLift = legs === 'walk' ? Math.max(0, Math.sin(t * 9)) * 10 : 0;
-
-    farLegNode = (
-      <g key="leg-far">
-        {limb([[farHipX, legY + 10], [farFootX, -22 - farLift]], legW * 0.94, look.pants, 'lf')}
-        <path d={`M${farHipX} ${legY + 10}L${farFootX} ${-22 - farLift}`} stroke={PAL.ink} strokeWidth={legW * 0.94} strokeLinecap="round" fill="none" opacity={0.16} />
-        <S d={Rr(farFootX - 18, -28 - farLift, 58, 23, 11)} f={shoe} />
-        <path d={Rr(farFootX - 18, -28 - farLift, 58, 23, 11)} fill={PAL.ink} opacity={0.14} />
+  const draw3QLeg = (pts: [number, number][], isFar: boolean, toeRot = 0) => {
+    const w = isFar ? legW * 0.94 : legW;
+    const ankle = pts[pts.length - 1];
+    const d = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join('');
+    const swShoe = isFar ? 58 : 62;
+    const shShoe = isFar ? 23 : 24;
+    const sxOff = isFar ? -18 : -20;
+    const syOff = isFar ? -6 : -8;
+    return (
+      <g key={isFar ? 'leg-far' : 'leg-near'}>
+        {limb(pts, w, look.pants, isFar ? 'lf' : 'ln')}
+        {isFar && <path d={d} stroke={PAL.ink} strokeWidth={w} strokeLinecap="round" strokeLinejoin="round" fill="none" opacity={0.16} />}
+        <g transform={`translate(${ankle[0].toFixed(1)} ${ankle[1].toFixed(1)}) rotate(${toeRot.toFixed(1)})`}>
+          <S d={Rr(sxOff, syOff, swShoe, shShoe, 11)} f={shoe} />
+          {isFar && <path d={Rr(sxOff, syOff, swShoe, shShoe, 11)} fill={PAL.ink} opacity={0.14} />}
+        </g>
       </g>
     );
-    nearLegNode = (
-      <g key="leg-near">
-        {limb([[nearHipX, legY + 10], [nearFootX, -16 - nearLift]], legW, look.pants, 'ln')}
-        <S d={Rr(nearFootX - 20, -24 - nearLift, 62, 24, 11)} f={shoe} />
-      </g>
+  };
+
+  if (legs === 'stand') {
+    farLegNode = draw3QLeg([[farHipX, bY + 10], [farHipX + 6, bY * 0.5], [farHipX + 10, -22]], true, 0);
+    nearLegNode = draw3QLeg([[nearHipX, bY + 10], [nearHipX + 6, bY * 0.5], [nearHipX + 10, -16]], false, 0);
+  } else if (legs === 'walk') {
+    const ph = Math.sin(t * 9);
+    const farLift = Math.max(0, -ph) * 18;
+    const nearLift = Math.max(0, ph) * 18;
+    farLegNode = draw3QLeg(
+      [[farHipX, bY + 10], [farHipX + 16 - ph * 12, bY * 0.52 - farLift * 0.7], [farHipX + 10 - ph * 22, -22 - farLift]],
+      true,
+      farLift > 2 ? -10 : 0,
+    );
+    nearLegNode = draw3QLeg(
+      [[nearHipX, bY + 10], [nearHipX + 16 + ph * 12, bY * 0.52 - nearLift * 0.7], [nearHipX + 10 + ph * 22, -16 - nearLift]],
+      false,
+      nearLift > 2 ? -10 : 0,
+    );
+  } else if (legs === 'run') {
+    const ph = Math.sin(t * 14);
+    const farLift = Math.max(0, -ph) * 42;
+    const nearLift = Math.max(0, ph) * 42;
+    const farTrail = Math.max(0, ph) * 20;
+    const nearTrail = Math.max(0, -ph) * 20;
+    farLegNode = draw3QLeg(
+      [[farHipX, bY + 10], [farHipX + 26 - ph * 26, bY * 0.46 - farLift * 0.85], [farHipX + 4 - ph * 42 - farTrail * 0.6, -22 - farLift - farTrail * 0.5]],
+      true,
+      farLift > 4 ? -14 : 18,
+    );
+    nearLegNode = draw3QLeg(
+      [[nearHipX, bY + 10], [nearHipX + 26 + ph * 26, bY * 0.46 - nearLift * 0.85], [nearHipX + 4 + ph * 42 - nearTrail * 0.6, -16 - nearLift - nearTrail * 0.5]],
+      false,
+      nearLift > 4 ? -14 : 18,
     );
   } else if (legs === 'sit') {
-    const farHipX = legX * 0.68;
-    const nearHipX = -legX * 0.82;
-    farLegNode = (
-      <g key="leg-far">
-        {limb([[farHipX, bY], [farHipX + 36, bY + 18], [farHipX + 30, -22]], legW * 0.94, look.pants, 'lf')}
-        <path d={`M${farHipX} ${bY}L${farHipX + 36} ${bY + 18}L${farHipX + 30} -22`} stroke={PAL.ink} strokeWidth={legW * 0.94} strokeLinecap="round" strokeLinejoin="round" fill="none" opacity={0.16} />
-        <S d={Rr(farHipX + 12, -28, 58, 23, 11)} f={shoe} />
+    farLegNode = draw3QLeg([[farHipX, bY], [farHipX + 36, bY + 18], [farHipX + 30, -22]], true, 0);
+    nearLegNode = draw3QLeg([[nearHipX, bY], [nearHipX + 40, bY + 20], [nearHipX + 34, -16]], false, 0);
+  } else if (legs === 'crouch') {
+    farLegNode = draw3QLeg([[farHipX, bY + 4], [farHipX + 44, bY + 42 * H], [farHipX + 18, -22]], true, 0);
+    nearLegNode = draw3QLeg([[nearHipX, bY + 4], [nearHipX + 38, bY + 46 * H], [nearHipX - 4, -16]], false, 0);
+  } else if (legs === 'ride') {
+    // knees clearly bent forward-outward straddling mount, boots tucked cleanly beneath hip
+    farLegNode = draw3QLeg([[farHipX, bY + 6], [farHipX + 48, bY + 32 * H], [farHipX + 20, -24 * H]], true, 18);
+    nearLegNode = draw3QLeg([[nearHipX, bY + 6], [nearHipX + 44, bY + 38 * H], [nearHipX + 10, -18 * H]], false, 20);
+  } else if (legs === 'jump') {
+    farLegNode = draw3QLeg([[farHipX, bY + 6], [farHipX + 46, bY + 26 * H], [farHipX + 12, bY + 78 * H]], true, 24);
+    nearLegNode = draw3QLeg([[nearHipX, bY + 6], [nearHipX + 40, bY + 34 * H], [nearHipX - 12, bY + 86 * H]], false, 28);
+  } else if (legs === 'fall') {
+    const kick = Math.sin(t * 18) * 14;
+    farLegNode = draw3QLeg(
+      [[farHipX, bY + 6], [farHipX + 54 + kick * 0.5, bY + 20 * H - kick * 0.4], [farHipX + 82 + kick, bY + 58 * H - kick * 0.7]],
+      true,
+      -22 + kick * 0.6,
+    );
+    nearLegNode = draw3QLeg(
+      [[nearHipX, bY + 6], [nearHipX + 38 - kick * 0.5, bY + 38 * H + kick * 0.4], [nearHipX + 66 - kick, bY + 86 * H + kick * 0.6]],
+      false,
+      18 - kick * 0.6,
+    );
+    motionLines = (
+      <g>
+        <L d={`M${nearShX - 28} ${sY + 36}q-18 28 8 50`} w={4} o={0.35} />
+        <L d={`M${farHipX + 100} ${bY + 20}q18 20 2 44`} w={4} o={0.35} />
       </g>
     );
-    nearLegNode = (
-      <g key="leg-near">
-        {limb([[nearHipX, bY], [nearHipX + 40, bY + 20], [nearHipX + 34, -16]], legW, look.pants, 'ln')}
-        <S d={Rr(nearHipX + 14, -24, 62, 24, 11)} f={shoe} />
-      </g>
+  } else if (legs === 'push') {
+    // far (front) leg deeply bent forward, near (back) leg extended straight behind bracing
+    farLegNode = draw3QLeg([[farHipX, bY + 8], [farHipX + 46, bY + 48 * H], [farHipX + 32, -22]], true, 0);
+    nearLegNode = draw3QLeg([[nearHipX, bY + 8], [nearHipX - 38, bY + 72 * H], [nearHipX - 78, -16]], false, 16);
+  } else if (legs === 'climb') {
+    const cyc = Math.sin(t * 7);
+    const farLift = (cyc * 0.5 + 0.5) * 58 * H;
+    const nearLift = (-cyc * 0.5 + 0.5) * 58 * H;
+    farLegNode = draw3QLeg(
+      [[farHipX, bY + 8], [farHipX + 42, bY + 42 * H - farLift * 0.6], [farHipX + 18, -22 - farLift * 0.75]],
+      true,
+      cyc > 0 ? -10 : 8,
+    );
+    nearLegNode = draw3QLeg(
+      [[nearHipX, bY + 8], [nearHipX + 38, bY + 42 * H - nearLift * 0.6], [nearHipX + 12, -16 - nearLift * 0.75]],
+      false,
+      cyc < 0 ? -10 : 8,
     );
   }
 
@@ -252,8 +351,18 @@ export const Person3Q: React.FC<ThreeQProps> = ({look, pose, expr = 'neutral', t
     collar.push(<rect key="v4" x={nearHemX - 6} y={bY - 30} width={farHemX - nearHemX + 12} height={16} fill={PAL.trim} stroke={PAL.ink} strokeWidth={3} />);
   }
 
-  // --- ma: đuôi khói ---
-  const bob = g ? Math.sin(t * 2.2 + blinkPh) * 10 : (pose.hop ?? 0);
+  // --- ma: đuôi khói; người thường: nhịp bước + nhún nhảy + squash/stretch + thở nhẹ ---
+  const modeBob =
+    legs === 'walk' ? Math.abs(Math.sin(t * 9)) * 7 :
+    legs === 'run' ? Math.abs(Math.sin(t * 14)) * 16 :
+    legs === 'ride' ? Math.sin(t * 6) * 4 :
+    legs === 'jump' ? Math.sin(t * 8) * 5 :
+    legs === 'climb' ? Math.abs(Math.sin(t * 7)) * 6 : 0;
+  const bob = g ? Math.sin(t * 2.2 + blinkPh) * 10 : (pose.hop ?? 0) + modeBob;
+  const breath = Math.sin(t * 2.5 + blinkPh) * 0.008;
+  const sq = Math.max(0.5, (pose.squash ?? 1) + breath);
+  const sxSq = 1 / Math.sqrt(sq);
+  const totalRot = (pose.lean ?? 0) + (pose.pitch ?? 0);
   const tail = g ? (
     <g>
       <path d={`M${lHem} ${hemY - 4}C${lHem + 16} ${hemY + 60} ${-24} ${hemY + 40} ${-6 + Math.sin(t * 2) * 14} ${hemY + 130}C${38} ${hemY + 60} ${rHem - 8} ${hemY + 50} ${rHem} ${hemY - 4}Z`} fill={PAL.ghost} stroke={PAL.ink} strokeWidth={LINE} opacity={0.85} />
@@ -265,8 +374,9 @@ export const Person3Q: React.FC<ThreeQProps> = ({look, pose, expr = 'neutral', t
 
   return (
     <g transform={`scale(${face} 1)`}>
-      <g transform={`translate(0 ${-bob}) rotate(${pose.lean ?? 0} 0 ${legY})`} opacity={g ? 0.93 : 1}>
+      <g transform={`translate(0 ${(-bob).toFixed(1)}) rotate(${totalRot.toFixed(2)} 0 ${bY.toFixed(1)}) scale(${sxSq.toFixed(4)} ${sq.toFixed(4)})`} opacity={g ? 0.93 : 1}>
         {g && <ellipse cx={0} cy={hyy} rx={HR * 3.2} ry={HR * 4} fill="url(#glowG)" />}
+        {motionLines}
         {propBack?.(hands)}
         {!farArmInFront && drawArm(rp, 'ra', true)}
         {!farArmInFront && drawHand(hands.r, 'hr', true)}

@@ -5,8 +5,10 @@
 // line in shotlist.ts — the reviewer must accept each waiver in the gate review.
 import fs from 'node:fs';
 import path from 'node:path';
+import React from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
 import {loadProject} from './load.mjs';
-import {actorBoxes, inter, area, CAPTION, W, H, measurePropBox, measureHandPropBox, overlayBoxesAt, setTextsAt, projectBox, shotGeometry, actorStateAt, scalarKeyAt} from './geom.mjs';
+import {actorBoxes, inter, area, CAPTION, W, H, measurePropBox, measureSubjectBox, measureHandPropBox, overlayBoxesAt, setTextsAt, projectBox, shotGeometry, actorStateAt, scalarKeyAt} from './geom.mjs';
 
 const phase = process.argv[2] ?? 'all';
 const P = await loadProject();
@@ -18,6 +20,7 @@ const src = (f) => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '');
 const shotSrc = src('src/episode/shotlist.ts');
 const propsSrc = src('src/props.tsx');
 const setsSrc = src('src/episode/sets.tsx');
+const subjectsSrc = src('src/episode/subjects.tsx');
 const waived = (rule, name) => new RegExp(`lint-ok:\\s*${rule}\\b`).test(shotSrc.split('\n').find((l) => l.includes(`'${name}'`)) ?? '');
 const lineWaived = (fileSrc, rule, key) => {
   const ls = fileSrc.split('\n');
@@ -40,8 +43,9 @@ const PALKEYS = new Set(Object.keys(P.PAL));
 const ROLES = new Set(['principal', 'support', 'extra']);
 const BEDS = new Set(['room', 'hum', 'quiet', 'echo', 'outdoor', 'fan', 'motor', 'basement', 'paper', 'street', 'market', 'kitchen', 'rain', 'night']);
 const VALID_ANGLES = new Set(['wide', 'low', 'high', 'ots', 'reverse', 'closeup', 'pov']);
+const VALID_SHOT_SCALES = new Set(['establishing', 'medium', 'closeup', 'insert']);
 const EXPRS = new Set(['neutral', 'smug', 'angry', 'shock', 'sad', 'cry', 'joy', 'stern', 'sly', 'deadpan', 'eager', 'shh']);
-const SIDE_ARMS = new Set(['swing', 'down', 'hold', 'phone', 'cane', 'carry', 'ride', 'shh', 'raise', 'pocket']);
+const SIDE_ARMS = new Set(['swing', 'down', 'hold', 'phone', 'cane', 'carry', 'ride', 'shh', 'raise', 'pocket', 'run', 'crouch', 'jump', 'fall', 'push', 'climb', 'cheer']);
 const OVER = new Set(['tag', 'bubble', 'label', 'stamp', 'score', 'pin', 'title', 'card', 'arrow']);
 const TH = {shapes: 60, colours: 8, texts: 2, halftone: 2, glow: 1, insertShapes: 15}; // exemplar median = 60 shapes
 const scriptMeta = (() => {
@@ -135,8 +139,21 @@ if (phase !== 'shots') {
       }
     }
   }
-  // SE-15: set count & multi-angle cinematography diversity
+  // SE-15: set count & multi-angle cinematography diversity + LA-01 design scale/sub-scene contract
   if (isLong16x9) {
+    for (const id of sets) {
+      const d = P.EPISODE_SETS[id];
+      if (!d || d.insert || lineWaived(setsSrc, 'LA-01', id)) continue;
+      if (!(Array.isArray(d.actorScale) && d.actorScale.length === 2)) {
+        err('LA-01', `${id}: missing actorScale [minS, maxS] on long_16x9 set — declare valid actor scale on the main floor plane`);
+      }
+      if (!(typeof d.shotScale === 'string' && VALID_SHOT_SCALES.has(d.shotScale))) {
+        err('LA-01', `${id}: missing or invalid shotScale '${d.shotScale ?? ''}' (must be establishing|medium|closeup|insert)`);
+      }
+      if (!(typeof d.location === 'string' && d.location.trim().length > 0)) {
+        err('LA-01', `${id}: missing location group id (e.g. 'lab', 'yard') for drawn sub-scene grouping`);
+      }
+    }
     if (sets.length < 15) {
       err('SE-15', `long_16x9 episode has only ${sets.length} set(s) (minimum 15 distinct sets / angle plates required for a 10-min video)`);
     }
@@ -145,6 +162,28 @@ if (phase !== 'shots') {
       err('SE-15', `long_16x9 episode declares only ${angles.size} distinct set angle type(s) [${[...angles].join(', ')}] (minimum 3 of wide|low|high|ots|reverse|closeup|pov required; recommended ≥ 4)`);
     } else if (angles.size < 4) {
       warn('SE-15', `long_16x9 episode declares ${angles.size} distinct set angle type(s) [${[...angles].join(', ')}] (recommended ≥ 4 of wide|low|high|ots|reverse|closeup|pov)`);
+    }
+    if (sets.length >= 15) {
+      const byLoc = new Map();
+      const nonInsertWithScale = [];
+      for (const id of sets) {
+        const d = P.EPISODE_SETS[id];
+        if (!d || d.insert) continue;
+        if (typeof d.shotScale === 'string' && VALID_SHOT_SCALES.has(d.shotScale)) {
+          nonInsertWithScale.push(d);
+          if (typeof d.location === 'string' && d.location.trim()) {
+            const loc = d.location.trim();
+            if (!byLoc.has(loc)) byLoc.set(loc, new Set());
+            byLoc.get(loc).add(d.shotScale);
+          }
+        }
+      }
+      const multiScaleLocs = [...byLoc.values()].filter((s) => s.size >= 2).length;
+      if (nonInsertWithScale.length > 0 && nonInsertWithScale.every((d) => d.shotScale === 'establishing')) {
+        err('SE-15', `long_16x9 episode has only 'establishing' sets and 0 drawn 'medium'/'closeup' sub-scene plates — draw dedicated close-up/medium sub-scenes instead of fake camera zooms`);
+      } else if (multiScaleLocs < 3) {
+        warn('SE-15', `long_16x9 episode has only ${multiScaleLocs} location(s) with >= 2 drawn shotScale types (recommended >= 3 locations with establishing + medium/closeup sub-scene plates)`);
+      }
     }
   } else if (sets.length > 0 && sets.length < 4) {
     warn('SE-15', `short episode has only ${sets.length} set(s) (recommended 4–5 sets for visual variety)`);
@@ -211,6 +250,34 @@ if (phase !== 'shots') {
         err('PR-04', `${k}: hand grip origin (0,0) too far from prop or oversized (gripDist=${Math.round(hb.gripDist)} px, size=${Math.round(hb.width)}x${Math.round(hb.height)} px; max gripDist 120, max dim 380)`);
       }
     }
+    // PR-06: Multi-pose Hero Subject validation (SUBJECTS registry)
+    for (const [id, def] of Object.entries(P.SUBJECTS ?? {})) {
+      if (lineWaived(subjectsSrc, 'PR-06', id)) continue;
+      if (!def?.title) err('PR-06', `${id}: SUBJECT missing title`);
+      if (!(Array.isArray(def?.relToActor) && def.relToActor.length === 2)) {
+        err('PR-06', `${id}: SUBJECT missing relToActor [minR, maxR]`);
+      }
+      if (!(Array.isArray(def?.poses) && def.poses.length >= 4)) {
+        err('PR-06', `${id}: SUBJECT has only ${def?.poses?.length ?? 0} pose(s) (minimum 4 distinct poses required)`);
+      }
+      if (Array.isArray(def?.poses) && def.poses.length > 0) {
+        const distinctMarkups = new Set();
+        const distinctBounds = new Set();
+        for (const pose of def.poses) {
+          try {
+            const svg = renderToStaticMarkup(React.createElement('svg', null, def.render(pose, {t: 0.5})));
+            const mb = measureSubjectBox(id, pose, P, {t: 0.5});
+            if (svg && svg !== '<svg></svg>') distinctMarkups.add(svg);
+            distinctBounds.add(`${Math.round(mb.minX)}:${Math.round(mb.minY)}:${Math.round(mb.maxX)}:${Math.round(mb.maxY)}`);
+          } catch (e) {
+            err('PR-06', `${id} pose '${pose}': render threw ${e.message}`);
+          }
+        }
+        if (def.poses.length >= 4 && Math.max(distinctMarkups.size, distinctBounds.size) < 3) {
+          err('PR-06', `${id}: only ${distinctMarkups.size} of ${def.poses.length} poses produce distinct SVG markup (minimum 3 distinct poses required — no copy-paste poses)`);
+        }
+      }
+    }
   }
   // token discipline in episode code
   for (const f of ['src/episode/sets.tsx', 'src/episode/cast.ts', 'src/episode/geo.ts', 'src/episode/shotlist.ts']) {
@@ -232,7 +299,7 @@ if (phase !== 'shots') {
   {
     const walkT = (d) => fs.existsSync(d) ? fs.readdirSync(d, {withFileTypes: true}).flatMap((e) => e.isDirectory() ? walkT(path.join(d, e.name)) : [path.join(d, e.name)]) : [];
     // every episode .tsx (a new file is no way around it); the engine rig files and the exemplar are not episode code
-    const ENGINE = /^src[\\/](chars|kit|side|Film|Root|overlays)\.tsx$|^src[\\/](design|exemplar)[\\/]/;
+    const ENGINE = /^src[\\/](chars|kit|side|back|threeq|subjects|Film|Root|overlays)\.tsx$|^src[\\/](design|exemplar)[\\/]/;
     const files = walkT('src').filter((f) => /\.tsx$/.test(f) && !ENGINE.test(f));
     const DECL = /^(?:export\s+)?(?:const|let|function|type|interface|class)\s+([A-Za-z_$][\w$]*)/;
     const FACE = /\b\w*(eye|pupil|blink|iris|lash|brow|mouth|face|cheek|blush)\w*/i;
@@ -245,8 +312,8 @@ if (phase !== 'shots') {
         if (cur) units[cur] += l.replace(/\/\/.*$/, '') + '\n';
       });
     }
-    // drop comments and the <Person …> / <PersonSide …> elements themselves (their expr / look props are the rig, not a drawing)
-    for (const k in units) units[k] = units[k].replace(/\/\*[\s\S]*?\*\//g, '').replace(/<Person(Side)?\b[^>]*?\/>/gs, '<Person />');
+    // drop comments and the <Person …> / <PersonSide …> / <PersonBack …> / <Person3Q …> elements themselves (their expr / look props are the rig, not a drawing)
+    for (const k in units) units[k] = units[k].replace(/\/\*[\s\S]*?\*\//g, '').replace(/<Person(Side|Back|3Q)?\b[^>]*?\/>/gs, '<Person />');
     const direct = new Set(Object.keys(units).filter((k) => FACE.test(units[k])));
     report.rigs = [];
     for (const [k, code] of Object.entries(units)) {
@@ -313,6 +380,12 @@ if (phase !== 'design') {
       visitTT(a.enter, at + '.enter'); visitTT(a.exit, at + '.exit');
       if (a.ride && !(s.actors ?? []).some((c) => c.id === a.ride)) err('MO-07', `${at}: rides '${a.ride}' who is not in the shot`);
     }
+    for (const ex of s.extras ?? []) {
+      const et = `${tag} extra ${ex.k}`;
+      if (Array.isArray(ex.pose)) ex.pose.forEach(([, tt]) => visitTT(tt, `${et}.pose`));
+      if (Array.isArray(ex.expr)) ex.expr.forEach(([, tt]) => visitTT(tt, `${et}.expr`));
+      for (const w of ex.path ?? []) visitTT(w[2], `${et}.path`);
+    }
   });
   // anchors: resolvable + unambiguous
   for (const [spec, where] of anchors) {
@@ -349,12 +422,21 @@ if (phase !== 'design') {
         err('CA-05', `${tag}: camera [${cx}, ${cy}, ${k}] sees [${Math.round(x0)}, ${Math.round(y0)}, ${Math.round(x1)}, ${Math.round(y1)}] — outside the painted set bounds [${B.join(', ')}] (empty void on screen)`);
     }
     if (Math.max(k0, k1) / Math.min(k0, k1) > 2.2) warn('CA-03', `${tag}: zoom ratio ${(Math.max(k0, k1) / Math.min(k0, k1)).toFixed(1)}× inside one shot`);
+    // LA-03: ban fake close-up via camera zoom on establishing/wide sets
+    const setDef = P.SETS[r.set];
+    if ((setDef?.shotScale === 'establishing' || setDef?.angle === 'wide') && !setDef?.insert) {
+      if ((r.cam[2] > 1.35 || (r.cam2 && r.cam2[2] > 1.45)) && !waived('LA-03', r.name)) {
+        const maxK = Math.max(r.cam[2], r.cam2 ? r.cam2[2] : r.cam[2]);
+        err('LA-03', `${tag}: fake close-up via camera zoom (${maxK.toFixed(2)}×) on establishing/wide set '${r.set}' — draw a dedicated 'medium' or 'closeup' sub-scene plate instead`);
+      }
+    }
     // first appearance of a set: establish it
     if (!P.SETS[r.set]?.insert && r.set !== 'solid' && !rows.slice(0, i).some((q) => q.set === r.set) && Math.min(k0, k1) > 1.2 && !waived('CA-04', r.name))
       err('CA-04', `${tag}: first shot in '${r.set}' is not an establishing frame (zoom ${Math.min(k0, k1)} > 1.2)`);
     // something must change in every shot (actor motion, camera move, set state, talk, expression, overlay)
     const lives = r.cam2 || (s.keys && Object.keys(s.keys).length) || (s.over ?? []).length || s.of || s.punch ||
-      (s.actors ?? []).some((A) => A.path || A.reach || A.talk || A.hop || A.shake || A.pant || A.ride || ['p', 'e', 'legs', 'arms', 'view'].some((k) => Array.isArray(A[k])));
+      (s.actors ?? []).some((A) => A.path || A.reach || A.talk || A.hop || A.shake || A.pant || A.ride || ['p', 'e', 'legs', 'arms', 'view'].some((k) => Array.isArray(A[k]))) ||
+      (s.extras ?? []).some((E) => (E.path && E.path.length > 1) || Array.isArray(E.pose) || Array.isArray(E.expr));
     if (!lives && !waived('MO-08', r.name)) warn('MO-08', `${tag}: nothing moves or changes for ${dur.toFixed(1)} s — add a camera drift, an expression key or a gesture`);
     // overlays visible at once
     const ovs = (s.over ?? []).map((o, j) => ({a: r.over[j].t, b: o.until ? P.tAt(o.until) : r.t1}));
@@ -565,7 +647,46 @@ if (phase !== 'design') {
       }
     }
   }
-  // ---- screen geometry (GE-*): measured from the shot table, no render. Each hit makes the shot HOT:
+  // SH-18: Multi-pose Hero Creature enforcement
+  {
+    const HERO_CREATURE_RE = /(cat|dog|ant|bug|ladybug|bird|spider|rat|mouse|monster|robot|dragon|boss)/i;
+    const creatureShots = new Map();
+    const creaturePoses = new Map();
+    for (let i = 0; i < rows.length; i++) {
+      const s = shots[i];
+      for (const e of s?.extras ?? []) {
+        if (!e?.k || !HERO_CREATURE_RE.test(e.k)) continue;
+        if (!creatureShots.has(e.k)) {
+          creatureShots.set(e.k, new Set());
+          creaturePoses.set(e.k, new Set());
+        }
+        creatureShots.get(e.k).add(i);
+        const ps = creaturePoses.get(e.k);
+        if (Array.isArray(e.pose)) {
+          for (const [pv] of e.pose) ps.add(String(pv));
+        } else if (e.pose) {
+          ps.add(String(e.pose));
+        } else if (e.c) {
+          ps.add(String(e.c));
+        } else {
+          ps.add('default');
+        }
+      }
+    }
+    if (isLong16x9 || rows.length >= 6) {
+      const minShots = isLong16x9 ? 2 : 3;
+      for (const [k, shotSet] of creatureShots) {
+        if (shotSet.size < minShots) continue;
+        const posesUsed = creaturePoses.get(k);
+        const isRegistered = !!(P.SUBJECTS ?? {})[k];
+        const isWaived = [...shotSet].every((si) => waived('SH-18', rows[si].name)) || propWaived('SH-18', k) || lineWaived(subjectsSrc, 'SH-18', k);
+        if (!isWaived && (!isRegistered || (shotSet.size >= 3 && posesUsed.size <= 1))) {
+          err('SH-18', `hero creature '${k}' reused across ${shotSet.size} shots with ${posesUsed.size} pose/state(s)${isRegistered ? '' : ' and not registered in SUBJECTS'} — register in SUBJECTS with >= 4 poses and vary poses across shots`);
+        }
+      }
+    }
+  }
+  // ---- screen geometry (GE-*, LA-*): measured from the shot table, no render. Each hit makes the shot HOT:
   // its review must open the measurement crops (node scripts/qa.mjs crops <i>) — see sv-22 "review cards".
   const looks = {...(P.EX_LOOKS ?? {}), ...P.CAST};
   const hot = {};
@@ -578,11 +699,55 @@ if (phase !== 'design') {
     if (makeHot) markHot(r.i, rule);
   };
   const lastH = {};
+  const layoutReport = [];
   for (const r of rows) {
+    let worstGrid = null;
+    const shotScaleIssues = [];
+    const shotScaleSeen = new Set();
+    const shotCutoffIssues = [];
+    const shotCutoffSeen = new Set();
     for (const u of [0.15, 0.5, 0.85]) {
       const t = r.t0 + (r.t1 - r.t0) * u;
       const g = shotGeometry(r, t, P, rows);
       const B = g.actors;
+      if (g.gridLayout) {
+        if (!worstGrid
+          || g.gridLayout.maxCellCount > worstGrid.maxCellCount
+          || (g.gridLayout.maxCellCount === worstGrid.maxCellCount && g.gridLayout.occupancyFrac > worstGrid.occupancyFrac)) {
+          worstGrid = {
+            cells: g.gridLayout.cells,
+            maxCellCount: g.gridLayout.maxCellCount,
+            crowdedCells: g.gridLayout.crowdedCells,
+            overcrowdedCells: g.gridLayout.overcrowdedCells,
+            occupancyFrac: g.gridLayout.occupancyFrac,
+          };
+        }
+        if (g.gridLayout.overcrowdedCells.length > 0 || g.gridLayout.occupancyFrac > 0.78) {
+          if (!waived('LA-02', r.name) && !seen.has(`${r.i}|LA-02-ERR`)) {
+            seen.add(`${r.i}|LA-02-ERR`);
+            err('LA-02', `#${r.i} '${r.name}': 3×3 layout overcrowded (cells [${g.gridLayout.overcrowdedCells.join(',')}] >= 4 clusters, occupancy ${Math.round(g.gridLayout.occupancyFrac * 100)}%) at ${t.toFixed(2)} s — declutter or split into 2 shots`);
+            markHot(r.i, 'LA-02');
+          }
+        } else if (g.gridLayout.crowdedCells.length > 0 || g.gridLayout.occupancyFrac > 0.65) {
+          if (!waived('LA-02', r.name) && !seen.has(`${r.i}|LA-02-ERR`) && !seen.has(`${r.i}|LA-02-WARN`)) {
+            seen.add(`${r.i}|LA-02-WARN`);
+            warn('LA-02', `#${r.i} '${r.name}': 3×3 layout crowded (cells [${g.gridLayout.crowdedCells.join(',')}] >= 3 clusters, occupancy ${Math.round(g.gridLayout.occupancyFrac * 100)}%) at ${t.toFixed(2)} s`);
+          }
+        }
+      }
+      for (const si of g.scaleIssues ?? []) {
+        const sKey = `${si.kind}:${si.id ?? si.k}`;
+        if (!shotScaleSeen.has(sKey)) { shotScaleSeen.add(sKey); shotScaleIssues.push(si); }
+        if (!waived('LA-01', r.name) && !seen.has(`${r.i}|LA-01|${sKey}`)) {
+          seen.add(`${r.i}|LA-01|${sKey}`);
+          if (si.kind === 'actor_scale') {
+            err('LA-01', `#${r.i} '${r.name}': actor '${si.id}' scale s=${si.s} outside set '${r.set}' actorScale [${si.expected[0]}..${si.expected[1]}] at ${t.toFixed(2)} s`);
+          } else {
+            err('LA-01', `#${r.i} '${r.name}': subject '${si.k}' height ratio ${si.ratio}× vs actor outside relToActor [${si.expected[0]}..${si.expected[1]}] at ${t.toFixed(2)} s`);
+          }
+          markHot(r.i, 'LA-01');
+        }
+      }
       for (let a = 0; a < B.length; a++) for (let b = a + 1; b < B.length; b++) {
         const o = inter(B[a].body, B[b].body) / Math.max(1, Math.min(area(B[a].body), area(B[b].body)));
         if (o > 0.25 && !r.actors[a].ride && !r.actors[b].ride) { flag(r, 'GE-01', `${B[a].id} and ${B[b].id} bodies overlap ${(o * 100).toFixed(0)} % at ${t.toFixed(2)} s — check who is in front and that nothing reads as one blob`, B[a].id + B[b].id); break; }
@@ -611,12 +776,20 @@ if (phase !== 'design') {
           for (const x of B) {
             const {x: hx, y: hy, r: hr} = x.hc;
             const onScreen = hx + hr > 0 && hx - hr < W && hy + hr > 0 && hy - hr < H;
-            if (!onScreen || pr.y < x.worldY - 5) continue;
+            if (!onScreen || (x.mountedOn && x.mountedOn === pr.id) || pr.depthY < x.depthY - 5) continue;
             const frac = inter(pr.screenBox, x.head) / Math.max(1, area(x.head));
             if (frac > 0.35) {
-              flag(r, 'GE-17', `prop '${pr.k}' (y=${Math.round(pr.y)}) covers ${Math.round(frac * 100)}% of ${x.id}'s head (y=${Math.round(x.worldY)}) at ${t.toFixed(2)} s`, `${pr.k}:${x.id}`);
+              flag(r, 'GE-17', `prop '${pr.k}' (depthY=${Math.round(pr.depthY)}) covers ${Math.round(frac * 100)}% of ${x.id}'s head (depthY=${Math.round(x.depthY)}) at ${t.toFixed(2)} s`, `${pr.k}:${x.id}`);
             }
           }
+        }
+      }
+      for (const cc of g.creatureCutoffIssues ?? []) {
+        if (!shotCutoffSeen.has(cc.k)) { shotCutoffSeen.add(cc.k); shotCutoffIssues.push({k: cc.k, clippedFrac: +cc.clippedFrac.toFixed(3), screenBox: cc.screenBox}); }
+        if (!waived('LA-04', r.name) && !seen.has(`${r.i}|LA-04|${cc.k}`)) {
+          seen.add(`${r.i}|LA-04|${cc.k}`);
+          err('LA-04', `#${r.i} '${r.name}': hero creature '${cc.k}' is awkwardly cut off ${Math.round(cc.clippedFrac * 100)}% at frame edge [${Math.round(cc.screenBox.x0)}, ${Math.round(cc.screenBox.y0)}, ${Math.round(cc.screenBox.x1)}, ${Math.round(cc.screenBox.y1)}] at ${t.toFixed(2)} s — re-frame inside canvas, use a closeup pose, or mark fg: true`);
+          markHot(r.i, 'LA-04');
         }
       }
       for (const dl of g.detachedLimbIssues ?? []) {
@@ -663,12 +836,22 @@ if (phase !== 'design') {
         }
       }
     }
+    layoutReport.push({
+      i: r.i,
+      name: r.name,
+      set: r.set,
+      shotScale: P.SETS[r.set]?.shotScale ?? null,
+      gridLayout: worstGrid,
+      scaleIssues: shotScaleIssues,
+      creatureCutoffIssues: shotCutoffIssues,
+    });
     if (r.reaches.length) (hot[r.i] ??= []).push('reach');
     if (r.keys.length) (hot[r.i] ??= []).push('key');
   }
   fs.mkdirSync('qa', {recursive: true});
   fs.writeFileSync('qa/hot.json', JSON.stringify(Object.fromEntries(Object.entries(hot).map(([k, v]) => [k, [...new Set(v)]])), null, 1));
   fs.writeFileSync('qa/strips_needed.json', JSON.stringify(strips, null, 1));
+  fs.writeFileSync('qa/layout_report.json', JSON.stringify(layoutReport, null, 1));
 }
 
 Object.assign(report, {phase, at: new Date().toISOString(), errors, warns, sets: setReport, strips: strips.length});

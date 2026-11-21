@@ -2,17 +2,19 @@ import React, {useMemo} from 'react';
 import {AbsoluteFill, Audio, staticFile, useCurrentFrame} from 'remotion';
 import {Defs, FONT, L, PAL, S, E} from './kit';
 import {Person, POSES, Pose, poseMix, Expr, Look} from './chars';
-import {PersonSide, SIDE_CYCLE} from './side';
+import {PersonSide, SIDE_CYCLE, SideLegs, SideArms} from './side';
 import {PersonBack} from './back';
 import {Person3Q} from './threeq';
 import {SETS, SetLayers, Item, SetOpts} from './sets';
 import {OverView} from './overlays';
-import {Actor, DURATION, FPS, Keys, Shot, TT, WORDS, abs, resolveShots, tAt} from './engine';
+import {Actor, DURATION, ExtraDef, FPS, Keys, Shot, TT, WORDS, abs, resolveShots, tAt} from './engine';
 import {FRAME_W, FRAME_H, CAPTION_Y} from './format';
 import {SHOTS} from './episode/shotlist';
 import {clamp, easeIO, easeOut, lerp, smooth} from './math';
 import {HAND_PROPS, SIDE_PROPS, WORLD_PROPS} from './props';
 import {CAST} from './episode/cast';
+import {SUBJECTS} from './episode/subjects';
+import {resolveSeat, SubjectDef} from './subjects';
 import {EX_LOOKS} from './exemplar/looks';
 
 export const LOOKS: Record<string, Look> = {...EX_LOOKS, ...CAST};
@@ -41,14 +43,14 @@ const trap = (u: number, r: number) => {
   const w = 1 - u;
   return {s: 1 - (vm * w * w) / (2 * r), v: (vm * w) / r};
 };
-const segsOf = (a: Actor, shot: Shot): Seg[] => {
-  const p = a.path!;
+const segsFromPath = (p: [number, number, TT][], shot: Shot): Seg[] => {
   const out: Seg[] = [];
   for (let i = 0; i + 1 < p.length; i++) {
     out.push({x0: p[i][0], y0: p[i][1], x1: p[i + 1][0], y1: p[i + 1][1], t0: abs(p[i][2], shot), t1: abs(p[i + 1][2], shot)});
   }
   return out;
 };
+const segsOf = (a: Actor, shot: Shot): Seg[] => segsFromPath(a.path!, shot);
 /** vị trí + vận tốc (px/s) + hướng tại t */
 const motion = (segs: Seg[], t: number) => {
   const first = segs.find((g) => Math.abs(g.x1 - g.x0) > 2);
@@ -87,9 +89,36 @@ const sidePropFor = (name: string | undefined, t: number) => {
   return (h: {near: [number, number]; far: [number, number]}) => f(h, t);
 };
 
-const SIDE_ARMS = new Set(['swing', 'down', 'hold', 'phone', 'cane', 'carry']);
+const SIDE_ARMS = new Set([
+  'swing', 'down', 'hold', 'phone', 'cane', 'carry',
+  'run', 'ride', 'crouch', 'jump', 'fall', 'push', 'climb', 'cheer',
+]);
+const SIDE_LEGS = new Set<SideLegs>(['walk', 'run', 'sit', 'carried', 'ride', 'crouch', 'jump', 'fall', 'push', 'climb']);
 
-type Ctx = {shot: Shot; t: number; actors: Actor[]; memo: Map<string, {x: number; y: number; dir: number; v: number; s: number}>};
+export const extraStateOf = (ex: ExtraDef, shot: Shot, t: number) => {
+  let x = ex.x, y = ex.y, dir = ex.flip ? -1 : 1;
+  if (ex.path && ex.path.length > 1) {
+    const m = motion(segsFromPath(ex.path, shot), t);
+    x = m.x; y = m.y;
+    if (m.dir) dir = m.dir;
+  }
+  const subj = SUBJECTS[ex.k];
+  const pose = keyAt<string>(ex.pose, subj?.poses?.[0] ?? 'idle', shot, t).cur;
+  const expr = keyAt<string | undefined>(ex.expr, subj?.exprs?.[0], shot, t).cur;
+  const s = ex.s ?? 1;
+  const tilt = ex.tilt ?? 0;
+  const flip = ex.flip ?? (dir < 0);
+  return {x, y, dir, pose, expr, s, tilt, flip};
+};
+
+type ExtraState = ReturnType<typeof extraStateOf> & {def?: SubjectDef; ex: ExtraDef};
+type Ctx = {
+  shot: Shot;
+  t: number;
+  actors: Actor[];
+  memo: Map<string, {x: number; y: number; dir: number; v: number; s: number}>;
+  extraStates: Map<string, ExtraState>;
+};
 
 /** vị trí thế giới của actor (dùng cho người được cõng) */
 const placeOf = (a: Actor, ctx: Ctx) => {
@@ -156,8 +185,30 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx}> = ({a, ctx}) => {
       bob = 0;
     }
   }
+  let mountRot = 0;
+  let mountSeat: ReturnType<typeof resolveSeat> = null;
+  if (a.mount) {
+    const ms = ctx.extraStates.get(a.mount.target);
+    if (ms && ms.def) {
+      const seat = resolveSeat(ms.def, ms.pose, a.mount.slot ?? 0);
+      if (seat) {
+        mountSeat = seat;
+        const fSign: 1 | -1 = ms.flip ? -1 : 1;
+        const lx = seat.dx * fSign * ms.s;
+        const ly = seat.dy * ms.s;
+        const ang = (ms.tilt * Math.PI) / 180;
+        const cosA = Math.cos(ang), sinA = Math.sin(ang);
+        x = ms.x + lx * cosA - ly * sinA;
+        y = ms.y + lx * sinA + ly * cosA;
+        const seatFace: 1 | -1 = (seat.face ? seat.face * fSign : fSign) as 1 | -1;
+        if (a.face === undefined) dir = seatFace;
+        mountRot = (seat.angle ?? 0) * fSign + ms.tilt;
+      }
+    }
+  }
   const hasPath = !!(a.path && a.path.length > 1);
-  const vk = keyAt<'front' | 'side' | 'back' | '3q'>(a.view, hasPath || a.ride ? 'side' : 'front', shot, t, 0.24);
+  const defaultView = mountSeat ? (mountSeat.view ?? '3q') : (hasPath || a.ride ? 'side' : 'front');
+  const vk = keyAt<'front' | 'side' | 'back' | '3q'>(a.view, defaultView, shot, t, 0.24);
   const hop = a.hop ? Math.abs(Math.sin(t * 9 + ph)) * a.hop : 0;
   const sh = a.shake ? Math.sin(t * 40 + ph) * a.shake : 0;
 
@@ -193,15 +244,20 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx}> = ({a, ctx}) => {
       for (let tt = t0; tt < t; tt += 1 / 60) ex += Math.max(0, motion(segs, tt).v - vNom) / 60;
       phase += ex / cyc;
     }
-    if (riderOf) speed = 0;
-    const lk = keyAt<string>(a.legs as Keys<string> | undefined, a.ride ? 'carried' : 'walk', shot, t, 0.45);
-    let legs = lk.cur as 'walk' | 'sit' | 'carried';
+    if (riderOf || mountSeat) speed = 0;
+    const defaultSideLegs: SideLegs = a.ride
+      ? 'carried'
+      : mountSeat
+        ? (mountSeat.pose && SIDE_LEGS.has(mountSeat.pose as SideLegs) ? (mountSeat.pose as SideLegs) : 'ride')
+        : 'walk';
+    const lk = keyAt<SideLegs>(a.legs, defaultSideLegs, shot, t, 0.45);
+    let legs: SideLegs = lk.cur;
     let seatH = a.seatH ?? 120;
     if (legs === 'sit' && lk.prev === 'walk' && lk.u < 1) seatH = lerp(200 * H, seatH, easeIO(lk.u));
     if (legs === 'walk' && lk.prev === 'sit' && lk.u < 1) { legs = 'sit'; seatH = lerp(seatH, 200 * H, easeIO(lk.u)); }
-    const ak = keyAt<string>(a.arms, a.ride ? 'ride' : 'swing', shot, t);
-    let arms: React.ComponentProps<typeof PersonSide>['arms'] = SIDE_ARMS.has(ak.cur) ? (ak.cur as 'swing') : 'swing';
-    if (ak.cur === 'ride' || a.ride) arms = {near: {x: 110, y: -330 * H}, far: {x: 120, y: -350 * H}};
+    const ak = keyAt<string>(a.arms, a.ride ? 'ride' : (mountSeat ? 'ride' : 'swing'), shot, t);
+    let arms: SideArms = SIDE_ARMS.has(ak.cur) ? (ak.cur as SideArms) : 'swing';
+    if (a.ride && ak.cur === 'ride') arms = {near: {x: 110, y: -330 * H}, far: {x: 120, y: -350 * H}};
     if (ak.cur === 'shh') arms = {near: {x: 96, y: -470 * H}};
     if (ak.cur === 'raise') arms = {near: {x: 60, y: -700 * H}, far: {x: 40, y: -690 * H}};
     if (ak.cur === 'pocket') arms = {near: {x: -10, y: -190 * H}, far: {x: -14, y: -195 * H}};
@@ -213,11 +269,21 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx}> = ({a, ctx}) => {
       const tg = {x: lerp(rest.x, lx + rb.press * 7, rb.w), y: lerp(rest.y, ly, rb.w)};
       arms = {near: tg, far: typeof arms === 'object' ? arms.far : undefined};
     }
+    let sideSquash: number | undefined;
+    let sidePitch: number | undefined;
+    if (a.p !== undefined) {
+      const pk = keyAt<string>(a.p, 'idle', shot, t);
+      const p0: Pose = POSES[pk.prev] ?? POSES.idle;
+      const p1: Pose = POSES[pk.cur] ?? POSES.idle;
+      const sp = pk.u < 1 ? poseMix(p0, p1, smooth(pk.u)) : p1;
+      sideSquash = sp.squash;
+      sidePitch = sp.pitch;
+    }
     const pant = a.pant ? Math.sin(t * 7 + ph) : 0;
     body = (
       <g>
         <g transform={`translate(0 ${pant * 4}) scale(1 ${1 + pant * 0.012})`}>
-          <PersonSide look={look} t={t} phase={phase} speed={speed} slope={a.slope ?? 0} legs={legs} seatH={seatH} arms={arms} expr={ek.cur} talk={talk} blinkPh={ph} lean={(a.lean ?? 0) + (a.tip ? 8 : 0) + (ak.cur === 'carry' ? 12 : 0) + (a.ride ? 14 : 0)} look2={a.look2 ?? 0} prop={sidePropFor(a.prop, t)} />
+          <PersonSide look={look} t={t} phase={phase} speed={speed} slope={a.slope ?? 0} legs={legs} seatH={seatH} arms={arms} expr={ek.cur} talk={talk} blinkPh={ph} lean={(a.lean ?? 0) + (a.tip ? 8 : 0) + (ak.cur === 'carry' ? 12 : 0) + (a.ride ? 14 : 0)} look2={a.look2 ?? 0} squash={sideSquash} pitch={sidePitch} prop={sidePropFor(a.prop, t)} />
         </g>
         {a.pant && [0, 1].map((i) => {
           const k = ((t * 1.6 + i * 0.5) % 1);
@@ -226,7 +292,8 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx}> = ({a, ctx}) => {
       </g>
     );
   } else {
-    const pk = keyAt(a.p as Keys<string> | undefined, 'idle', shot, t);
+    const defaultPose = mountSeat ? (mountSeat.pose ?? 'ride') : 'idle';
+    const pk = keyAt(a.p as Keys<string> | undefined, defaultPose, shot, t);
     const p0: Pose = POSES[pk.prev] ?? POSES.idle;
     const p1: Pose = POSES[pk.cur] ?? POSES.idle;
     let pose = pk.u < 1 ? poseMix(p0, p1, smooth(pk.u)) : p1;
@@ -252,8 +319,9 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx}> = ({a, ctx}) => {
       body = <Person look={look} pose={pose} expr={ek.cur} talk={talk} t={t} gaze={a.gaze ?? 0} blinkPh={ph} prop={propFor(a.prop, t)} />;
     }
   }
+  const rotStr = mountRot ? ` rotate(${mountRot.toFixed(2)})` : '';
   return (
-    <g transform={`translate(${x + sh} ${y - hop + bob}) scale(${s * sx} ${s})`} opacity={op}>
+    <g transform={`translate(${x + sh} ${y - hop + bob})${rotStr} scale(${s * sx} ${s})`} opacity={op}>
       {body}
     </g>
   );
@@ -341,8 +409,19 @@ export const Film: React.FC = () => {
   const opts: SetOpts = {t, bg: shot.bg, ...(shot.o ?? {}), ...keyedOpts(shot, t), ...(shot.of ? shot.of(u, ts, t) : {})};
   const layers: SetLayers = def.render(opts);
 
+  const extraList = (shot.extras ?? []).map((ex, i) => ({
+    i,
+    ex,
+    st: extraStateOf(ex, shot, t),
+    def: SUBJECTS[ex.k],
+  }));
+  const extraStates = new Map<string, ExtraState>();
+  for (const item of extraList) {
+    if (item.ex.id) extraStates.set(item.ex.id, {...item.st, def: item.def, ex: item.ex});
+  }
+
   const acts = shot.actors ?? [];
-  const ctx: Ctx = {shot, t, actors: acts, memo: new Map()};
+  const ctx: Ctx = {shot, t, actors: acts, memo: new Map(), extraStates};
   const toActorItem = (a: Actor): Item => {
     let yy = a.y;
     if (a.path && a.path.length > 1) yy = placeOf(a, ctx).y;
@@ -350,16 +429,38 @@ export const Film: React.FC = () => {
       const c = acts.find((q) => q.id === a.ride);
       if (c) yy = placeOf(c, ctx).y - 0.5;
     }
+    if (a.mount) {
+      const ms = ctx.extraStates.get(a.mount.target);
+      if (ms) {
+        const seat = ms.def ? resolveSeat(ms.def, ms.pose, a.mount.slot ?? 0) : null;
+        yy = ms.y + (ms.ex.z ?? 0) + (seat?.zOffset ?? 20);
+      }
+    }
     return {y: yy + (a.z ?? 0), key: 'a-' + a.id, node: <ActorView key={a.id} a={a} ctx={ctx} />};
   };
   const actors: Item[] = acts.filter((a) => !a.fg).map(toActorItem);
-  const fgActors: Item[] = acts.filter((a) => a.fg).map(toActorItem).sort((p, q) => p.y - q.y);
-  const extras: Item[] = (shot.extras ?? []).map((x, i) => {
-    const f = WORLD_PROPS[x.k];
-    if (!f) throw new Error('unknown world prop ' + x.k + ' (register it in props.tsx WORLD_PROPS)');
-    return {y: x.y, key: 'x' + i, node: <g transform={`translate(${x.x} ${x.y}) scale(${x.s ?? 1})`}>{f(x.c, t)}</g>};
-  });
-  const midItems = [...layers.mid, ...extras, ...actors].sort((p, q) => p.y - q.y);
+  const fgActors: Item[] = acts.filter((a) => a.fg).map(toActorItem);
+  const midExtras: Item[] = [];
+  const fgExtras: Item[] = [];
+  for (const {i, ex, st, def: subj} of extraList) {
+    let content: React.ReactNode;
+    if (subj) {
+      content = subj.render(st.pose, {t, expr: st.expr, flip: false, c: ex.c});
+    } else {
+      const f = WORLD_PROPS[ex.k];
+      if (!f) throw new Error('unknown world prop ' + ex.k + ' (register it in props.tsx WORLD_PROPS or episode/subjects.tsx SUBJECTS)');
+      content = f(ex.c, t);
+    }
+    const item: Item = {
+      y: st.y + (ex.z ?? 0),
+      key: ex.id ? `x-${i}-${ex.id}` : 'x' + i,
+      node: <g transform={`translate(${st.x} ${st.y}) rotate(${st.tilt}) scale(${st.s * (st.flip ? -1 : 1)} ${st.s})`}>{content}</g>,
+    };
+    if (ex.fg) fgExtras.push(item);
+    else midExtras.push(item);
+  }
+  const midItems = [...layers.mid, ...midExtras, ...actors].sort((p, q) => p.y - q.y);
+  const fgItems = [...fgExtras, ...fgActors].sort((p, q) => p.y - q.y);
 
   // background and actors share depth 1 so feet never slide on the floor when the camera moves
   const worldLayers = (
@@ -367,7 +468,7 @@ export const Film: React.FC = () => {
       {layers.far && <LayerG d={0.5} cam={cam}>{layers.far}</LayerG>}
       <LayerG d={1} cam={cam}>{layers.back}</LayerG>
       <LayerG d={1} cam={cam}>{midItems.map((m) => <g key={m.key}>{m.node}</g>)}</LayerG>
-      {fgActors.length > 0 && <LayerG d={1.2} cam={cam}>{fgActors.map((m) => <g key={m.key}>{m.node}</g>)}</LayerG>}
+      {fgItems.length > 0 && <LayerG d={1.2} cam={cam}>{fgItems.map((m) => <g key={m.key}>{m.node}</g>)}</LayerG>}
       {layers.fg && <LayerG d={1.3} cam={cam}>{layers.fg}</LayerG>}
     </>
   );

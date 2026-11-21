@@ -1,6 +1,7 @@
 // Visual QA evidence (gate G5). Renders frames of the Film composition and tiles them into LIGHT JPEG sheets
 // (each ≤ ~1 MB, usually 100–400 KB) so a reviewer can open many of them cheaply.
-//   node scripts/qa.mjs where <i> [t] [--free WxH] -> terminal layout table of 1080×1920 boxes + open regions (no render)
+//   node scripts/qa.mjs where <i> [t] [--free WxH] -> terminal layout table of frame boxes + 3x3 grid + scale/cutoff (no render)
+//   node scripts/qa.mjs layout [i] [t]             -> 3x3 grid + scale + creature-cutoff summary for 1 shot or all shots (no render)
 //   node scripts/qa.mjs pass [changed|all]         -> ONE bundle/browser: contact + stale strips + cards + HOT crops + carry.py
 //   node scripts/qa.mjs review --batch <file.jsonl> -> validate & atomically write batch qa/review/NN.json (no render)
 //   node scripts/qa.mjs contact [--all]            -> qa/contact_p<N>.jpg : every shot at 25 % and 75 % (full frame)
@@ -335,6 +336,33 @@ if (mode === 'where') {
         console.log(`    ${o.k.padEnd(10)} "${(o.text ?? '').slice(0, 26)}" box=${fmtB(o)}`);
       }
     }
+    if (g.gridLayout) {
+      const gl = g.gridLayout;
+      const cellStr = (id) => {
+        const n = gl.cells[id] ?? 0;
+        return `${id}=${n}${n >= 4 ? '!!' : n >= 3 ? '*' : ' '}`;
+      };
+      console.log(`  3x3 GRID (clutter_occupancy=${Math.round(gl.occupancyFrac * 100)}%, maxCell=${gl.maxCellCount}${gl.overcrowdedCells.length ? ` !! OVERCROWDED(${gl.overcrowdedCells.join(',')})` : gl.crowdedCells.length ? ` * CROWDED(${gl.crowdedCells.join(',')})` : ''}):`);
+      console.log(`    ${cellStr('A1').padEnd(8)} ${cellStr('B1').padEnd(8)} ${cellStr('C1')}`);
+      console.log(`    ${cellStr('A2').padEnd(8)} ${cellStr('B2').padEnd(8)} ${cellStr('C2')}`);
+      console.log(`    ${cellStr('A3').padEnd(8)} ${cellStr('B3').padEnd(8)} ${cellStr('C3')}`);
+    }
+    if (g.scaleIssues?.length) {
+      console.log('  SCALE ISSUES (LA-01):');
+      for (const si of g.scaleIssues) {
+        if (si.kind === 'actor_scale') {
+          console.log(`    !! actor '${si.id}' s=${si.s} outside set actorScale [${si.expected[0]}..${si.expected[1]}]`);
+        } else {
+          console.log(`    !! subject '${si.k}' height ratio ${si.ratio}x vs actor outside relToActor [${si.expected[0]}..${si.expected[1]}]`);
+        }
+      }
+    }
+    if (g.creatureCutoffIssues?.length) {
+      console.log('  CREATURE CUTOFF (LA-04):');
+      for (const cc of g.creatureCutoffIssues) {
+        console.log(`    !! creature '${cc.k}' clipped ${Math.round(cc.clippedFrac * 100)}% at frame edge box=${fmtB(cc.screenBox)}`);
+      }
+    }
     if (freeReq) {
       const blocked = [
         cap,
@@ -357,6 +385,82 @@ if (mode === 'where') {
       console.log(`  FREE (${freeReq.w}x${freeReq.h} clear of faces/signs/overlays/captions): ${pick.length ? pick.map(fmtB).join('  ') : 'NONE'}`);
     }
   }
+  process.exit(0);
+}
+
+// layout [i] [t]: 3x3 grid + scale + creature-cutoff inspection (no browser)
+if (mode === 'layout') {
+  if (typeof geom.shotGeometry !== 'function') {
+    console.error('qa.mjs layout requires geom.mjs shotGeometry() export');
+    process.exit(1);
+  }
+  const fmtB = (b) => `[${Math.round(b.x0)},${Math.round(b.y0)}..${Math.round(b.x1)},${Math.round(b.y1)}]`;
+  if (arg !== undefined) {
+    const idx = Number(arg);
+    const r = rows[idx];
+    if (!Number.isInteger(idx) || !r) {
+      console.error(`usage: node scripts/qa.mjs layout [i] [t] (shot 0..${rows.length - 1})`);
+      process.exit(1);
+    }
+    const ts = arg2 !== undefined ? [Number(arg2)] : [0.15, 0.5, 0.85].map((u) => +(r.t0 + (r.t1 - r.t0) * u).toFixed(2));
+    if (ts.some((t) => Number.isNaN(t))) { console.error(`invalid timestamp '${arg2}'`); process.exit(1); }
+    const setDef = P.SETS?.[r.set] ?? {};
+    console.log(`#${r.i} '${r.name}' · set=${r.set} · shotScale=${setDef.shotScale ?? '-'} · actorScale=${setDef.actorScale ? `[${setDef.actorScale.join('..')}]` : '-'} · ${r.t0.toFixed(2)}–${r.t1.toFixed(2)}s`);
+    for (const t of ts) {
+      const g = geom.shotGeometry(r, t, P, rows);
+      const gl = g.gridLayout;
+      console.log(`\n@ t=${t.toFixed(2)}s  cam=[${g.cam.map((v, k) => k === 2 ? v.toFixed(2) : Math.round(v)).join(', ')}]  occ=${Math.round(gl.occupancyFrac * 100)}%  maxCell=${gl.maxCellCount}`);
+      for (const rowIds of [['A1', 'B1', 'C1'], ['A2', 'B2', 'C2'], ['A3', 'B3', 'C3']]) {
+        const line = rowIds.map((id) => {
+          const ents = gl.cellEntities?.[id] ?? [];
+          const flag = ents.length >= 4 ? '!!' : ents.length >= 3 ? '*' : '';
+          return `${id}(${ents.length}${flag}):[${ents.join(',')}]`.padEnd(28);
+        }).join(' ');
+        console.log('  ' + line);
+      }
+      if (g.scaleIssues?.length) {
+        console.log('  SCALE ISSUES (LA-01):');
+        for (const si of g.scaleIssues) {
+          console.log(si.kind === 'actor_scale'
+            ? `    !! actor '${si.id}' s=${si.s} outside [${si.expected[0]}..${si.expected[1]}]`
+            : `    !! subject '${si.k}' ratio=${si.ratio}x outside [${si.expected[0]}..${si.expected[1]}]`);
+        }
+      }
+      if (g.creatureCutoffIssues?.length) {
+        console.log('  CREATURE CUTOFF (LA-04):');
+        for (const cc of g.creatureCutoffIssues) {
+          console.log(`    !! creature '${cc.k}' clipped ${Math.round(cc.clippedFrac * 100)}% box=${fmtB(cc.screenBox)}`);
+        }
+      }
+    }
+    process.exit(0);
+  }
+  console.log('#i  | set                      | shotScale    | maxCell | occ% | scaleErr | cutoffErr');
+  console.log('----+--------------------------+--------------+---------+------+----------+----------');
+  let totScale = 0, totCutoff = 0, totOver = 0;
+  for (const r of rows) {
+    let maxCell = 0, maxOcc = 0;
+    const scaleSet = new Set(), cutoffSet = new Set();
+    for (const u of [0.15, 0.5, 0.85]) {
+      const t = r.t0 + (r.t1 - r.t0) * u;
+      const g = geom.shotGeometry(r, t, P, rows);
+      if (g.gridLayout) {
+        if (g.gridLayout.maxCellCount > maxCell) maxCell = g.gridLayout.maxCellCount;
+        if (g.gridLayout.occupancyFrac > maxOcc) maxOcc = g.gridLayout.occupancyFrac;
+      }
+      for (const si of g.scaleIssues ?? []) scaleSet.add(`${si.kind}:${si.id ?? si.k}`);
+      for (const cc of g.creatureCutoffIssues ?? []) cutoffSet.add(cc.k);
+    }
+    const sc = P.SETS?.[r.set]?.shotScale ?? '-';
+    const occPct = Math.round(maxOcc * 100);
+    if (maxCell >= 4 || occPct > 78) totOver++;
+    totScale += scaleSet.size;
+    totCutoff += cutoffSet.size;
+    console.log(
+      `${String('#' + r.i).padEnd(3)} | ${r.set.slice(0, 24).padEnd(24)} | ${String(sc).padEnd(12)} | ${String(maxCell).padStart(7)} | ${String(occPct + '%').padStart(4)} | ${String(scaleSet.size).padStart(8)} | ${String(cutoffSet.size).padStart(9)}`
+    );
+  }
+  console.log(`layout: ${rows.length} shots · overcrowded=${totOver} · scaleErr=${totScale} · cutoffErr=${totCutoff}`);
   process.exit(0);
 }
 
@@ -527,7 +631,7 @@ try {
     tile({out: `qa/shots/${pad(r.i)}.jpg`, cols: 3, w: 300, title: `#${r.i} ${r.name} · ${r.set} · hash ${hashes[r.i]}`, cells: jobs.map((j) => ({img: j.out, label: fmt(j.t), sub: ''}))});
     console.log('ok', r.i, `${((Date.now() - t00) / 1000).toFixed(0)} s`);
   } else {
-    console.log('modes: pass [changed|all] | where <i> [t] [--free WxH] | review --batch <file.jsonl> | contact [--all] | strips [names] [--all] | cards [changed|hot|all|i,j] | crops <i> | frames t1,t2 | shot <i> | status');
+    console.log('modes: pass [changed|all] | where <i> [t] [--free WxH] | layout [i] [t] | review --batch <file.jsonl> | contact [--all] | strips [names] [--all] | cards [changed|hot|all|i,j] | crops <i> | frames t1,t2 | shot <i> | status');
     process.exitCode = 1;
   }
 } finally {

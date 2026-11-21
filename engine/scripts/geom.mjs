@@ -402,6 +402,25 @@ export const measurePropBox = (propKey, P = cachedP, c = undefined, t = 0.5) => 
   return res;
 };
 
+const subjectCache = new Map();
+
+/** Render a SUBJECT key at a given pose to static SVG and return its exact geometry + internal texts/circles. */
+export const measureSubjectBox = (subjKey, pose, P = cachedP, opts = {t: 0.5}) => {
+  if (P) cachedP = P;
+  const def = P?.SUBJECTS?.[subjKey];
+  if (!def) throw new Error(`measureSubjectBox: unknown subject '${subjKey}'`);
+  const actualPose = pose ?? def.poses?.[0] ?? 'idle';
+  const renderOpts = {t: 0.5, ...(opts ?? {})};
+  const cacheable = renderOpts.t === 0.5 && !renderOpts.flip && !renderOpts.c;
+  const key = cacheable ? `${subjKey}:${actualPose}:${renderOpts.expr ?? ''}` : null;
+  if (key && subjectCache.has(key)) return subjectCache.get(key);
+  const svg = renderToStaticMarkup(React.createElement('svg', null, def.render(actualPose, renderOpts)));
+  const p = parseSvgBoxes(svg);
+  const res = {...p.bounds, texts: p.texts, circles: p.circles};
+  if (key) subjectCache.set(key, res);
+  return res;
+};
+
 const handPropCache = new Map();
 
 /** Render a HAND_PROP key at grip origin (0, 0) to static SVG and return bbox + gripDist. */
@@ -507,6 +526,21 @@ const keyedOptsAt = (def, row, P, t) => {
 
 const absTime = (tt, row, P) => (typeof tt === 'number' ? row.t0 + tt : P.tAt(tt));
 
+/** Interpolate an ExtraDef's world position along e.path (resolving TT via absTime) or fall back to [e.x, e.y]. */
+export const extraPos = (e, t, row, P) => {
+  if (!e?.path || e.path.length < 2) return [e?.x ?? 0, e?.y ?? 0];
+  const p = e.path.map(([px, py, tt]) => [px, py, absTime(tt, row, P)]);
+  if (t <= p[0][2]) return [p[0][0], p[0][1]];
+  for (let i = 1; i < p.length; i++) {
+    if (t <= p[i][2]) {
+      const u = (t - p[i - 1][2]) / Math.max(0.001, p[i][2] - p[i - 1][2]);
+      return [lerp(p[i - 1][0], p[i][0], u), lerp(p[i - 1][1], p[i][1], u)];
+    }
+  }
+  const l = p[p.length - 1];
+  return [l[0], l[1]];
+};
+
 export const scalarKeyAt = (spec, fallback, row, P, t) => {
   if (spec === undefined) return fallback;
   if (!Array.isArray(spec)) return spec;
@@ -592,10 +626,36 @@ export const detachedLimbIssues = (row, t, P = cachedP, precomputedProps = null)
   return issues;
 };
 
+const CREATURE_RE = /cat|dog|ant|bug|ladybug|bird|spider|monster|dragon/i;
+
+const actorBoxAt = (id, lookKey, wx, wy, s, L, cam, d = 1) => {
+  const [cx, cy, k] = cam;
+  const kd = Math.pow(k, d);
+  const ox = W / 2 + (cx - W / 2) * d;
+  const oy = H / 2 + (cy - H / 2) * d;
+  const sx = (x) => W / 2 + (x - ox) * kd;
+  const sy = (y) => H / 2 + (y - oy) * kd;
+  const hh = L.h ?? 1, hd = L.head ?? 1, ww = L.w ?? 1;
+  const headC = wy - (382 * hh + 90 * hd) * s, headR = 100 * hd * s;
+  const top = headC - headR * 1.15;
+  const half = Math.max(headR, 110 * ww * s);
+  return {
+    id, look: lookKey,
+    hc: {x: sx(wx), y: sy(headC), r: headR * kd},
+    head: box(sx(wx - headR * 1.3), sy(top - 40 * s), sx(wx + headR * 1.3), sy(headC + headR * 1.25)),
+    body: box(sx(wx - half), sy(headC + headR * 0.8), sx(wx + half), sy(wy)),
+    hands: box(sx(wx - 260 * s), sy(wy - 400 * hh * s), sx(wx + 260 * s), sy(wy - 120 * hh * s)),
+    feet: box(sx(wx - 150 * s), sy(wy - 90 * s), sx(wx + 150 * s), sy(wy + 30 * s)),
+    all: box(sx(wx - half * 1.2), sy(top), sx(wx + half * 1.2), sy(wy + 10 * s)),
+    h: (wy - top) * kd,
+  };
+};
+
 /**
  * Compute full screen-space geometry of shot i (or row) at time t:
- * actors (head, body, hands, feet, all, dir, view), visible set + WORLD_PROP signs (clipped/occluded status),
- * extras (WORLD_PROPS), active overlays, reachIssues, captionIssues, detachedLimbIssues, and caption band.
+ * actors (head, body, hands, feet, all, dir, view, depthY, mountedOn), visible set + prop/subject signs,
+ * extras (SUBJECTS + WORLD_PROPS), active overlays, reachIssues, captionIssues, detachedLimbIssues,
+ * creatureCutoffIssues, gridLayout (3x3 spatial grid + union occupancy), scaleIssues, and caption band.
  */
 export const shotGeometry = (shotOrIdx, t, P, rowsCache = null) => {
   if (P) cachedP = P;
@@ -603,14 +663,9 @@ export const shotGeometry = (shotOrIdx, t, P, rowsCache = null) => {
   const row = typeof shotOrIdx === 'number' ? rows[shotOrIdx] : shotOrIdx;
   const def = P.SHOTS[row.i] ?? row;
   const looks = {...(P.EX_LOOKS ?? {}), ...(P.CAST ?? {})};
+  const subjects = P.SUBJECTS ?? {};
   const cam = camAt(row, t);
   const defActors = def.actors ?? [];
-  const actors = actorBoxes(row, t, looks).map((ab, idx) => {
-    const ra = (row.actors ?? [])[idx];
-    const da = defActors.find((q) => q.id === ab.id) ?? defActors[idx];
-    const st = actorStateAt(ra ?? da ?? {}, da, t, row, P);
-    return {...ab, dir: st.dir, view: st.view, worldY: st.y};
-  });
 
   const dur = Math.max(0.01, row.t1 - row.t0);
   const ts = t - row.t0;
@@ -626,21 +681,32 @@ export const shotGeometry = (shotOrIdx, t, P, rowsCache = null) => {
 
   const overlays = (def.over ?? []).map((o) => overlayBox(o, cam, row, P, t)).filter(Boolean);
 
+  // Resolve extras from BOTH P.SUBJECTS and P.WORLD_PROPS first (actors with `mount` depend on live extra positions)
   const VEHICLE_RE = /bus|truck|van|train|ambulance|fire.?truck|cab/i;
   const propSigns = [];
   const props = (def.extras ?? []).map((e) => {
-    const mb = measurePropBox(e.k, P, e.c, t);
+    const [ex, ey] = extraPos(e, t, row, P);
+    const subjDef = subjects[e.k] ?? null;
+    const isSubject = !!subjDef;
+    const curPose = scalarKeyAt(e.pose, subjDef?.poses?.[0] ?? 'idle', row, P, t);
+    const curExpr = scalarKeyAt(e.expr, subjDef?.exprs?.[0], row, P, t);
+    const mb = isSubject
+      ? measureSubjectBox(e.k, curPose, P, {t, expr: curExpr, flip: e.flip, c: e.c})
+      : measurePropBox(e.k, P, e.c, t);
     const sc = e.s ?? 1;
-    const wb = box(e.x + mb.minX * sc, e.y + mb.minY * sc, e.x + mb.maxX * sc, e.y + mb.maxY * sc);
-    const sb = projectBox(wb, cam, 1);
+    const wx0 = e.flip ? ex - mb.maxX * sc : ex + mb.minX * sc;
+    const wx1 = e.flip ? ex - mb.minX * sc : ex + mb.maxX * sc;
+    const wb = box(wx0, ey + mb.minY * sc, wx1, ey + mb.maxY * sc);
+    const d = e.fg ? 1.2 : 1;
+    const sb = projectBox(wb, cam, d);
     const sArea = Math.max(1, area(sb));
     const visArea = area(clip(sb));
     const clippedFrac = visArea > 0 ? 1 - visArea / sArea : 1;
-    const foregroundSmall = Math.max(mb.width, mb.height) < 700 && !VEHICLE_RE.test(e.k);
+    const foregroundSmall = !e.fg && Math.max(mb.width, mb.height) < 700 && !VEHICLE_RE.test(e.k);
     const edgeClipped = visArea > 0 && foregroundSmall && clippedFrac > 0.15 && clippedFrac < 0.95;
     let dxHint = '';
     if (edgeClipped) {
-      const k = cam[2] || 1;
+      const k = Math.pow(cam[2] || 1, d);
       const parts = [];
       if (sb.x0 < 0) parts.push(`x +${Math.ceil((-sb.x0 + 16) / k)}`);
       if (sb.x1 > W) parts.push(`x -${Math.ceil((sb.x1 - W + 16) / k)}`);
@@ -648,27 +714,42 @@ export const shotGeometry = (shotOrIdx, t, P, rowsCache = null) => {
       if (sb.y1 > H) parts.push(`y -${Math.ceil((sb.y1 - H + 16) / k)}`);
       dxHint = parts.join(', ');
     }
+    const z = e.z ?? 0;
+    const depthY = ey + z;
     for (const tx of mb.texts ?? []) {
       if (tx.fontSize * sc >= 14) {
+        const tx0 = e.flip ? ex - tx.x1 * sc : ex + tx.x0 * sc;
+        const tx1 = e.flip ? ex - tx.x0 * sc : ex + tx.x1 * sc;
         propSigns.push({
           text: tx.text,
-          x0: e.x + tx.x0 * sc,
-          y0: e.y + tx.y0 * sc,
-          x1: e.x + tx.x1 * sc,
-          y1: e.y + tx.y1 * sc,
+          x0: tx0,
+          y0: ey + tx.y0 * sc,
+          x1: tx1,
+          y1: ey + tx.y1 * sc,
           fontSize: tx.fontSize * sc,
-          d: 1,
+          d,
           source: `prop:${e.k}`,
           propKey: e.k,
-          propY: e.y,
+          propY: depthY,
         });
       }
     }
     return {
       k: e.k,
-      x: e.x,
-      y: e.y,
+      id: e.id ?? null,
+      x: ex,
+      y: ey,
+      z,
+      depthY,
       s: sc,
+      fg: !!e.fg,
+      flip: !!e.flip,
+      tilt: e.tilt ?? 0,
+      isSubject,
+      subjectKind: subjDef?.kind ?? null,
+      relToActor: subjDef?.relToActor ?? null,
+      pose: curPose,
+      expr: curExpr ?? null,
       widthUnscaled: mb.width,
       heightUnscaled: mb.height,
       foregroundSmall,
@@ -679,6 +760,40 @@ export const shotGeometry = (shotOrIdx, t, P, rowsCache = null) => {
       edgeClipped,
       dxHint,
     };
+  });
+
+  const propById = new Map();
+  for (const pr of props) if (pr.id) propById.set(pr.id, pr);
+
+  const actors = (row.actors ?? []).map((ra, idx) => {
+    const da = defActors.find((q) => q.id === ra.id) ?? defActors[idx];
+    const st = actorStateAt(ra ?? da ?? {}, da, t, row, P);
+    const L = looks[ra.look] ?? {};
+    const s = da?.s ?? ra?.s ?? 1;
+    let wx = st.x;
+    let wy = st.y;
+    let depthY = st.y + (da?.z ?? 0);
+    let mountedOn = null;
+    let fg = !!da?.fg;
+    if (da?.mount?.target) {
+      const mountPr = propById.get(da.mount.target);
+      if (mountPr) {
+        const subj = subjects[mountPr.k];
+        const slot = da.mount.slot ?? 0;
+        const seat = subj?.seats?.[mountPr.pose]?.[slot] ?? subj?.seats?.default?.[slot] ?? null;
+        const lx = (mountPr.flip ? -1 : 1) * mountPr.s * (seat?.dx ?? 0);
+        const ly = mountPr.s * (seat?.dy ?? 0);
+        const rad = ((mountPr.tilt ?? 0) * Math.PI) / 180;
+        const cos = Math.cos(rad), sin = Math.sin(rad);
+        wx = mountPr.x + lx * cos - ly * sin;
+        wy = mountPr.y + lx * sin + ly * cos;
+        depthY = mountPr.y + (mountPr.z ?? 0) + (seat?.zOffset ?? 20) + (da.z ?? 0);
+        mountedOn = da.mount.target;
+        fg = !!(da.fg ?? mountPr.fg);
+      }
+    }
+    const ab = actorBoxAt(ra.id, ra.look, wx, wy, s, L, cam, fg ? 1.2 : 1);
+    return {...ab, s, dir: st.dir, view: st.view, worldX: wx, worldY: wy, depthY, fg, mountedOn};
   });
 
   const signs = [...rawSetSigns, ...propSigns].map((s) => {
@@ -721,7 +836,7 @@ export const shotGeometry = (shotOrIdx, t, P, rowsCache = null) => {
       for (const a of actors) {
         const da = defActors.find((q) => q.id === a.id);
         if (targetsFixture(da, s)) continue;
-        if (s.source !== 'set' && a.worldY < (s.propY ?? -Infinity) - 1) continue;
+        if (s.source !== 'set' && a.depthY < (s.propY ?? -Infinity) - 1) continue;
         const fh = inter(a.head, sb) / sArea;
         const fb = inter(a.body, sb) / sArea;
         const fhn = inter(a.hands, sb) / sArea;
@@ -788,6 +903,118 @@ export const shotGeometry = (shotOrIdx, t, P, rowsCache = null) => {
 
   const limbIssues = detachedLimbIssues(row, t, P, props);
 
+  // LA-04: hero creature awkward frame-edge cut-off (non-fg creature >= 200 px tall sliced 35%..95% off edge)
+  const creatureCutoffIssues = [];
+  for (const pr of props) {
+    if (pr.fg) continue;
+    const isCreature = (pr.isSubject && pr.subjectKind === 'creature') || (!pr.isSubject && CREATURE_RE.test(pr.k));
+    if (!isCreature) continue;
+    const screenH = pr.screenBox.y1 - pr.screenBox.y0;
+    const visArea = area(clip(pr.screenBox));
+    if (visArea > 0 && screenH >= 200 && pr.clippedFrac > 0.35 && pr.clippedFrac < 0.95) {
+      creatureCutoffIssues.push({k: pr.k, t, clippedFrac: pr.clippedFrac, screenBox: pr.screenBox});
+    }
+  }
+
+  // LA-02: 3x3 Spatial Grid & Clutter Analysis (A1..C3) + 24x16 union occupancy lattice
+  const clusters = [];
+  const mountClusterById = new Map();
+  for (const pr of props) {
+    if (pr.fg) continue;
+    const cb = clip(pr.screenBox);
+    if (area(cb) <= 0) continue;
+    const cl = {label: pr.id ? `${pr.k}#${pr.id}` : pr.k, box: cb};
+    clusters.push(cl);
+    if (pr.id) mountClusterById.set(pr.id, cl);
+  }
+  for (const a of actors) {
+    if (a.fg) continue;
+    const cb = clip(a.all);
+    if (area(cb) <= 0) continue;
+    if (a.mountedOn && mountClusterById.has(a.mountedOn)) {
+      const cl = mountClusterById.get(a.mountedOn);
+      cl.box = box(Math.min(cl.box.x0, cb.x0), Math.min(cl.box.y0, cb.y0), Math.max(cl.box.x1, cb.x1), Math.max(cl.box.y1, cb.y1));
+      cl.label += `+${a.id}`;
+    } else {
+      clusters.push({label: a.id, box: cb});
+    }
+  }
+  for (const ov of overlays) {
+    const cb = clip(ov);
+    if (area(cb) <= 0) continue;
+    clusters.push({label: `${ov.k}`, box: cb});
+  }
+
+  const colNames = ['A', 'B', 'C'];
+  const colW = W / 3, rowH = H / 3, cellArea = colW * rowH;
+  const cells = {};
+  const cellEntities = {};
+  const crowdedCells = [];
+  const overcrowdedCells = [];
+  let maxCellCount = 0;
+  for (let rr = 0; rr < 3; rr++) {
+    for (let cc = 0; cc < 3; cc++) {
+      const cellId = `${colNames[cc]}${rr + 1}`;
+      const cbox = {x0: cc * colW, y0: rr * rowH, x1: (cc + 1) * colW, y1: (rr + 1) * rowH};
+      const ents = [];
+      for (const cl of clusters) {
+        const ov = inter(cl.box, cbox);
+        if (ov / cellArea > 0.12 || ov / Math.max(1, area(cl.box)) > 0.25) ents.push(cl.label);
+      }
+      cells[cellId] = ents.length;
+      cellEntities[cellId] = ents;
+      if (ents.length > maxCellCount) maxCellCount = ents.length;
+      if (ents.length >= 3) crowdedCells.push(cellId);
+      if (ents.length >= 4) overcrowdedCells.push(cellId);
+    }
+  }
+  const NX = 24, NY = 16;
+  let occPts = 0;
+  for (let gy = 0; gy < NY; gy++) {
+    const py = ((gy + 0.5) * H) / NY;
+    for (let gx = 0; gx < NX; gx++) {
+      const px = ((gx + 0.5) * W) / NX;
+      for (let ci = 0; ci < clusters.length; ci++) {
+        const b = clusters[ci].box;
+        if (px >= b.x0 && px <= b.x1 && py >= b.y0 && py <= b.y1) { occPts++; break; }
+      }
+    }
+  }
+  const gridLayout = {
+    cells,
+    cellEntities,
+    maxCellCount,
+    crowdedCells,
+    overcrowdedCells,
+    occupancyFrac: +(occPts / (NX * NY)).toFixed(3),
+  };
+
+  // LA-01: Scale Ratio Audit (set.actorScale & SUBJECT relToActor)
+  const scaleIssues = [];
+  const setDef = P.SETS?.[row.set];
+  if (Array.isArray(setDef?.actorScale) && setDef.actorScale.length === 2) {
+    const [minS, maxS] = setDef.actorScale;
+    for (const a of actors) {
+      if (a.fg || a.mountedOn || area(clip(a.all)) <= 0) continue;
+      if (a.s < minS * 0.85 || a.s > maxS * 1.15) {
+        scaleIssues.push({kind: 'actor_scale', id: a.id, s: a.s, expected: setDef.actorScale});
+      }
+    }
+  }
+  const visActors = actors.filter((a) => !a.fg && area(clip(a.all)) > 0 && a.h > 0);
+  if (visActors.length > 0) {
+    const avgActorHeight = visActors.reduce((sum, a) => sum + a.h, 0) / visActors.length;
+    for (const pr of props) {
+      if (pr.fg || !pr.onScreen || !Array.isArray(pr.relToActor) || pr.relToActor.length !== 2) continue;
+      const prHeight = pr.screenBox.y1 - pr.screenBox.y0;
+      const ratio = prHeight / Math.max(1, avgActorHeight);
+      const [minR, maxR] = pr.relToActor;
+      if (ratio < minR * 0.7 || ratio > maxR * 1.35) {
+        scaleIssues.push({kind: 'subject_ratio', k: pr.k, ratio: +ratio.toFixed(2), expected: pr.relToActor});
+      }
+    }
+  }
+
   return {
     i: row.i,
     name: row.name,
@@ -801,6 +1028,9 @@ export const shotGeometry = (shotOrIdx, t, P, rowsCache = null) => {
     reachIssues,
     captionIssues,
     detachedLimbIssues: limbIssues,
+    creatureCutoffIssues,
+    gridLayout,
+    scaleIssues,
     caption: capBox,
   };
 };

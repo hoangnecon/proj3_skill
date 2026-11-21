@@ -10,9 +10,10 @@ import {SHOTS} from '../src/episode/shotlist';
 import {resolveShots, abs, tAt, WORDS, C, DURATION, normWord} from '../src/engine';
 import {POSES} from '../src/chars';
 import {HAND_PROPS, SIDE_PROPS, WORLD_PROPS} from '../src/props';
+import {SUBJECTS} from '../src/episode/subjects';
 import {PAL} from '../src/kit';
 
-export {CAST, CAST_ROLES, EX_LOOKS, SETS, EPISODE_SETS, EXEMPLAR_SETS, SHOTS, WORDS, C, DURATION, POSES, HAND_PROPS, SIDE_PROPS, WORLD_PROPS, PAL, tAt, normWord};
+export {CAST, CAST_ROLES, EX_LOOKS, SETS, EPISODE_SETS, EXEMPLAR_SETS, SHOTS, WORDS, C, DURATION, POSES, HAND_PROPS, SIDE_PROPS, WORLD_PROPS, SUBJECTS, PAL, tAt, normWord};
 
 /** element statistics of a set rendered at its plate options — the "is this more than a few boxes" measure */
 export const setStats = (id: string) => {
@@ -54,6 +55,7 @@ export const shotTable = () =>
         talks: (a.talk ?? []).length > 0,
         path: a.path ? a.path.map(([x, y, tt]) => [x, y, +abs(tt, s).toFixed(3)]) : null,
         view: a.view ?? null,
+        z: a.z ?? 0, fg: !!a.fg, mount: a.mount ?? null,
       };
     });
     const keyEvents: {key: string; value: unknown; t: number}[] = [];

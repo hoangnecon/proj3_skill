@@ -61,11 +61,12 @@ export type Actor = {
   face?: Keys<1 | -1>; // side/3q view facing (default: travel direction or flip)
   fg?: boolean; // render in foreground OTS plane (d = 1.2) after mid layers
   slope?: number; // ground slope dy/dx for stairs/ramps (negative = going up to the right)
-  legs?: Keys<'walk' | 'sit' | 'carried'>; // side view leg mode; walk->sit animates sitting down
+  legs?: Keys<'walk' | 'run' | 'sit' | 'carried' | 'ride' | 'crouch' | 'jump' | 'fall' | 'push' | 'climb'>; // side view leg mode; walk->sit animates sitting down
   seatH?: number; // hip height when sitting (rig units, standing hip = 200*h)
   arms?: Keys<string>; // side view: swing | down | hold | phone | cane | carry | ride | shh | raise | pocket
   reach?: {at: TT; x: number; y: number; hold?: number; hand?: 'near' | 'far' | 'r' | 'l'; fy?: number}[]; // touch a world point
   ride?: string; // id of the actor carrying this one piggyback
+  mount?: {target: string; slot?: number}; // attach rider to a Hero Subject extra by id + seat slot
   lean?: number; // degrees, + = forward
   look2?: number; // side view head tilt, + = look up
   tip?: boolean; // tiptoe (short steps, lean)
@@ -91,6 +92,22 @@ export type Over = {
 /** a key track for one set option: [value, at, tweenSeconds?]. Numbers tween (easeIO), other values switch. */
 export type KeyTrack = [number | string | boolean | number[] | string[], TT, number?][];
 
+export type ExtraDef = {
+  id?: string; // stable id so actors can reference via `mount: {target: id, slot}`
+  k: string; // key in WORLD_PROPS or SUBJECTS
+  x: number;
+  y: number;
+  s?: number;
+  c?: string; // legacy variant string for WORLD_PROPS
+  pose?: Keys<string>; // multi-pose state for SUBJECTS (e.g. 'stalk', 'pounce', [['stalk', 0], ['pounce', 's4@vồ']])
+  expr?: Keys<string>; // expression for SUBJECTS
+  flip?: boolean;
+  tilt?: number; // roll/bank angle in degrees
+  z?: number; // depth-sort nudge
+  fg?: boolean; // render in foreground plane (d = 1.2)
+  path?: [number, number, TT][]; // optional animated motion path for creatures/vehicles
+};
+
 export type ShotDef = {
   at: string; // word anchor where this shot starts (first shot: 's1')
   name: string; // short human description, shown in QA sheets
@@ -103,7 +120,7 @@ export type ShotDef = {
   ease?: 'io' | 'out' | 'in' | 'lin';
   actors?: Actor[];
   over?: Over[];
-  extras?: {k: string; x: number; y: number; s?: number; c?: string}[]; // WORLD_PROPS placed on the floor
+  extras?: ExtraDef[]; // WORLD_PROPS or Hero SUBJECTS placed in the scene
   punch?: number; // zoom kick at shot start (gags), 0.04–0.08
   shake?: number; // camera shake px (impacts only)
   tilt?: number; // subtle Dutch/cinematic camera roll in degrees (e.g. -4..+4)

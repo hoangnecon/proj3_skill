@@ -18,7 +18,7 @@ belongs in the same series and carry the same density of detail. Agents that ski
 
 ## Inputs → outputs
 - In: `brief.md` (Characters, Locations), `beats.md` (segment map: who is where), G3 passed.
-- Out: `src/episode/cast.ts` (CAST + CAST_ROLES), `src/episode/sets.tsx` (EPISODE_SETS), `src/episode/geo.ts` (touch
+- Out: `src/episode/cast.ts` (CAST + CAST_ROLES), `src/episode/sets.tsx` (EPISODE_SETS), `src/episode/subjects.tsx` (multi-pose Hero `SUBJECTS`), `src/episode/geo.ts` (touch
   points), new props in `src/props.tsx` if needed, evidence in `qa/design/`, `gates/G4.review.md`.
 
 ## Workflow
@@ -30,15 +30,16 @@ belongs in the same series and carry the same density of detail. Agents that ski
    colours → story trait → register → `node scripts/design.mjs` → look at `cast_episode_p*.png` and every
    `expr_<key>.png` (open the light `_v.jpg` views; sets also get `set_<id>_zoom.jpg`, 3×3 full-resolution
    ninths to judge detail and text) → fix → `node scripts/design.mjs --changed` (re-renders only what changed) → repeat. Run `node scripts/lint.mjs design` until CH-* errors are gone.
-3. **Sets.** For each location: location card → object list (≥ 15, sets.md §9) → blocking sketch with
+3. **Sets & Drawn Sub-Scenes.** For each location: location card → object list (≥ 15, sets.md §9) → blocking sketch with
    touch points in `geo.ts` → six passes, rendering `node scripts/design.mjs --only set:<id>` after each
-   pass → compare with the exemplar plate of the same kind → `bounds` → register.
-4. **Lint.** `node scripts/lint.mjs design` must print 0 errors (checks `CH-*`, `SE-01..14`, `PR-01..04`, `TK-*`). It prints the density line per set
+   pass → compare with the exemplar plate of the same kind → `bounds` → register. For natural/outdoor environments, use the Botanical Kit in `kit.tsx` (`Leaf`, `GrassTuft`, `GrassStrip`, `LeafCluster`, `Bush`, `TreeCanopy`, `Vine`) rather than flat geometric blobs. In `long_16x9` episodes, every non-insert set MUST declare `actorScale: [minS, maxS]`, `shotScale: 'establishing' | 'medium' | 'closeup' | 'insert'`, and `location` (`LA-01`), and at least 3 locations should include `≥ 2` drawn `shotScale` plates (`SE-15`, never fake close-ups via camera zoom).
+3b. **Hero Subjects (`src/episode/subjects.tsx`).** Every recurring hero creature, boss, vehicle, or rideable machine MUST be registered in `SUBJECTS` (`PR-06`) with `title`, `kind`, `relToActor: [minR, maxR]`, optional `seats` for `Actor.mount`, and **`≥ 4` distinct poses** (at least 3 producing distinct SVG markup/bounds; no copy-paste static stickers).
+4. **Lint.** `node scripts/lint.mjs design` must print 0 errors (checks `CH-01..10`, `SE-01..15`, `PR-01..06`, `LA-01`, `TK-01..03`). It prints the density line per set
    (`set kitchen: 118 shapes · 14 colours · 6 texts · halftone 4 · glow 3 · mid 2`). Do not weaken a
    threshold; add detail.
 5. **Render all evidence.** `node scripts/design.mjs` (writes cast pages, expression sheets for every
-   principal and support, `props_episode_p*.png` + `_v.jpg` human-scale prop sheets, set plates + grids, and auto-generates `qa/design/visual_spec.json` with `cast`, `sets`, `world_props`, and `hand_props` specs).
-6. **Review.** Fill `gates/G4.review.md`: one line per evidence image — including `props_episode_p*_v.jpg` (mandatory check that vehicles/furniture match the `575 px` adult / `435 px` child ruler and zero text is occluded) and every `set_<id>_v.jpg` / `_grid_v.jpg` — with what you actually saw (≥ 4
+   principal and support, `props_episode_p*.png` + `_v.jpg` human-scale prop sheets, `subject_<id>.png` + `_v.jpg` multi-pose Hero Subject sheets, set plates + grids with scale silhouettes, and auto-generates `qa/design/visual_spec.json` with `cast`, `sets`, `subjects`, `world_props`, and `hand_props` specs).
+6. **Review.** Fill `gates/G4.review.md`: one line per evidence image — including `props_episode_p*_v.jpg`, every `subject_<id>_v.jpg` (verify `≥ 4` distinct poses and `relToActor` human-scale proportions), and every `set_<id>_v.jpg` / `_grid_v.jpg` — with what you actually saw (≥ 4
    words) and the rubric answers (characters.md §8, sets.md §11).
 7. **Show the user** the cast sheet and the set plates (send the PNGs) and get their OK. Put their words
    in `user_quote`. If they asked you to carry on without checking, use `approval: delegated` and quote that.
@@ -67,3 +68,5 @@ belongs in the same series and carry the same density of detail. Agents that ski
 | Lint PR-01 / PR-02 prop scale or text overlap | scale vehicle/cart to human-scale table (sets.md §3b), move opaque wheel/shape clear of `<text>`, verify in `props_episode_p*_v.jpg` |
 | Lint PR-03 disembodied `*Head` prop | a `*Head` prop exists alongside its full-body `WORLD_PROPS` entry — remove the disembodied head and use full-body multi-pose props instead |
 | Lint PR-04 `HAND_PROPS` grip or size | keep grip origin `(0,0)` within `<= 120 px` of the prop (`gripDist <= 120`) and max dimension `<= 380 px` |
+| Lint PR-06 Hero Subject poses/spec | register in `src/episode/subjects.tsx` with `title`, `relToActor: [minR, maxR]`, and `>= 4` poses (at least 3 visually distinct SVG outputs); render `qa/design/subject_<id>.png` |
+| Lint LA-01 missing set scale/sub-scene metadata | declare `actorScale: [minS, maxS]`, `shotScale` (`establishing|medium|closeup|insert`), and `location` on every non-insert `long_16x9` set |

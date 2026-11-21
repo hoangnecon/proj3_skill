@@ -41,17 +41,16 @@ export const PersonBack: React.FC<BackProps> = ({look, pose, t, gaze = 0, lean =
   const HR = 100 * (look.head ?? 1); // bán kính đầu
   const hy = shY - 8 - HR * 0.9;
   const legs = g ? 'none' : pose.legs ?? 'stand';
-  const sitDrop = legs === 'sit' ? 70 : 0;
+  const bodyDrop = legs === 'sit' ? 70 : legs === 'crouch' ? 62 * H : legs === 'ride' ? 68 * H : legs === 'push' ? 24 * H : 0;
+  const bY = legY + bodyDrop;
+  const sY = shY + bodyDrop;
 
   // --- tay (hỗ trợ đầy đủ POSES + IK target hướng vào cảnh) ---
   const armW = 30 * Math.min(1.25, W);
   const ua = 104 * H, fa = 96 * H;
-  const shoulder = (sg: number): [number, number] => [sg * (sw - 14), shY + 18 + sitDrop];
-  const shY0 = shY, legY0 = legY;
+  const shoulder = (sg: number): [number, number] => [sg * (sw - 14), sY + 18];
   const target = (sg: number, n: string): [number, number] => {
-    const hyy = hy + sitDrop;
-    const sY2 = shY0 + sitDrop;
-    const lY2 = legY0 + sitDrop;
+    const hyy = hy + bodyDrop;
     switch (n) {
       case 'mouth': return [sg * HR * 0.32, hyy + HR * 0.6];
       case 'taste': return [sg * HR * 0.32 + 33, hyy + HR * 0.6 + 90];
@@ -59,14 +58,14 @@ export const PersonBack: React.FC<BackProps> = ({look, pose, t, gaze = 0, lean =
       case 'ear': return [sg * HR * 0.95, hyy + HR * 0.1];
       case 'head': return [sg * HR * 0.7, hyy - HR * 0.6];
       case 'over': return [sg * 40, hyy - HR * 1.6];
-      case 'chest': return [sg * 10, sY2 + 90];
-      case 'pray': return [0, sY2 + 40];
-      case 'crossL': return [sw * 0.45, sY2 + 120];
-      case 'crossR': return [-sw * 0.45, sY2 + 104];
-      case 'hip': return [sg * (ww + 8), lY2 - 10];
-      case 'front': return [sg * 26, sY2 + 150];
+      case 'chest': return [sg * 10, sY + 90];
+      case 'pray': return [0, sY + 40];
+      case 'crossL': return [sw * 0.45, sY + 120];
+      case 'crossR': return [-sw * 0.45, sY + 104];
+      case 'hip': return [sg * (ww + 8), bY - 10];
+      case 'front': return [sg * 26, sY + 150];
     }
-    return [sg * sw, sY2 + 200];
+    return [sg * sw, sY + 200];
   };
   const armPts = (sg: number, a: Arm): [number, number][] => {
     const [x0, y0] = shoulder(sg);
@@ -87,8 +86,20 @@ export const PersonBack: React.FC<BackProps> = ({look, pose, t, gaze = 0, lean =
       if (sg * ex3 > sg * ex2) { ex2 = ex3; ey2 = ey3; }
       return [[x0, y0], [ex2, ey2], [tx, ty]];
     }
-    const t1 = rad(a[0]);
-    const t2 = rad(a[0] + a[1]);
+    let a0 = a[0], a1 = a[1];
+    if (legs === 'run') {
+      const swRun = Math.sin(t * 14) * sg;
+      a0 += swRun * 24;
+      a1 -= Math.max(0, swRun) * 14;
+    } else if (legs === 'climb') {
+      const swClimb = Math.sin(t * 7) * sg;
+      a0 += swClimb * 26;
+      a1 -= swClimb * 10;
+    } else if (legs === 'fall') {
+      a0 += Math.sin(t * 20 + (sg > 0 ? 1.8 : 0)) * 16;
+    }
+    const t1 = rad(a0);
+    const t2 = rad(a0 + a1);
     const x1 = x0 + sg * Math.sin(t1) * ua, y1 = y0 + Math.cos(t1) * ua;
     const x2 = x1 + sg * Math.sin(t2) * fa, y2 = y1 + Math.cos(t2) * fa;
     return [[x0, y0], [x1, y1], [x2, y2]];
@@ -100,8 +111,6 @@ export const PersonBack: React.FC<BackProps> = ({look, pose, t, gaze = 0, lean =
   const sleeveC = look.top === 'tank' ? skin : g ? 'ghostDeep' : look.topC;
   const fullSleeve = ['suit', 'uniform', 'robe', 'chef', 'aothe', 'blouse'].includes(look.top);
 
-  const bY = legY + sitDrop;
-  const sY = shY + sitDrop;
   // Tay đưa ra trước ngực/mặt sẽ khuất sau lưng khi nhìn từ phía sau
   const isOccluded = (p: [number, number][]) =>
     Math.abs(p[2][0]) < sw * 0.68 && p[2][1] > sY - 30 && p[2][1] < bY + 60;
@@ -112,45 +121,139 @@ export const PersonBack: React.FC<BackProps> = ({look, pose, t, gaze = 0, lean =
     <g key={k}>
       {limb(p, armW, fullSleeve ? sleeveC : skin, k + 'a')}
       {!fullSleeve && limb([p[0], [p[0][0] + (p[1][0] - p[0][0]) * 0.5, p[0][1] + (p[1][1] - p[0][1]) * 0.5]], armW + 6, sleeveC, k + 's')}
-      {dim && <path d={`M${p[0][0]} ${p[0][1]}L${p[1][0]} ${p[1][1]}L${p[2][0]} ${p[2][1]}`} stroke={PAL.ink} strokeWidth={armW} strokeLinecap="round" strokeLinejoin="round" fill="none" opacity={0.14} />}
+      {dim && <path d={`M${p[0][0].toFixed(1)} ${p[0][1].toFixed(1)}L${p[1][0].toFixed(1)} ${p[1][1].toFixed(1)}L${p[2][0].toFixed(1)} ${p[2][1].toFixed(1)}`} stroke={PAL.ink} strokeWidth={armW} strokeLinecap="round" strokeLinejoin="round" fill="none" opacity={0.14} />}
     </g>
   );
   const drawHand = (p: [number, number], k: string) => <S key={k} d={E(p[0], p[1], 17, 17)} f={skin} />;
 
-  // --- chân & gót giày nhìn từ sau ---
+  // --- chân khớp gối 2 khúc [hip, knee, ankle] & gót giày nhìn từ sau ---
   const legX = 34 * W + belly * 10;
   const legW = 40 * Math.min(1.2, W);
   const legEls: React.ReactNode[] = [];
   const shoe = look.shoes ?? 'red';
-  const drawBackShoe = (fx: number, fy: number, k: string) => (
-    <g key={k}>
-      <S d={Rr(fx - 26, fy - 24, 52, 24, 11)} f={shoe} />
+  const drawBackShoe = (ax: number, ay: number, k: string, rot = 0) => (
+    <g key={k} transform={`translate(${ax.toFixed(1)} ${ay.toFixed(1)}) rotate(${rot.toFixed(1)})`}>
+      <S d={Rr(-26, -6, 52, 24, 11)} f={shoe} />
       {/* đế giày + đường may gót phía sau */}
-      <S d={Rr(fx - 24, fy - 8, 48, 8, 4)} f="ink" sw={2} />
-      <L d={`M${fx} ${fy - 23}v14`} w={3.5} o={0.55} />
+      <S d={Rr(-24, 10, 48, 8, 4)} f="ink" sw={2} />
+      <L d="M0 -5v14" w={3.5} o={0.55} />
     </g>
   );
+  const drawKneeCrease = (kx: number, ky: number, k: string, o = 0.5) => (
+    <L key={k} d={`M${(kx - legW * 0.34).toFixed(1)} ${ky.toFixed(1)}q${(legW * 0.34).toFixed(1)} 5 ${(legW * 0.68).toFixed(1)} 0`} w={4} o={o} />
+  );
 
-  if (legs === 'stand' || legs === 'walk') {
-    const sw2 = legs === 'walk' ? Math.sin(t * 9) * 14 : 0;
+  if (legs === 'stand') {
     for (const sg of [-1, 1]) {
-      const lift = legs === 'walk' ? Math.max(0, sg * Math.sin(t * 9)) * 12 : 0;
-      const fx = sg * legX + sg * sw2 * (sg > 0 ? 0.5 : -0.5);
-      const kneeY = legY * 0.52 - lift * 0.4;
-      legEls.push(limb([[sg * legX, legY + 10], [fx, -18 - lift]], legW, look.pants, 'leg' + sg));
-      // nếp khoeo chân phía sau + bóng chấm halftone
-      legEls.push(<L key={'kn' + sg} d={`M${fx - legW * 0.36} ${kneeY}q${legW * 0.36} ${5} ${legW * 0.72} 0`} w={4} o={0.55} />);
+      const hip: [number, number] = [sg * legX, bY + 10];
+      const knee: [number, number] = [sg * (legX + 2), bY * 0.5];
+      const ankle: [number, number] = [sg * legX, -18];
+      legEls.push(limb([hip, knee, ankle], legW, look.pants, 'leg' + sg));
+      legEls.push(drawKneeCrease(knee[0], knee[1], 'kn' + sg, 0.55));
       if (sg > 0) {
-        legEls.push(<Sh key={'lsh' + sg} d={R(fx - legW * 0.1, legY + 10, legW * 0.62, Math.max(10, -legY - 34 - lift))} o={0.42} />);
+        legEls.push(<Sh key={'lsh' + sg} d={R(ankle[0] - legW * 0.1, bY + 10, legW * 0.62, Math.max(10, -bY - 34))} o={0.42} />);
       }
-      legEls.push(drawBackShoe(fx, -lift, 'sh' + sg));
+      legEls.push(drawBackShoe(ankle[0], ankle[1], 'sh' + sg));
+    }
+  } else if (legs === 'walk') {
+    for (const sg of [-1, 1]) {
+      const stride = Math.sin(t * 9) * sg;
+      const lift = Math.max(0, stride) * 20;
+      const hip: [number, number] = [sg * legX, bY + 10];
+      const knee: [number, number] = [sg * (legX + 5 + Math.max(0, stride) * 8), bY * 0.5 - lift * 0.65];
+      const ankle: [number, number] = [sg * (legX + stride * 8), -18 - lift];
+      legEls.push(limb([hip, knee, ankle], legW, look.pants, 'leg' + sg));
+      legEls.push(drawKneeCrease(knee[0], knee[1], 'kn' + sg, 0.55));
+      if (sg > 0) {
+        legEls.push(<Sh key={'lsh' + sg} d={R(ankle[0] - legW * 0.1, bY + 10, legW * 0.62, Math.max(10, -bY - 34 - lift))} o={0.42} />);
+      }
+      legEls.push(drawBackShoe(ankle[0], ankle[1], 'sh' + sg, stride > 0 ? sg * stride * 12 : 0));
+    }
+  } else if (legs === 'run') {
+    for (const sg of [-1, 1]) {
+      const stride = Math.sin(t * 14) * sg;
+      const lift = Math.max(0, stride) * 44;
+      const trail = Math.max(0, -stride) * 18;
+      const hip: [number, number] = [sg * legX, bY + 10];
+      const knee: [number, number] = [sg * (legX + 10 + Math.max(0, stride) * 14), bY * 0.44 - lift * 0.85];
+      const ankle: [number, number] = [sg * (legX + stride * 14), -18 - lift - trail * 0.5];
+      legEls.push(limb([hip, knee, ankle], legW, look.pants, 'leg' + sg));
+      legEls.push(drawKneeCrease(knee[0], knee[1], 'kn' + sg, 0.55));
+      legEls.push(drawBackShoe(ankle[0], ankle[1], 'sh' + sg, sg * (stride > 0 ? 16 : -10)));
     }
   } else if (legs === 'sit') {
     for (const sg of [-1, 1]) {
       const fx = sg * (legX + 10);
-      legEls.push(limb([[sg * legX, legY + sitDrop], [sg * (legX + 14), legY + sitDrop + 20], [fx, -18]], legW, look.pants, 'leg' + sg));
-      legEls.push(<L key={'kn' + sg} d={`M${fx - legW * 0.32} ${legY * 0.4}q${legW * 0.32} 4 ${legW * 0.64} 0`} w={4} o={0.45} />);
-      legEls.push(drawBackShoe(fx, 0, 'sh' + sg));
+      legEls.push(limb([[sg * legX, bY], [sg * (legX + 14), bY + 20], [fx, -18]], legW, look.pants, 'leg' + sg));
+      legEls.push(drawKneeCrease(fx, legY * 0.4, 'kn' + sg, 0.45));
+      legEls.push(drawBackShoe(fx, -18, 'sh' + sg));
+    }
+  } else if (legs === 'crouch') {
+    for (const sg of [-1, 1]) {
+      const hip: [number, number] = [sg * legX, bY + 6];
+      const knee: [number, number] = [sg * (legX + 24), bY + 46 * H];
+      const ankle: [number, number] = [sg * (legX + 16), -18];
+      legEls.push(limb([hip, knee, ankle], legW, look.pants, 'leg' + sg));
+      legEls.push(drawKneeCrease(knee[0], knee[1], 'kn' + sg, 0.52));
+      legEls.push(drawBackShoe(ankle[0], ankle[1], 'sh' + sg, sg * 6));
+    }
+  } else if (legs === 'ride') {
+    // straddling knees clearly visible from behind
+    for (const sg of [-1, 1]) {
+      const hip: [number, number] = [sg * legX, bY + 6];
+      const knee: [number, number] = [sg * (legX + 34), bY + 34 * H];
+      const ankle: [number, number] = [sg * (legX + 22), -26 * H];
+      legEls.push(limb([hip, knee, ankle], legW, look.pants, 'leg' + sg));
+      legEls.push(drawKneeCrease(knee[0], knee[1], 'kn' + sg, 0.52));
+      legEls.push(drawBackShoe(ankle[0], ankle[1], 'sh' + sg, sg * 16));
+    }
+  } else if (legs === 'jump') {
+    for (const sg of [-1, 1]) {
+      const hip: [number, number] = [sg * legX, bY + 8];
+      const knee: [number, number] = [sg * (legX + 18), bY + 26 * H];
+      const ankle: [number, number] = [sg * (legX + 8), bY + 76 * H];
+      legEls.push(limb([hip, knee, ankle], legW, look.pants, 'leg' + sg));
+      legEls.push(drawKneeCrease(knee[0], knee[1], 'kn' + sg, 0.5));
+      legEls.push(drawBackShoe(ankle[0], ankle[1], 'sh' + sg, sg * 18));
+    }
+  } else if (legs === 'fall') {
+    for (const sg of [-1, 1]) {
+      const kick = Math.sin(t * 18 + (sg > 0 ? 1.4 : 0)) * 14;
+      const asym = sg > 0 ? -16 : 12;
+      const hip: [number, number] = [sg * legX, bY + 8];
+      const knee: [number, number] = [sg * (legX + 26) + sg * kick * 0.5, bY + 28 * H + asym * 0.8 + kick * 0.4];
+      const ankle: [number, number] = [sg * (legX + 46) + sg * kick, bY + 74 * H + asym * 1.4 + kick];
+      legEls.push(limb([hip, knee, ankle], legW, look.pants, 'leg' + sg));
+      legEls.push(drawKneeCrease(knee[0], knee[1], 'kn' + sg, 0.48));
+      legEls.push(drawBackShoe(ankle[0], ankle[1], 'sh' + sg, sg * (28 + kick)));
+    }
+    legEls.push(
+      <L key="fm1" d={`M${-legX - 72} ${bY + 30}q-18 24 4 46`} w={4} o={0.35} />,
+      <L key="fm2" d={`M${legX + 74} ${bY + 12}q18 22 -4 44`} w={4} o={0.35} />,
+    );
+  } else if (legs === 'push') {
+    const fHip: [number, number] = [legX, bY + 8];
+    const fKnee: [number, number] = [legX + 24, bY + 52 * H];
+    const fAnkle: [number, number] = [legX + 14, -18];
+    const bHip: [number, number] = [-legX, bY + 8];
+    const bKnee: [number, number] = [-legX - 32, bY + 74 * H];
+    const bAnkle: [number, number] = [-legX - 58, -18];
+    legEls.push(limb([bHip, bKnee, bAnkle], legW, look.pants, 'leg-1'));
+    legEls.push(drawKneeCrease(bKnee[0], bKnee[1], 'kn-1', 0.48));
+    legEls.push(drawBackShoe(bAnkle[0], bAnkle[1], 'sh-1', -12));
+    legEls.push(limb([fHip, fKnee, fAnkle], legW, look.pants, 'leg1'));
+    legEls.push(drawKneeCrease(fKnee[0], fKnee[1], 'kn1', 0.52));
+    legEls.push(drawBackShoe(fAnkle[0], fAnkle[1], 'sh1', 4));
+  } else if (legs === 'climb') {
+    for (const sg of [-1, 1]) {
+      const cyc = Math.sin(t * 7) * sg;
+      const lift = (cyc * 0.5 + 0.5) * 56 * H;
+      const hip: [number, number] = [sg * legX, bY + 8];
+      const knee: [number, number] = [sg * (legX + 16 + (cyc > 0 ? 10 : 0)), bY + 42 * H - lift * 0.55];
+      const ankle: [number, number] = [sg * (legX + 8), -18 - lift * 0.75];
+      legEls.push(limb([hip, knee, ankle], legW, look.pants, 'leg' + sg));
+      legEls.push(drawKneeCrease(knee[0], knee[1], 'kn' + sg, 0.52));
+      legEls.push(drawBackShoe(ankle[0], ankle[1], 'sh' + sg, sg * (cyc > 0 ? 14 : -4)));
     }
   }
 
@@ -228,8 +331,17 @@ export const PersonBack: React.FC<BackProps> = ({look, pose, t, gaze = 0, lean =
     backDet.push(<rect key="v4" x={-ww - 6} y={bY - 30} width={2 * ww + 12} height={16} fill={PAL.trim} stroke={PAL.ink} strokeWidth={3} />);
   }
 
-  // --- ma: đuôi khói ---
-  const bob = g ? Math.sin(t * 2.2) * 10 : (pose.hop ?? 0);
+  // --- ma: đuôi khói; người thường: nhịp bước + squash/stretch + pitch + thở nhẹ ---
+  const modeBob =
+    legs === 'walk' ? Math.abs(Math.sin(t * 9)) * 7 :
+    legs === 'run' ? Math.abs(Math.sin(t * 14)) * 16 :
+    legs === 'ride' ? Math.sin(t * 6) * 4 :
+    legs === 'jump' ? Math.sin(t * 8) * 5 :
+    legs === 'climb' ? Math.abs(Math.sin(t * 7)) * 6 : 0;
+  const bob = g ? Math.sin(t * 2.2) * 10 : (pose.hop ?? 0) + modeBob;
+  const breath = Math.sin(t * 2.5) * 0.008;
+  const sq = Math.max(0.5, (pose.squash ?? 1) + breath);
+  const sxSq = 1 / Math.sqrt(sq);
   const tail = g ? (
     <g>
       <path d={`M${-hemW} ${hemY - 4}C${-hemW + 20} ${hemY + 60} ${-30} ${hemY + 40} ${-10 + Math.sin(t * 2) * 14} ${hemY + 130}C${40} ${hemY + 60} ${hemW - 10} ${hemY + 50} ${hemW} ${hemY - 4}Z`} fill={PAL.ghost} stroke={PAL.ink} strokeWidth={LINE} opacity={0.85} />
@@ -237,11 +349,11 @@ export const PersonBack: React.FC<BackProps> = ({look, pose, t, gaze = 0, lean =
     </g>
   ) : null;
 
-  const totalLean = (pose.lean ?? 0) + lean;
+  const totalLean = (pose.lean ?? 0) + lean + (pose.pitch ?? 0);
 
   return (
-    <g transform={`translate(0 ${-bob}) rotate(${totalLean} 0 ${legY})`} opacity={g ? 0.93 : 1}>
-      {g && <ellipse cx={0} cy={hy} rx={HR * 3.2} ry={HR * 4} fill="url(#glowG)" />}
+    <g transform={`translate(0 ${(-bob).toFixed(1)}) rotate(${totalLean.toFixed(2)} 0 ${bY.toFixed(1)}) scale(${sxSq.toFixed(4)} ${sq.toFixed(4)})`} opacity={g ? 0.93 : 1}>
+      {g && <ellipse cx={0} cy={hy + bodyDrop} rx={HR * 3.2} ry={HR * 4} fill="url(#glowG)" />}
       {propBack?.(hands)}
       {lBehind && drawArm(lp, 'la', true)}
       {rBehind && drawArm(rp, 'ra', true)}
@@ -266,7 +378,7 @@ export const PersonBack: React.FC<BackProps> = ({look, pose, t, gaze = 0, lean =
       {!lBehind && drawHand(hands.l, 'hl')}
       {!rBehind && drawHand(hands.r, 'hr')}
       {/* đầu sau vẽ sau cùng để tóc dài / gáy phủ tự nhiên lên vai */}
-      <HeadBack look={look} hy={hy + sitDrop} R={HR} gaze={gaze} />
+      <HeadBack look={look} hy={hy + bodyDrop} R={HR} gaze={gaze} />
     </g>
   );
 };

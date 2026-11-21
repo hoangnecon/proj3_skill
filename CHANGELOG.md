@@ -1,5 +1,25 @@
 # Changelog
 
+## `v4.2.0` — 2026-11-22 · Articulated Character Physics, Multi-Pose Hero Subjects, Botanical Kit & Mandatory Scale / 3×3 Layout / Anti-Fake-Zoom CI
+- **Pillar A — Articulated 4-View Character Physics (`chars.tsx`, `side.tsx`, `back.tsx`, `threeq.tsx`):**
+  - Added full articulated knee/elbow joint bending across all 4 views (`front`, `side`, `back`, `3q`) and expanded dynamic `legs`/`arms` action modes (`run`, `crouch`, `jump`, `fall`, `push`, `climb`, `cheer`).
+- **Pillar B — Multi-Pose Hero Subjects, Botanical Kit & Drawn Sub-Scene Contract (`subjects.ts`, `episode/subjects.tsx`, `kit.tsx`, `engine.ts`, `sets/types.ts`):**
+  - Added `SUBJECTS` registry (`SubjectDef` with `kind`, `relToActor`, `≥ 4` distinct `poses`, optional `exprs`, and `seats` mount anchors) + `Actor.mount` (`{target, slot}`) and `ExtraDef` animated `path`/`pose`/`expr`/`flip`/`tilt`/`z`/`fg`.
+  - Added riso-ink Botanical Kit primitives (`Leaf`, `GrassTuft`, `GrassStrip`, `LeafCluster`, `Bush`, `TreeCanopy`, `Vine`) in `kit.tsx`.
+  - Extended `SetDef` with `location`, `shotScale` (`establishing|medium|closeup|insert`), `actorScale` (`[minS, maxS]`), and `zones`.
+- **Pillar C — Film, SubjectSheet, Design & Delivery Integration (`Film.tsx`, `Sheets.tsx`, `Root.tsx`, `entry.tsx`, `design.mjs`, `deliver.mjs`):**
+  - Added live `SUBJECTS` rendering, animated extra paths, `Actor.mount` seat transforms with z-aware depth sorting in `Film.tsx`, `SubjectSheet` (`qa/design/subject_<id>.png`) + set-plate actor scale silhouettes in `Sheets.tsx`/`design.mjs`, and `SUBJECTS` export in `entry.tsx`.
+- **Pillar D — Mandatory Scale, 3×3 Layout Grid, Z-Aware Occlusion, Anti-Fake-Zoom & Multi-Pose Subject CI (`geom.mjs`, `lint.mjs`, `qa.mjs`, `sv_gate.py`, Skills & Docs):**
+  - `geom.mjs`: exported `measureSubjectBox` & `extraPos`; upgraded `shotGeometry` to resolve `SUBJECTS` + `WORLD_PROPS`, live `Actor.mount` coordinates & `depthY`, 3×3 spatial grid (`A1..C3`) + `24×16` union occupancy (`gridLayout`), actor/subject scale checks (`scaleIssues`), and hero creature frame-edge cut-offs (`creatureCutoffIssues`).
+  - `PR-06` (`lint.mjs design` ERROR): validates every `SUBJECT` has `title`, `relToActor`, and `≥ 4` poses (`≥ 3` visually distinct SVG outputs).
+  - `LA-01` (`lint.mjs design` & `shots` ERROR): enforces `actorScale`/`shotScale`/`location` on non-insert `long_16x9` sets, and verifies on-screen actor `s` vs `set.actorScale` and `SUBJECT` height vs `relToActor`.
+  - `LA-02` (`lint.mjs shots` ERROR/WARN + HOT): enforces 3×3 spatial grid clutter budget (`≥ 4` clusters/cell or `> 78%` occupancy ERROR; `≥ 3` clusters or `> 65%` WARN), grouping `Actor.mount` riders with their mount as one cluster.
+  - `LA-03` (`lint.mjs shots` ERROR): bans fake close-up camera zooms (`cam[2] > 1.35` or `cam2[2] > 1.45`) on `establishing`/`wide` sets; enhanced `SE-15` to require drawn `medium`/`closeup` sub-scenes (`≥ 3` locations with `≥ 2` drawn `shotScale` types).
+  - `LA-04` (`lint.mjs shots` ERROR + HOT) & z-aware `GE-17`: fixes `GE-17` to compare `depthY` (`y + z`) and skip mounted riders; bans non-`fg` hero creatures awkwardly sliced `35%..95%` off frame edges.
+  - `SH-18` (`lint.mjs shots` ERROR): requires recurring hero creatures/bosses/vehicles to be registered in `SUBJECTS` with `≥ 4` poses and varied across shots.
+  - `qa.mjs`: added `node scripts/qa.mjs layout [i]` (zero-browser 1-line-per-shot table & detailed 3×3 breakdown) and upgraded `qa.mjs where <i>` with 3×3 Grid Occupancy Matrix, `LA-01` scale issues, and `LA-04` creature cutoff; `lint.mjs shots` writes `qa/layout_report.json`.
+  - `sv_gate.py`: tracks `src/episode/subjects.tsx` and `src/subjects.ts` in G4 inputs and verifies `qa/design/subject_<id>.png` exists for every subject in `visual_spec.json`.
+
 ## `v4.1.0` — 2026-11-22 · Cinematic 16:9 Long-Form RSI: 4-View Rigs, True 16:9 QA, Anti-Slop/Severed-Limb CI & G2 Story Doctor (`docs/rsi-forensics-v4.0-2026-11-22.md`)
 - **Pillar 1 — Fixed 16:9 QA/Tile/Crop Corruption (`tile.py`, `crops.py`, `qa.mjs`, `design.mjs`, `deliver.mjs`, `blind_pack.mjs`):**
   - Fixed `tile.py` hardcoded `9:16` cell height (`h = int(w * 1920 / 1080)`) → dynamic aspect ratio from actual image dimensions + `4×3` wide grids for `16:9` contact sheets, strips, and `final_check.jpg`.
