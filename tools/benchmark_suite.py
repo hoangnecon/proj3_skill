@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unified Dual-Format Quality & Speed Benchmark CLI (RSI v4.5.0).
+"""Unified Dual-Format Quality & Speed Benchmark CLI (RSI v5.1.0).
 
 Runs a clean, read-only regression & speed benchmark across the suite and
 representative 9:16 Short + 16:9 Long-Form projects inside isolated temporary
@@ -389,7 +389,7 @@ def _count_field(val: object) -> int | None:
     return None
 
 
-def _extract_blueprint_counts(ep: Path, out: str) -> tuple[int, int, str]:
+def _extract_blueprint_counts(ep: Path, out: str) -> tuple[int, int, int, str]:
     candidates: list[Path] = []
     # Any JSON path mentioned in stdout
     for m in re.findall(r"([A-Za-z0-9_./-]+\.json)\b", out):
@@ -440,6 +440,7 @@ def _extract_blueprint_counts(ep: Path, out: str) -> tuple[int, int, str]:
 
     subjects = 0
     sub_scenes = 0
+    location_packs = 0
     if isinstance(bp_data, dict):
         metrics = bp_data.get("metrics") if isinstance(bp_data.get("metrics"), dict) else {}
         summary = bp_data.get("summary") if isinstance(bp_data.get("summary"), dict) else {}
@@ -499,6 +500,21 @@ def _extract_blueprint_counts(ep: Path, out: str) -> tuple[int, int, str]:
                         sub_scenes = n
                         break
 
+        for cand in (
+            metrics.get("locations_with_3plus_angles"),
+            bp_data.get("locations_with_3plus_angles"),
+            summary.get("locations_with_3plus_angles"),
+            counts.get("locations_with_3plus_angles"),
+            metrics.get("location_packs"),
+            bp_data.get("location_packs"),
+            summary.get("location_packs"),
+            counts.get("location_packs"),
+        ):
+            n = _count_field(cand)
+            if n is not None:
+                location_packs = n
+                break
+
     # Regex fallback from stdout if JSON didn't provide non-zero counts
     if subjects == 0:
         m_sub = re.search(r"(?:hero[_\s-]*)?subjects?\s*[=:]\s*(\d+)", out, re.I)
@@ -508,8 +524,12 @@ def _extract_blueprint_counts(ep: Path, out: str) -> tuple[int, int, str]:
         m_sc = re.search(r"(?:sub[_\s-]?scenes?|set[_\s-]?plates?|sets)\s*[=:]\s*(\d+)", out, re.I)
         if m_sc:
             sub_scenes = int(m_sc.group(1))
+    if location_packs == 0:
+        m_lp = re.search(r"(?:locations_with_3plus_angles|location[_\s-]?packs?|locs3\+)\s*[=:]\s*(\d+)", out, re.I)
+        if m_lp:
+            location_packs = int(m_lp.group(1))
 
-    return subjects, sub_scenes, bp_rel
+    return subjects, sub_scenes, location_packs, bp_rel
 
 
 def run_plan_assets_check(ep: Path, py_exe: str, env: dict[str, str]) -> dict:
@@ -523,13 +543,15 @@ def run_plan_assets_check(ep: Path, py_exe: str, env: dict[str, str]) -> dict:
             "elapsed_s": 0.0,
             "subjects": 0,
             "sub_scenes": 0,
+            "locations_with_3plus_angles": 0,
+            "location_packs": 0,
             "blueprint_path": "",
             "reason": "scripts/plan_assets.py not present",
             "error": "",
         }
 
     rc, dt, out, err = run_cmd([py_exe, "scripts/plan_assets.py"], ep, env, timeout_s=60.0)
-    subjects, sub_scenes, bp_rel = _extract_blueprint_counts(ep, out)
+    subjects, sub_scenes, location_packs, bp_rel = _extract_blueprint_counts(ep, out)
     return {
         "passed": rc == 0,
         "skipped": False,
@@ -538,6 +560,8 @@ def run_plan_assets_check(ep: Path, py_exe: str, env: dict[str, str]) -> dict:
         "elapsed_s": round(dt, 3),
         "subjects": subjects,
         "sub_scenes": sub_scenes,
+        "locations_with_3plus_angles": location_packs,
+        "location_packs": location_packs,
         "blueprint_path": bp_rel,
         "summary": (out.strip().splitlines()[-1][:140] if out.strip() else ""),
         "error": (err.strip() or out.strip())[:200] if rc != 0 else "",
@@ -793,7 +817,7 @@ def render_scorecard(report: dict) -> str:
                 lines.append(
                     f"| 9:16 Short · `plan_assets.py` | {'PASS' if pa['passed'] else 'FAIL'} | "
                     f"{pa['elapsed_ms']:.0f} ms | {0 if pa['passed'] else 1} | 0 | "
-                    f"subjects={pa['subjects']}, sub_scenes={pa['sub_scenes']} |"
+                    f"subjects={pa['subjects']}, sub_scenes={pa['sub_scenes']}, locs3+={pa.get('locations_with_3plus_angles', pa.get('location_packs', 0))} |"
                 )
         la = sc["lint_all"]
         ly = sc["qa_layout"]
@@ -840,7 +864,7 @@ def render_scorecard(report: dict) -> str:
                 lines.append(
                     f"| 16:9 Long · `plan_assets.py` | {'PASS' if pa['passed'] else 'FAIL'} | "
                     f"{pa['elapsed_ms']:.0f} ms | {0 if pa['passed'] else 1} | 0 | "
-                    f"subjects={pa['subjects']}, sub_scenes={pa['sub_scenes']} |"
+                    f"subjects={pa['subjects']}, sub_scenes={pa['sub_scenes']}, locs3+={pa.get('locations_with_3plus_angles', pa.get('location_packs', 0))} |"
                 )
         ls = lc["lint_shots"]
         ly = lc["qa_layout"]
@@ -884,7 +908,7 @@ def render_scorecard(report: dict) -> str:
             lines.append(
                 f"| 16:9 Long-Script (`{Path(lsp['path']).name}`) · `plan_assets.py` | {'PASS' if pa['passed'] else 'FAIL'} | "
                 f"{pa['elapsed_ms']:.0f} ms | {0 if pa['passed'] else 1} | 0 | "
-                f"subjects={pa['subjects']}, sub_scenes={pa['sub_scenes']} |"
+                f"subjects={pa['subjects']}, sub_scenes={pa['sub_scenes']}, locs3+={pa.get('locations_with_3plus_angles', pa.get('location_packs', 0))} |"
             )
 
     # Show any failure details concisely

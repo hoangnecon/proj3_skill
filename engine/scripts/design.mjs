@@ -4,10 +4,12 @@
 //   subject_<id>.png           every hero subject in src/episode/subjects.tsx (poses, ruler, mount pins, exprs)
 //   expr_<look>.png            per principal/support: 12 expressions, 6 poses, 6 3/4 physics poses, walk cycle, sitting
 //   set_<id>.png / _grid.png   every episode set (clean plate + world/thirds/depth/scale layout grid)
+//   overview_sets.jpg          all episode set plates grouped by (location, shotScale, id)
+//   location_<slug>_pack.jpg   per-location multi-angle continuity strip for every location with >= 2 plates
 //   every sheet also gets a light <name>_v.jpg to LOOK at (≤ 1600 px, JPEG); every set plate a set_<id>_zoom.jpg
 //   (3×3 full-resolution ninths); `--changed` re-renders only changed sheets; `--status` lists stale sheets (G4)
 //   --exemplar                 also render the exemplar cast + ex-* plates for side-by-side comparison
-// Usage: node scripts/design.mjs [--exemplar] [--only set:<id>|look:<key>|subject:<id>|subjects|props]
+// Usage: node scripts/design.mjs [--exemplar] [--only set:<id>|loc:<location>|look:<key>|subject:<id>|subjects|props]
 import {cachedBundle} from './bundle_cache.mjs';
 import {renderStill, selectComposition, openBrowser} from '@remotion/renderer';
 import crypto from 'node:crypto';
@@ -113,8 +115,15 @@ for (const k of castKeys) {
   const role = P.CAST_ROLES[k]?.role;
   if ((!only && role !== 'extra') || only === 'look:' + k) jobs.push(['ExprSheet', {look: k}, `qa/design/expr_${k}.png`]);
 }
+const onlyLoc = only && only.startsWith('loc:') ? only.slice(4) : null;
 for (const id of setIds) {
-  if (only && only !== 'set:' + id) continue;
+  if (only) {
+    if (onlyLoc) {
+      if (P.EPISODE_SETS[id]?.location !== onlyLoc) continue;
+    } else if (only !== 'set:' + id) {
+      continue;
+    }
+  }
   jobs.push(['SetPlate', {id, grid: false}, `qa/design/set_${id}.png`]);
   jobs.push(['SetPlate', {id, grid: true}, `qa/design/set_${id}_grid.png`]);
 }
@@ -157,6 +166,8 @@ const is16x9 = (() => {
       location: d.location ?? null,
       shotScale: d.shotScale ?? null,
       angle: d.angle ?? null,
+      cameraDir: d.cameraDir ?? null,
+      landmarks: d.landmarks ?? [],
       actorScale: d.actorScale ?? null,
       zones: d.zones ?? null,
     }];
@@ -222,17 +233,32 @@ console.log(`design: ${todo.length} rendered, ${jobs.length - todo.length} uncha
 const plates = jobs.filter(([id, props]) => id === 'SetPlate' && !props.grid && !P.SETS[props.id]?.insert).map(([, , out]) => out);
 if (plates.length) execFileSync(PY, ['scripts/plate_check.py', ...plates], {stdio: 'inherit'});
 // glanceable G4 set overview sheet (qa/design/overview_sets.jpg — .jpg so sv_gate G4 .png glob stays untouched)
-const epPlates = setIds.filter((id) => !P.EPISODE_SETS[id]?.insert && fs.existsSync(`qa/design/set_${id}.png`));
+const SHOT_SCALE_ORDER = {establishing: 0, medium: 1, closeup: 2, insert: 3};
+const sortByLocScaleId = (a, b) => {
+  const da = P.EPISODE_SETS[a] ?? {};
+  const db = P.EPISODE_SETS[b] ?? {};
+  const la = String(da.location ?? '~');
+  const lb = String(db.location ?? '~');
+  if (la !== lb) return la.localeCompare(lb);
+  const sa = SHOT_SCALE_ORDER[da.shotScale] ?? 9;
+  const sb = SHOT_SCALE_ORDER[db.shotScale] ?? 9;
+  if (sa !== sb) return sa - sb;
+  return a.localeCompare(b);
+};
+const epPlates = setIds
+  .filter((id) => !P.EPISODE_SETS[id]?.insert && fs.existsSync(`qa/design/set_${id}.png`))
+  .sort(sortByLocScaleId);
 if (!only && plates.length >= 2 && epPlates.length >= 2) {
   const plateStats = (() => {
     try { return JSON.parse(fs.readFileSync('qa/design/plate_stats.json', 'utf8')); }
     catch { return {}; }
   })();
-  const maxLabel = is16x9 ? 38 : 28;
+  const maxLabel = is16x9 ? 42 : 28;
   const cells = epPlates.map((id) => {
     const d = P.EPISODE_SETS[id] ?? {};
     const st = plateStats[id] ?? {};
-    const fullLabel = `${id} (${d.location ?? '-'} · ${d.shotScale ?? '-'} · ${d.angle ?? '-'})`;
+    const angPart = d.cameraDir ? `${d.angle ?? '-'}/${d.cameraDir}` : `${d.angle ?? '-'}`;
+    const fullLabel = `${id} (${d.location ?? '-'} · ${d.shotScale ?? '-'} · ${angPart})`;
     const label = fullLabel.length > maxLabel ? fullLabel.slice(0, maxLabel - 1) + '…' : fullLabel;
     return {
       img: `qa/design/set_${id}.png`,
@@ -253,6 +279,46 @@ if (!only && plates.length >= 2 && epPlates.length >= 2) {
     execFileSync(PY, [path.resolve('scripts/tile.py'), tmpTileSpec], {stdio: 'inherit'});
   } finally {
     try { fs.unlinkSync(tmpTileSpec); } catch {}
+  }
+}
+// per-location multi-angle continuity strip (qa/design/location_<slug>_pack.jpg — .jpg so sv_gate .png glob stays clean)
+const targetPackLoc = onlyLoc || (only && only.startsWith('set:') ? (P.EPISODE_SETS[only.slice(4)]?.location ?? null) : null);
+if (!only || onlyLoc || (only && only.startsWith('set:'))) {
+  const byLoc = new Map();
+  for (const id of epPlates) {
+    const loc = P.EPISODE_SETS[id]?.location;
+    if (!loc) continue;
+    if (targetPackLoc && loc !== targetPackLoc) continue;
+    if (!byLoc.has(loc)) byLoc.set(loc, []);
+    byLoc.get(loc).push(id);
+  }
+  for (const [loc, group] of byLoc.entries()) {
+    if (group.length < 2) continue;
+    const slug = String(loc).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const packOut = `qa/design/location_${slug}_pack.jpg`;
+    const tmpPackSpec = `qa/design/_loc_pack_${slug}_tile.json`;
+    const cells = group.map((id) => {
+      const d = P.EPISODE_SETS[id] ?? {};
+      return {
+        img: `qa/design/set_${id}.png`,
+        label: `${id} · ${d.angle ?? '-'}/${d.cameraDir ?? '-'} · ${d.shotScale ?? '-'}`,
+        sub: `scale ${d.actorScale ? d.actorScale.join('-') : '-'} · lm: ${(d.landmarks ?? []).slice(0, 3).join(', ') || '-'}`,
+      };
+    });
+    fs.writeFileSync(tmpPackSpec, JSON.stringify({
+      out: packOut,
+      cols: Math.min(3, group.length),
+      w: is16x9 ? 540 : 360,
+      q: 78,
+      title: `LOCATION PACK: ${String(loc).toUpperCase()} · ${group.length} redrawn angles · ${is16x9 ? '16:9' : '9:16'}`,
+      cells,
+    }));
+    try {
+      execFileSync(PY, [path.resolve('scripts/tile.py'), tmpPackSpec], {stdio: 'inherit'});
+      console.log(`ok ${packOut}`);
+    } finally {
+      try { fs.unlinkSync(tmpPackSpec); } catch {}
+    }
   }
 }
 if (!jobs.length) console.log('nothing to render (cast and sets are empty)');

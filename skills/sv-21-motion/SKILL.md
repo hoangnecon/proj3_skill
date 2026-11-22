@@ -1,11 +1,11 @@
 ---
 name: sv-21-motion
-description: Animate characters in a story-video episode with studio 2D craft (v5.0) — 4-phase foot-roll walks/runs, tapered articulated limbs, curved spine silhouettes, grounded altitude shadows, parabolic jump arcs (arcH), 3-layer straddle mounts with IK grip anchors (MO-14), contact-locked pushing (pushTarget, MO-13), wind-blown secondary motion, and procedural riso action FX (dust/sweat/speed/impact/stars, MO-15) anchored to narration words — and verify every action with frame strips. Use whenever writing or editing actors/extras in src/episode/shotlist.ts or src/episode/subjects.tsx, fixing pasted-sticker or stiff motion, and for the motion half of gate G5.
+description: Animate characters in a story-video episode with studio 2D craft (v5.1) — 4-phase foot-roll walks/runs, tapered articulated limbs, curved spine silhouettes, grounded altitude shadows, parabolic jump arcs (arcH), 3-layer straddle mounts with IK grip anchors (MO-14), contact-locked pushing (pushTarget, MO-13), wind-blown secondary motion, procedural riso action FX (dust/sweat/speed/impact/stars, MO-15), and Long-Form multi-action choreography density (MO-16) anchored to narration words — and verify every action with frame strips. Use whenever writing or editing actors/extras in src/episode/shotlist.ts or src/episode/subjects.tsx, fixing pasted-sticker or stiff motion, and for the motion half of gate G5.
 ---
 
-# sv-21 · Motion and Studio 2D Animation Craft (`v5.0`)
+# sv-21 · Motion and Studio 2D Animation Craft (`v5.1`)
 
-Motion is judged frame by frame against the **"Pasted-Sticker Test"**. The user rejected episodes where *"bước chân đi này kia vẫn chưa ổn, chưa rõ ràng và chi tiết"* or where characters felt *"ghép vào cho có"* (floating without contact shadows, hands pushing empty air, riders pasted flat on top of a creature shell, or brick-stiff limbs with zero secondary life). Every character on screen must carry **weight, contact, squash-and-stretch, curved spine energy, and secondary motion** driven by `src/anim.ts` and verified by frame strips (`MO-01..MO-15`).
+Motion is judged frame by frame against the **"Pasted-Sticker Test"**. The user rejected episodes where *"bước chân đi này kia vẫn chưa ổn, chưa rõ ràng và chi tiết"* or where characters felt *"ghép vào cho có"* (floating without contact shadows, hands pushing empty air, riders pasted flat on top of a creature shell, or brick-stiff limbs with zero secondary life). Every character on screen must carry **weight, contact, squash-and-stretch, curved spine energy, and secondary motion** driven by `src/anim.ts` and verified by frame strips (`MO-01..MO-16`).
 
 ## Read first
 - `references/actor-api.md` — every Actor field and its exact behaviour (speeds, reach geometry, seat heights).
@@ -15,7 +15,7 @@ Motion is judged frame by frame against the **"Pasted-Sticker Test"**. The user 
 ## Workflow (inside the G5 loop of sv-22)
 1. Block each shot from `beats.md`: who is the subject, what physical action carries the line, which word
    it lands on. Write the actor with anchors, coordinates from `src/episode/geo.ts`, and `v5.0` contact/physics fields (`arcH`, `pushTarget`, `wind`, `fx`, `altitude`, `SubjectSeat.straddle`/`grip`).
-2. `node scripts/lint.mjs shots` — fix every `MO-01..MO-15`, `SZ-01..02`, `SH-*` error and resolve HOT warnings (`MO-13`, `MO-14`, `MO-15`). It also writes `qa/strips_needed.json`: one strip for every walk, reach, sit/stand, ride and animated set key.
+2. `node scripts/lint.mjs shots` — fix every `MO-01..MO-16`, `SZ-01..02`, `SH-*` error and resolve HOT warnings (`MO-13`, `MO-14`, `MO-15`, `MO-16`). It also writes `qa/strips_needed.json`: one strip for every walk, reach, sit/stand, ride and animated set key.
 3. `node scripts/qa.mjs strips` → `qa/strips/<name>.jpg` (6–10 full frames with timestamps, 2 rows, light JPEG).
 4. Look at EVERY strip with the checklist below. Fix, re-render that strip
    (`node scripts/qa.mjs strips <name>`), look again.
@@ -71,14 +71,23 @@ Never treat a 2D character as a static cutout slid from `(x0, y0)` to `(x1, y1)`
   - `'stars'` — orbiting dizzy stars around the head (bonks, hard falls, dazed beats).
 - **Fall/Trip Weight (`MO-15`):** Any actor using `p: 'fall'`, `p: 'trip'`, or `legs: 'fall'` with zero `fx` and zero shot `shake` triggers `WARN [MO-15]` — add `fx: ['impact', 'stars']` or `fx: ['dust']` (and optional `shake: 6..12`) so hits feel physical!
 
-### DO vs DON'T (`MO-13`, `MO-14`, `MO-15`)
-| Beat | DON'T (Pasted-Sticker Fail) | DO (Studio 2D Craft `v5.0`) | Guard |
+### 6. Long-Shot Multi-Action Choreography Density (`MO-16`, `long_16x9`)
+- Under `v5.1` Long-Form pacing (`shots_long_16x9`: `4.5–9.5 s` mean, `max 14.0 s`, `~65–110` shots per 10-minute episode), longer takes MUST stay continuously alive — never a dead static hold!
+- **`MO-16` Enforcement on `long_16x9`:**
+  - Any shot **`> 5.0 s`** with **`0` choreography events** is a hard **ERROR** (dead static hold).
+  - Any shot **`> 5.0 s`** with **`< 2` choreography events** triggers **WARN**.
+  - Any shot **`> 8.5 s`** with **`< 3` choreography events** triggers **WARN**.
+- **Counted choreography events (`MO-16`):** motivated `cam2` moves, set `keys`, multi-waypoint `path`, `arcH`, `mount`, `pushTarget`, `reach`, keyed `p`/`e`/`view`/`face`/`legs`/`arms`, `fx`/`wind`, and animated `extras`. Choreograph a clear Beginning → Mid-beat → Reaction arc inside every 5–12 s take (e.g. walk-in `path` → `reach` / `keys` door reaction → expression `e` + `cam2` push).
+
+### DO vs DON'T (`MO-13`, `MO-14`, `MO-15`, `MO-16`)
+| Beat | DON'T (Pasted-Sticker Fail) | DO (Studio 2D Craft `v5.1`) | Guard |
 |---|---|---|---|
 | Pushing a door / crate / lever | `{p: 'push', x: 500, y: 840}` with hands pushing empty air | `{p: 'push', x: 500, y: 840, pushTarget: [640, 560], lean: 14, fx: ['sweat']}` + `keys` door reaction | `MO-13` |
 | Two riders on a flying creature | Flat `seats: {fly: [{dx: 20, dy: -70}, {dx: -40, dy: -70}]}` or opposing `face: 1` / `face: -1` | `straddle: true`, real `grip: [gx, gy]`, `wind: 1.4`, same `face` facing travel direction + `altitude: 220` on creature | `MO-14`, `MO-15` |
 | Flying / hovering creature | `{k: 'ladybug', pose: 'fly', x: 900, y: 420}` floating with no ground reference | `{k: 'ladybug', pose: 'fly', x: 900, y: 420, altitude: 240}` so `GroundShadow` projects on the floor below | `MO-15` |
 | Jump across a gap | Static `p: 'jump'` mid-air or linear diagonal slide | `path: [[x0, y0, t0], [x1, y1, t1]], legs: 'jump', arcH: 150, fx: ['dust']` (shadow stays grounded) | `MO-15` |
 | Trip / bonk / hard fall | `{p: 'fall'}` with no FX and `shake: 0` (weightless sticker) | `{p: 'fall', fx: ['impact', 'stars']}` or `{legs: 'fall', fx: ['dust']}` + `shake: 8` | `MO-15` |
+| 6–10 s Long-Form shot (`long_16x9`) | Static wide frame with 0–1 pose changes across 7 seconds | Layer `≥ 2` (`≥ 3` if `> 8.5 s`) events: `path` + `reach`/keyed `p`/`e` + `cam2` push + set `keys` / `fx` | `MO-16` |
 
 ---
 
@@ -92,7 +101,7 @@ Never treat a 2D character as a static cutout slid from `(x0, y0)` to `(x1, y1)`
 | jump / fall | `arcH` body arcs smoothly while `GroundShadow` stays on floor; landings/falls pop with `fx: ['dust']` or `['impact', 'stars']` (`MO-15`) |
 | set key | the change (door sliding, number changing) is visible and starts on the word |
 
-## Core Rules (`MO-01..MO-15`)
+## Core Rules (`MO-01..MO-16`)
 - Walking = side view, always (`MO-04`). Front view is for standing, talking, gesturing.
 - No action without anticipation; no touch without the world reacting.
 - Speeds come from the character (`actor-api.md` table, `MO-02`/`MO-03`), not from "whatever fits the time": if the line is too short for the walk, start earlier or cut to the arrival. Waypoints must be monotonic in time (`MO-01`).
@@ -106,7 +115,7 @@ Never treat a 2D character as a static cutout slid from `(x0, y0)` to `(x1, y1)`
   - `flip: true` mirrors `pointL` / `pointR` — verify pointing direction points TOWARD the subject, never off-screen.
   - Never reach across the opposite side of `face` (`MO-11`: `(rc.x - x) * dir < -15`, arm slices across own face) or walk in `side` view with `arms: 'raise'` (`MO-11`: use `arms: 'swing'` or `arms: 'hold'`).
   - Never leave a floating sit (`MO-12`): keep `seatH <= 180` everywhere, and avoid `seatH > 40` on `outdoor`/`street`/`rain` sets unless `extras` includes a `bench`, `stool`, `chair`, or `desk` prop.
-  - Never air-push (`MO-13`), paste flat/contradictory riders on a creature (`MO-14`), use unknown `fx`, leave falls weightless, or fly a creature without `altitude` (`MO-15`).
+  - Never air-push (`MO-13`), paste flat/contradictory riders on a creature (`MO-14`), use unknown `fx`, leave falls weightless, fly a creature without `altitude` (`MO-15`), or leave a `long_16x9` shot `> 5.0 s` dead/under-choreographed (`MO-16`).
   - When narration describes a vehicle moving/rolling out, animate the prop's `x` or use set `keys` — never leave a vehicle stationary on a motion beat.
 - Never close G5 on strips you did not open. For hands, feet, shadows, and contact, open measurement crops (`node scripts/qa.mjs crops <i>`).
 
@@ -126,6 +135,7 @@ Never treat a 2D character as a static cutout slid from `(x0, y0)` to `(x1, y1)`
 | Riders look pasted flat on creature shell (`MO-14`) | add `straddle: true`, `grip: [gx, gy]`, and `wind: 1.2..1.5` to `SubjectSeat`, and match rider `face` to travel direction |
 | Flying creature floats disconnected (`MO-15`) | set `altitude: 160..280` on the flying/hovering `ExtraDef` so `GroundShadow` projects below |
 | Jump or fall looks stiff / weightless (`MO-15`) | add `arcH: 100..200` on jumps and `fx: ['impact', 'stars']` or `fx: ['dust']` + `shake` on falls/trips |
+| Long-Form shot `> 5.0 s` feels dead (`MO-16`) | choreograph `>= 2` events (`>= 3` if `> 8.5 s`): combine motivated `cam2`, `path`/`arcH`/`mount`/`pushTarget`/`reach`, keyed `p`/`e`/`view`/`face`/`legs`/`arms`, set `keys`, `fx`/`wind`, or animated `extras` |
 | Sitting in mid-air (`MO-12`) | match hip to seat (`seatH <= 180`; if `> 40` on `outdoor`/`street`/`rain`, add `bench`/`stool`/`chair`/`desk`) |
 | Character squashes thin (`sx = 0.12`) mid-path (`MO-10`) | `path` `dx` reversed while `face` is locked: make `dx` monotonic or `0` |
 | Character pops between views | key `view` ≥ 0.25 s before the move starts |

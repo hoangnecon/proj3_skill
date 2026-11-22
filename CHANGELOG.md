@@ -1,5 +1,20 @@
 # Changelog
 
+## `v5.1.0` — 2026-11-22 · Spatial Location Packs (24–30 Multi-Angle Redrawn Sets, `SE-17`, `location_<loc>_pack.jpg`) & Rich Multi-Action Long-Form Shots (`shots_long_16x9`, `MO-16`)
+- **Pillar 1 — Spatial Location Packs (`sets/types.ts`, `plan_assets.py`, `design.mjs`, `lint.mjs`):**
+  - Extended `SetDef` with `cameraDir?: 'front' | 'reverse' | 'left' | 'right' | 'top' | 'low' | 'detail'` and `landmarks?: string[]` (shared physical room fixtures drawn consistently across every redrawn camera angle of the same room).
+  - Upgraded `SE-15` for `long_16x9`: keeps `>= 15` hard floor (ERROR), warns below `24` drawn sets (target **`24–30` drawn sets** = 5–6 primary locations × 3–5 redrawn camera angles each), and warns if `< 3` primary locations have `>= 3` redrawn angles.
+  - Added `SE-17` (Spatial Location-Pack Continuity Guard): validates `cameraDir` enum and `landmarks` array format (ERROR), bans 3+ sets in one location duplicating identical `(angle, shotScale, cameraDir)` (ERROR), and warns when a 3+ set location declares zero overlapping `landmarks`.
+  - Upgraded `engine/scripts/plan_assets.py` (`v5.1.0`): plans `24–30` drawn sets grouped into Spatial Location Packs with extracted `shared_landmarks`, `cameraDir`, `~65–110` rich choreographed Long-Form shots, and 4 G4 set workers keeping whole location packs together.
+  - Upgraded `engine/scripts/design.mjs`: sorts `qa/design/overview_sets.jpg` by location and auto-tiles per-location multi-angle continuity strips **`qa/design/location_<loc>_pack.jpg`** for every location with `>= 2` rendered sets.
+- **Pillar 2 — Rich Multi-Action Long-Form Shots (`standards/pacing.json`, `lint.mjs`, `sv_doctor.py`):**
+  - Added `shots_long_16x9` to `standards/pacing.json` (`mean_s: [4.5, 9.5]`, `shots_per_min: [6.0, 14.0]`, `p10_s_min: 1.6`, `max_s: 14.0` → **`~65–110` rich dynamic shots** per 10-minute episode instead of 220 choppy static micro-cuts) while keeping 9:16 Shorts `shots` untouched.
+  - Added `MO-16` (Long-Shot Choreography Density Guard on `long_16x9`): flags any shot `> 5.0 s` with `0` choreography events as ERROR (dead static hold), `< 2` events as WARN, and `> 8.5 s` with `< 3` events as WARN, counting motivated `cam2`, set `keys`, multi-waypoint `path`, `arcH`, `mount`, `pushTarget`, `reach`, keyed `p`/`e`/`view`/`face`/`legs`/`arms`, `fx`/`wind`, and animated `extras`.
+  - Fixed `SZ-01` talking-actor height floor to be format-aware (`270 px` = 25% of 1080p height on `long_16x9`, keeping `480 px` = 25% of 1920p height on 9:16 Shorts), and added `primary_locations` / `locations_with_3plus_angles` / `location_pack_sheets` telemetry in `sv_doctor.py` (`check_g4`).
+- **Pillar 3 — Benchmark Suite Integration, Skill Docs & `v5.1.0` Manifest/Changelog:**
+  - Updated `tools/benchmark_suite.py` (`v5.1.0`) to extract `locations_with_3plus_angles` / `location_packs` from `plan_assets.py` blueprints and display `locs3+` in the dual-format scorecard.
+  - Updated `sv-02-long-form`, `sv-20-design-system`, `sv-21-motion`, `sv-22-shots-camera`, `CONVENTIONS.md`, `README.md`, `CHANGELOG.md`, and `.claude-plugin/plugin.json` (`5.1.0`, **137 lint rules**).
+
 ## `v5.0.0` — 2026-11-22 · Studio 2D Animation Physics (`src/anim.ts`), 3-Layer Straddle Mounting, Contact-Locked Effort, Living Action FX, Animation Craft CI (`MO-13..15`) & "Pasted-Sticker Test" Blind Review
 - **Pillar 1 — Studio 2D Animation Physics & Biomechanics Toolkit (`engine/src/anim.ts`, `engine.ts`, `subjects.ts`):**
   - Added pure-TS `src/anim.ts` providing 12-principles easing (`springSettle`, `anticipateEase`, `parabolicArc`), 4-phase foot-roll gait biomechanics (`footCycle` with `walk` 60% stance vs `run` 38% airborne flight phase + `gaitHipBob` delayed head counter-nod), organic tapered articulated limbs (`taperSegPath`, `TaperLimb` with merged silhouette outline, sleeve cuffs & joint creases), curved C-arc torso builder (`curvedTorsoPath`), secondary hair/cloth wind helper (`hairWindOffset`), grounding shadows (`GroundShadow`, `SeatShadow`), and procedural riso action FX (`DustPuff`, `SweatDrops`, `SpeedLines`, `ImpactBurst`, `DizzyStars`).

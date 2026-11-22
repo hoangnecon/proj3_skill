@@ -24,7 +24,9 @@ export type SetDef = {
   plateCam?: [number, number, number]; // camera for the design plate (default [540, 1150, 1])
   plateOpts?: Record<string, unknown>; // options for the design plate (e.g. door open, lights on)
   angle?: 'wide' | 'low' | 'high' | 'ots' | 'reverse' | 'closeup' | 'pov'; // optional camera angle grammar for set framing
+  cameraDir?: 'front' | 'reverse' | 'left' | 'right' | 'top' | 'low' | 'detail'; // camera compass/elevation viewpoint inside the parent location
   location?: string; // parent location id grouping drawn sub-scenes (e.g. 'lab', 'corridor', 'schoolyard')
+  landmarks?: string[]; // shared physical room/environment anchor IDs drawn consistently across all redrawn sub-scenes of the same location (e.g. ['mayThuPhong', 'bangXanh', 'quatTran', 'cuaSoTang3'])
   shotScale?: 'establishing' | 'medium' | 'closeup' | 'insert'; // true drawn scale of this plate (never fake close-up by over-zooming an establishing plate)
   actorScale?: [number, number]; // valid actor scale [minS, maxS] on the set's main floor plane (validated by LA-01 & drawn as silhouettes on _grid plate)
   zones?: {bgY?: number; mgY?: [number, number]; fgY?: number}; // explicit depth-lane Y coordinates for BG / MG / FG layout validation

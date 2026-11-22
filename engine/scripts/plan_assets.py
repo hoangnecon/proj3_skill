@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Deterministic G2->G4 Asset Blueprint & Parallel Worker Planner (RSI v4.5.0).
+"""Deterministic G2->G4 Asset Blueprint & Parallel Worker Planner (RSI v5.1.0).
 
 Zero-dependency stdlib planner that reads script.json, brief.md (if present), and
 beats.md (if present) in < 0.5s and produces:
-  - qa/asset_blueprint.json : machine-readable G4/G5 asset & parallel worker plan
+  - qa/asset_blueprint.json : machine-readable G4/G5 Spatial Location-Pack & parallel worker plan
   - qa/asset_blueprint.md   : crisp human-readable executive blueprint
 
 CLI:
@@ -28,14 +28,18 @@ from typing import Any
 
 VALID_SHOT_SCALES = ("establishing", "medium", "closeup", "insert")
 VALID_ANGLES = ("wide", "low", "high", "ots", "reverse", "closeup", "pov")
+VALID_CAMERA_DIRS = ("front", "reverse", "left", "right", "top", "low", "detail")
 
 TARGETS_LONG_16X9 = {
     "format": "16:9",
     "length_mode": "long_16x9",
     "min_cast": 10,
     "min_sets": 15,
-    "min_angles": 4,
-    "min_locations_with_subscenes": 3,
+    "target_sets": 25,
+    "min_angles": 5,
+    "min_locations_with_subscenes": 4,
+    "min_subscenes_per_primary_loc": 3,
+    "target_shots_range": [65, 110],
     "target_sla_min": 45,
 }
 
@@ -44,8 +48,11 @@ TARGETS_SHORT_9X16 = {
     "length_mode": "short_9x16",
     "min_cast": 3,
     "min_sets": 4,
+    "target_sets": 5,
     "min_angles": 2,
     "min_locations_with_subscenes": 1,
+    "min_subscenes_per_primary_loc": 1,
+    "target_shots_range": [50, 75],
     "target_sla_min": 15,
 }
 
@@ -284,6 +291,44 @@ CREATURE_HINT_RE = re.compile(
     r"(?i)(multi-pose|creature|boss|quái\s+thú|quái\s+vật|bọ\s+cánh\s+cam|mèo|kiến|chó|chim|nhện|chuột|rồng|robot|xe\s+buýt|ô\s*tô|tàu)",
     re.UNICODE,
 )
+
+# Physical room / environment landmark catalog (VN + EN) for deterministic spatial continuity anchors
+LANDMARK_CATALOG: list[tuple[str, list[str]]] = [
+    ("mayThuPhong", [r"máy\s+thu\s+phóng", r"máy\s+phóng\s+đại", r"shrink\s+machine", r"cỗ\s+máy"]),
+    ("nutDaoNguoc", [r"nút\s+đảo\s+ngược", r"nút\s+bấm", r"\breverse\s+button\b"]),
+    ("dongHoDemNguoc", [r"đồng\s+hồ\s+đếm\s+ngược", r"đồng\s+hồ", r"\bcountdown\s+clock\b", r"\bclock\b"]),
+    ("bangNoiQuy", [r"bảng\s+nội\s+quy", r"nội\s+quy", r"\brules?\s+board\b"]),
+    ("bangXanh", [r"bảng\s+xanh", r"bảng\s+đen", r"bảng\s+phấn", r"\bchalkboard\b", r"\bblackboard\b"]),
+    ("bienBaoLop", [r"tấm\s+biển\s+lớp", r"biển\s+lớp", r"biển\s+phòng", r"\broom\s+sign\b"]),
+    ("bienBao", [r"biển\s+báo", r"biển\s+hiệu", r"tấm\s+biển", r"\bsignboard\b", r"\bposter\b"]),
+    ("ongNghiem", [r"ống\s+nghiệm", r"giá\s+ống\s+nghiệm", r"\btest\s+tubes?\b", r"\bbeaker\b"]),
+    ("matBanGo", [r"mặt\s+bàn\s+gỗ", r"bàn\s+gỗ", r"bàn\s+thí\s+nghiệm", r"mặt\s+bàn", r"\blab\s+table\b", r"\bwooden\s+desk\b"]),
+    ("butChiGo", [r"bút\s+chì\s+gỗ", r"chiếc\s+bút\s+chì", r"bút\s+chì", r"\bpencil\b"]),
+    ("voOLi", [r"vở\s+ô\s*li", r"quyển\s+vở", r"\bnotebook\b"]),
+    ("bangDinh", [r"băng\s+dính", r"dải\s+băng\s+dính", r"\bsticky\s+tape\b", r"\btape\b"]),
+    ("rungCo", [r"rừng\s+cỏ", r"bãi\s+cỏ", r"thảm\s+cỏ", r"\bgrass\b", r"\blawn\b"]),
+    ("capSach", [r"cặp\s+sách", r"ba\s*lô", r"\bbackpack\b", r"\bschoolbag\b"]),
+    ("thuocGo", [r"thước\s+kẻ\s+gỗ", r"thước\s+gỗ", r"thước\s+kẻ", r"\bruler\b"]),
+    ("hopBut", [r"hộp\s+bút", r"\bpencil\s+case\b"]),
+    ("vachPhanTrang", [r"đường\s+phấn\s+trắng", r"vạch\s+phấn", r"phấn\s+trắng", r"\bchalk\s+line\b"]),
+    ("hopPhan", [r"hộp\s+phấn", r"\bchalk\s+box\b"]),
+    ("tuongGach", [r"tường\s+gạch", r"gạch\s+lát", r"mảng\s+tường", r"\bbrick\s+wall\b", r"\btiled\s+floor\b"]),
+    ("cuaSo", [r"cửa\s+sổ\s+bậu\s+gỗ", r"bậu\s+cửa\s+sổ", r"cửa\s+sổ", r"\bwindow\b"]),
+    ("tuCatMay", [r"tủ\s+cất\s+máy", r"tủ\s+thí\s+nghiệm", r"tủ\s+kính", r"tủ\s+gỗ", r"\bcabinet\b", r"\bglass\s+case\b"]),
+    ("quatTran", [r"quạt\s+trần", r"quạt\s+gió", r"gió\s+quạt", r"\bceiling\s+fan\b", r"\bfan\b"]),
+    ("hanhLang", [r"hành\s+lang", r"cột\s+hành\s+lang", r"\bcorridor\b", r"\bhallway\b"]),
+    ("cauThang", [r"cầu\s+thang", r"bậc\s+thang", r"\bstaircase\b", r"\bstairs\b"]),
+    ("lanCan", [r"lan\s+can", r"tay\s+vịn", r"\brailing\b", r"\bbalcony\b"]),
+    ("ongThoatNuoc", [r"ống\s+thoát\s+nước", r"đường\s+ống", r"\bdrain\s+pipe\b", r"\bpipe\b"]),
+    ("banGhe", [r"bàn\s+ghế", r"dãy\s+bàn", r"ghế\s+gỗ", r"\bdesks?\b", r"\bchairs?\b"]),
+    ("cuaRaVao", [r"cửa\s+phòng", r"cửa\s+lớp", r"cánh\s+cửa", r"khung\s+cửa", r"\bdoorway\b", r"\bdoor\b"]),
+    ("denTran", [r"đèn\s+xanh", r"đèn\s+đỏ", r"đèn\s+trần", r"đèn\s+huỳnh\s+quang", r"nắng\s+chiều", r"\blamp\b", r"\blight\b"]),
+    ("keSach", [r"kệ\s+sách", r"giá\s+sách", r"tủ\s+sách", r"\bbookshelf\b", r"\bshelf\b"]),
+    ("congTruong", [r"cổng\s+trường", r"sân\s+trường", r"\bschool\s+gate\b", r"\bcourtyard\b"]),
+    ("tanCay", [r"cây\s+phượng", r"tán\s+cây", r"gốc\s+cây", r"\btree\b"]),
+    ("quayHang", [r"quầy\s+hàng", r"sạp\s+hàng", r"quầy\s+bếp", r"\bcounter\b", r"\bstall\b"]),
+    ("cotDen", [r"cột\s+đèn", r"đèn\s+đường", r"\bstreetlight\b"]),
+]
 
 
 # ---------------------------------------------------------------------------
@@ -912,7 +957,7 @@ def extract_locations(
         seg_loc_assign.append(chosen)
         last_loc = chosen
 
-    # Attach segment counts & segment IDs to each location
+    # Attach segment counts, segment IDs & shared spatial landmarks to each location
     for loc in locs:
         loc["segments"] = [
             segments[i].get("id", f"s{i + 1}")
@@ -920,27 +965,177 @@ def extract_locations(
             if lid == loc["id"]
         ]
         loc["segment_count"] = len(loc["segments"])
+        loc["shared_landmarks"] = extract_location_landmarks(loc, segments, beats_map)
 
     return locs
+
+
+def extract_location_landmarks(
+    loc: dict[str, Any],
+    segments: list[dict[str, Any]],
+    beats_map: dict[str, dict[str, str]],
+) -> list[str]:
+    """Deterministically extract 4-6 physical room/environment anchor IDs for spatial continuity.
+
+    Always returns at least 3 sensible fallback anchors when brief text is sparse.
+    """
+    loc_id = str(loc.get("id") or "loc")
+    loc_id_low = loc_id.lower()
+    title_desc = f"{loc.get('title', '')}. {loc.get('description', '')}"
+
+    # Gather segment + visual notes text belonging to this location
+    seg_by_id = {str(s.get("id", "")): s for s in segments}
+    seg_texts: list[str] = []
+    for sid in loc.get("segments") or []:
+        seg = seg_by_id.get(sid)
+        if seg:
+            seg_texts.append(str(seg.get("text", "")))
+        vis = beats_map.get(sid, {}).get("visual", "")
+        if vis:
+            seg_texts.append(vis)
+    seg_corpus = "\n".join(seg_texts)
+
+    landmarks: list[str] = []
+    seen_low: set[str] = {loc_id_low}
+
+    def add_lm(candidate: str) -> None:
+        cand = candidate.strip()
+        if not cand or len(cand) < 3 or len(cand) > 32:
+            return
+        low = cand.lower()
+        if low in seen_low:
+            return
+        if low == "bienbao" and "bienbaolop" in seen_low:
+            return
+        seen_low.add(low)
+        landmarks.append(cand)
+
+    # Pass 1: Physical fixture / architectural catalog matches in location title+description (highest specificity)
+    for anchor_id, pats in LANDMARK_CATALOG:
+        if any(re.search(p, title_desc, re.IGNORECASE | re.UNICODE) for p in pats):
+            add_lm(anchor_id)
+            if len(landmarks) >= 6:
+                return landmarks[:6]
+
+    # Pass 2: Bolded fixtures/props in location description (e.g. **Máy Thu Phóng**, **ĐẢO NGƯỢC**)
+    for bm in re.finditer(r"\*\*([^*]{2,36})\*\*", str(loc.get("description", ""))):
+        phrase = bm.group(1).strip()
+        words = [w for w in re.split(r"\s+", phrase) if w]
+        if 1 <= len(words) <= 4:
+            cid = to_camel(phrase, fallback="")
+            if cid and not any(cid.lower() in existing.lower() or existing.lower() in cid.lower() for existing in landmarks):
+                add_lm(cid)
+                if len(landmarks) >= 6:
+                    return landmarks[:6]
+
+    # Pass 3: Physical fixture catalog matches in this location's segments & beats visual notes
+    if len(landmarks) < 5 and seg_corpus:
+        for anchor_id, pats in LANDMARK_CATALOG:
+            if any(re.search(p, seg_corpus, re.IGNORECASE | re.UNICODE) for p in pats):
+                add_lm(anchor_id)
+                if len(landmarks) >= 6:
+                    return landmarks[:6]
+
+    # Pass 4: Concise physical noun phrases from comma-separated clauses in description
+    if len(landmarks) < 4 and loc.get("description"):
+        desc_clean = re.sub(r"\([^)]*\)|`[^`]*`|\*\"[^\"]*\"\*|\"[^\"]*\"", " ", str(loc["description"]))
+        clauses = re.split(r"[,;]+|\bvà\b", desc_clean)
+        for cl in clauses:
+            folded = strip_accents(cl).lower()
+            words = [w for w in re.findall(r"[a-z]{2,}", folded) if w not in VN_STOPWORDS]
+            if 2 <= len(words) <= 3:
+                cid = to_camel(" ".join(words), fallback="")
+                if cid and len(cid) >= 5:
+                    add_lm(cid)
+                    if len(landmarks) >= 4:
+                        break
+
+    # Pass 5: Deterministic fallbacks (always >= 3 anchors even on sparse briefs)
+    fallbacks = [
+        f"{loc_id}MainFixture",
+        f"{loc_id}WallSign",
+        f"{loc_id}LightSource",
+        f"{loc_id}FloorAnchor",
+    ]
+    for fb in fallbacks:
+        if len(landmarks) >= 3:
+            break
+        add_lm(fb)
+
+    return landmarks[:6]
+
+
+def _select_plate_landmarks(
+    shared_landmarks: list[str],
+    camera_dir: str,
+    plate_idx: int = 0,
+) -> list[str]:
+    """Pick 2-4 shared room landmarks for a sub-scene plate, always overlapping the primary anchor."""
+    if not shared_landmarks:
+        return []
+    n = len(shared_landmarks)
+    if n <= 2:
+        return list(shared_landmarks)
+
+    if camera_dir == "front":
+        picked = shared_landmarks[:4]
+    elif camera_dir == "reverse":
+        picked = [shared_landmarks[0]] + shared_landmarks[1:3]
+        if n >= 4:
+            picked.append(shared_landmarks[-1])
+    elif camera_dir in ("left", "right"):
+        picked = [shared_landmarks[0], shared_landmarks[1]]
+        if n >= 3:
+            picked.append(shared_landmarks[2 if camera_dir == "left" else min(n - 1, 3)])
+    elif camera_dir in ("low", "top"):
+        picked = [shared_landmarks[0]] + shared_landmarks[1:min(n, 4)]
+    else:  # detail
+        picked = shared_landmarks[:2]
+        if n >= 4 and plate_idx % 2 == 1:
+            picked.append(shared_landmarks[2])
+
+    # Deduplicate preserving order, guarantee 2..4 items
+    out: list[str] = []
+    for lm in picked:
+        if lm not in out:
+            out.append(lm)
+    for lm in shared_landmarks:
+        if len(out) >= 2:
+            break
+        if lm not in out:
+            out.append(lm)
+    return out[:4]
 
 
 def expand_subscene_matrix(
     locations: list[dict[str, Any]],
     targets: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    """Expand primary locations into a Sub-Scene Matrix meeting all lint SE-15/LA-01 targets."""
+    """Expand primary locations into a Spatial Location-Pack Sub-Scene Matrix (RSI v5.1.0)."""
     is_16x9 = targets["format"] == "16:9"
     scale_map = ACTOR_SCALE_16X9 if is_16x9 else ACTOR_SCALE_9X16
     min_sets = targets["min_sets"]
+    target_sets = targets.get("target_sets", min_sets)
     min_angles = targets["min_angles"]
     min_multi_locs = targets["min_locations_with_subscenes"]
 
     matrix: list[dict[str, Any]] = []
     used_ids: set[str] = set()
     loc_scales: dict[str, set[str]] = {loc["id"]: set() for loc in locations}
+    loc_plate_counts: dict[str, int] = {loc["id"]: 0 for loc in locations}
     used_angles: set[str] = set()
+    loc_order = {loc["id"]: idx for idx, loc in enumerate(locations)}
 
-    def add_plate(loc: dict[str, Any], suffix: str, shot_scale: str, angle: str, purpose: str) -> None:
+    def add_plate(
+        loc: dict[str, Any],
+        suffix: str,
+        shot_scale: str,
+        angle: str,
+        camera_dir: str,
+        purpose: str,
+    ) -> None:
+        if camera_dir not in VALID_CAMERA_DIRS:
+            raise ValueError(f"Invalid cameraDir: {camera_dir}")
         base = loc["id"]
         set_id = base if not suffix else f"{base}{suffix}"
         n = 2
@@ -949,84 +1144,201 @@ def expand_subscene_matrix(
             n += 1
         used_ids.add(set_id)
         loc_scales[base].add(shot_scale)
+        p_idx = loc_plate_counts[base]
+        loc_plate_counts[base] = p_idx + 1
         used_angles.add(angle)
+        shared_lm = list(loc.get("shared_landmarks") or [])
         matrix.append({
             "id": set_id,
             "location": base,
             "location_title": loc["title"],
             "shotScale": shot_scale,
             "angle": angle,
+            "cameraDir": camera_dir,
+            "landmarks": _select_plate_landmarks(shared_lm, camera_dir, p_idx),
             "actorScale": list(scale_map[shot_scale]),
             "purpose": purpose,
             "segment_count": loc["segment_count"],
+            "_order": (loc_order.get(base, 999), p_idx),
         })
 
-    # Priority order for adding extra sub-scenes: highest segment count first, preserving original order on ties
+    # Priority order for extra plates: highest segment count first, preserving original order on ties
     priority_locs = sorted(
         enumerate(locations),
         key=lambda iv: (-iv[1]["segment_count"], iv[0]),
     )
     ordered_priority = [loc for _, loc in priority_locs]
 
-    # Tier 1: Every primary location gets an establishing plate
-    est_angles = ["wide", "high"] if is_16x9 else ["wide"]
-    for idx, loc in enumerate(locations):
-        ang = est_angles[idx % len(est_angles)]
-        suffix = ("Wide" if ang == "wide" else "High") if is_16x9 else ""
+    if is_16x9:
+        # Spatial Location Pack: 4 core redrawn plates for EVERY primary location
+        # (Wide front + 180deg Reverse + Diagonal OTS left/right + Vertical Low/High)
+        for idx, loc in enumerate(locations):
+            # Plate 1: Master establishing front view
+            add_plate(
+                loc,
+                suffix="Wide",
+                shot_scale="establishing",
+                angle="wide",
+                camera_dir="front",
+                purpose="Master establishing plate (front) — room geography, sightlines & main landmarks",
+            )
+            # Plate 2: 180-degree counter-angle redrawn looking back across the space
+            add_plate(
+                loc,
+                suffix="Reverse",
+                shot_scale="medium",
+                angle="reverse",
+                camera_dir="reverse",
+                purpose="180-deg reverse counter-angle — redrawn opposite wall & dialogue/reaction sightline",
+            )
+            # Plate 3: Diagonal over-the-shoulder / side staging plate
+            ots_dir = "left" if idx % 2 == 0 else "right"
+            add_plate(
+                loc,
+                suffix="Ots",
+                shot_scale="medium",
+                angle="ots",
+                camera_dir=ots_dir,
+                purpose=f"Diagonal OTS / side staging plate ({ots_dir}) — two-shot foreground depth & landmarks",
+            )
+            # Plate 4: Vertical contrast (Low worm-eye or High aerial) redrawn from floor/ceiling
+            if idx % 2 == 0:
+                add_plate(
+                    loc,
+                    suffix="Low",
+                    shot_scale="medium",
+                    angle="low",
+                    camera_dir="low",
+                    purpose="Low worm-eye vertical contrast — redrawn from floor plane looking up at fixtures/threats",
+                )
+            else:
+                add_plate(
+                    loc,
+                    suffix="High",
+                    shot_scale="establishing",
+                    angle="high",
+                    camera_dir="top",
+                    purpose="High aerial vertical overview — redrawn from elevated ceiling/balcony vantage",
+                )
+
+        # Plate 5: Tight detail / Closeup or POV on top-priority locations until >= target_sets (25) up to ~30
+        desired_total = min(30, max(target_sets, len(locations) * 4 + min(3, len(locations))))
+        detail_specs = [
+            ("Closeup", "closeup", "closeup", "detail", "Tight drawn close-up plate — hero expression, hand-prop & landmark detail"),
+            ("Pov", "closeup", "pov", "detail", "First-person POV / hero-interaction detail plate"),
+        ]
+        detail_added = 0
+        for p_idx, loc in enumerate(ordered_priority):
+            if len(matrix) >= desired_total and detail_added >= min(2, len(ordered_priority)):
+                break
+            if len(matrix) >= 30 and detail_added >= min(2, len(ordered_priority)):
+                break
+            suf, sc, ang, cdir, purp = detail_specs[p_idx % len(detail_specs)]
+            add_plate(loc, suffix=suf, shot_scale=sc, angle=ang, camera_dir=cdir, purpose=purp)
+            detail_added += 1
+
+        # Safety fill for episodes with <= 4 primary locations so planned_sets always reaches target_sets (25)
+        fill_specs = [
+            ("HighAlt", "establishing", "high", "top", "Complementary high-angle spatial overview"),
+            ("LowAlt", "medium", "low", "low", "Complementary low worm-eye threat/scale plate"),
+            ("PovDetail", "closeup", "pov", "detail", "Complementary POV hero-interaction plate"),
+            ("CloseupAlt", "closeup", "closeup", "detail", "Complementary tight dialogue/prop close-up"),
+            ("OtsOpposite", "medium", "ots", "right", "Opposite diagonal side staging plate"),
+        ]
+        f_idx = 0
+        while len(matrix) < target_sets or len(used_angles) < min_angles:
+            loc = ordered_priority[f_idx % len(ordered_priority)]
+            suf, sc, ang, cdir, purp = fill_specs[f_idx % len(fill_specs)]
+            add_plate(loc, suffix=suf, shot_scale=sc, angle=ang, camera_dir=cdir, purpose=purp)
+            f_idx += 1
+
+        # Sort so all 4-5 redrawn angles of each Location Pack appear adjacent
+        matrix.sort(key=lambda item: item["_order"])
+        for item in matrix:
+            item.pop("_order", None)
+        return matrix
+
+    # Lean 9:16 Short matrix (4-5 plates, backward-compatible with cameraDir + landmarks attached)
+    for loc in locations:
         add_plate(
             loc,
-            suffix=suffix,
+            suffix="",
             shot_scale="establishing",
-            angle=ang,
+            angle="wide",
+            camera_dir="front",
             purpose="Master establishing plate — geography, sightlines & depth zones",
         )
 
-    # Tier 2: Medium / OTS / Reverse sub-scenes
     med_specs = [
-        ("Ots", "medium", "ots", "Two-shot / over-the-shoulder staging plate"),
-        ("Reverse", "medium", "reverse", "Reverse-angle dialogue / action reaction plate"),
-        ("Medium", "medium", "low", "Low-angle midground heroic/threat scale plate"),
-        ("MediumWide", "medium", "wide", "Lateral tracking / running midground plate"),
+        ("Ots", "medium", "ots", "left", "Two-shot / over-the-shoulder staging plate"),
+        ("Reverse", "medium", "reverse", "reverse", "Reverse-angle dialogue / action reaction plate"),
+        ("Medium", "medium", "low", "low", "Low-angle midground heroic/threat scale plate"),
+        ("MediumWide", "medium", "wide", "front", "Lateral tracking / running midground plate"),
     ]
     med_idx = 0
     for loc in ordered_priority:
         multi_locs = sum(1 for sc in loc_scales.values() if len(sc) >= 2)
         if len(matrix) >= min_sets and len(used_angles) >= min_angles and multi_locs >= min_multi_locs:
             break
-        suf, sc, ang, purp = med_specs[med_idx % len(med_specs)]
-        add_plate(loc, suffix=suf, shot_scale=sc, angle=ang, purpose=purp)
+        suf, sc, ang, cdir, purp = med_specs[med_idx % len(med_specs)]
+        add_plate(loc, suffix=suf, shot_scale=sc, angle=ang, camera_dir=cdir, purpose=purp)
         med_idx += 1
 
-    # Tier 3: Closeup / Low / POV sub-scenes
     cu_specs = [
-        ("Closeup", "closeup", "closeup", "Dedicated drawn close-up plate for dialogue/reaction/prop"),
-        ("Low", "closeup", "low", "Worm-eye / giant-scale contrast close-up plate"),
-        ("Pov", "closeup", "pov", "First-person POV / hero-prop interaction plate"),
+        ("Closeup", "closeup", "closeup", "detail", "Dedicated drawn close-up plate for dialogue/reaction/prop"),
+        ("Low", "closeup", "low", "low", "Worm-eye / giant-scale contrast close-up plate"),
+        ("Pov", "closeup", "pov", "detail", "First-person POV / hero-prop interaction plate"),
     ]
     cu_idx = 0
     for loc in ordered_priority:
         multi_locs = sum(1 for sc in loc_scales.values() if len(sc) >= 2)
         if len(matrix) >= min_sets and len(used_angles) >= min_angles and multi_locs >= min_multi_locs:
             break
-        suf, sc, ang, purp = cu_specs[cu_idx % len(cu_specs)]
-        add_plate(loc, suffix=suf, shot_scale=sc, angle=ang, purpose=purp)
+        suf, sc, ang, cdir, purp = cu_specs[cu_idx % len(cu_specs)]
+        add_plate(loc, suffix=suf, shot_scale=sc, angle=ang, camera_dir=cdir, purpose=purp)
         cu_idx += 1
 
-    # Tier 4: Extra reverse / OTS / insert plates if a short location list still needs more sets to reach min_sets
     extra_specs = [
-        ("ReverseDetail", "medium", "reverse", "Secondary reverse-angle action plate"),
-        ("OtsAlt", "medium", "ots", "Alternate over-the-shoulder staging plate"),
-        ("PovDetail", "closeup", "pov", "Dedicated detail/POV plate for climax beat"),
-        ("HighWide", "establishing", "high", "Elevated overview angle for spatial staging"),
+        ("ReverseDetail", "medium", "reverse", "reverse", "Secondary reverse-angle action plate"),
+        ("OtsAlt", "medium", "ots", "right", "Alternate over-the-shoulder staging plate"),
+        ("PovDetail", "closeup", "pov", "detail", "Dedicated detail/POV plate for climax beat"),
+        ("HighWide", "establishing", "high", "top", "Elevated overview angle for spatial staging"),
     ]
     ex_idx = 0
     while len(matrix) < min_sets or len(used_angles) < min_angles:
         loc = ordered_priority[ex_idx % len(ordered_priority)]
-        suf, sc, ang, purp = extra_specs[ex_idx % len(extra_specs)]
-        add_plate(loc, suffix=suf, shot_scale=sc, angle=ang, purpose=purp)
+        suf, sc, ang, cdir, purp = extra_specs[ex_idx % len(extra_specs)]
+        add_plate(loc, suffix=suf, shot_scale=sc, angle=ang, camera_dir=cdir, purpose=purp)
         ex_idx += 1
 
+    for item in matrix:
+        item.pop("_order", None)
     return matrix
+
+
+def build_location_packs(
+    locations: list[dict[str, Any]],
+    sets_matrix: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Summarize each primary location's multi-angle Spatial Location Pack."""
+    by_loc: dict[str, list[dict[str, Any]]] = {}
+    for s in sets_matrix:
+        by_loc.setdefault(s["location"], []).append(s)
+
+    packs: list[dict[str, Any]] = []
+    for loc in locations:
+        plates = by_loc.get(loc["id"], [])
+        packs.append({
+            "location": loc["id"],
+            "title": loc["title"],
+            "plate_count": len(plates),
+            "angles": list(dict.fromkeys(p["angle"] for p in plates)),
+            "camera_dirs": list(dict.fromkeys(p["cameraDir"] for p in plates)),
+            "shot_scales": list(dict.fromkeys(p["shotScale"] for p in plates)),
+            "shared_landmarks": list(loc.get("shared_landmarks") or []),
+            "set_ids": [p["id"] for p in plates],
+        })
+    return packs
 
 
 # ---------------------------------------------------------------------------
@@ -1040,7 +1352,7 @@ def plan_g4_workers(
     sets_matrix: list[dict[str, Any]],
     is_long_16x9: bool,
 ) -> list[dict[str, Any]]:
-    """Build non-overlapping G4 parallel worker assignments."""
+    """Build non-overlapping G4 parallel worker assignments (whole Location Packs per worker)."""
     workers: list[dict[str, Any]] = []
 
     # Worker 1: Cast, Subjects, Props & Geometry
@@ -1064,9 +1376,9 @@ def plan_g4_workers(
         ),
     })
 
-    # Partition locations across Workers 2..4 (3 set workers for long_16x9, 2-3 for Short)
-    n_set_workers = 3 if is_long_16x9 else min(2, max(1, len(locations)))
-    n_set_workers = min(n_set_workers, max(1, len(locations)))
+    # Partition locations across up to 4 parallel set workers for long_16x9 (2 for Short),
+    # keeping EVERY whole Location Pack intact inside 1 worker so one artist redraws all 4-5 angles consistently.
+    n_set_workers = min(4, max(1, len(locations))) if is_long_16x9 else min(2, max(1, len(locations)))
 
     # Group sets by location
     sets_by_loc: dict[str, list[dict[str, Any]]] = {}
@@ -1086,7 +1398,7 @@ def plan_g4_workers(
         set_file = f"src/episode/sets_w{idx}_{loc_slug}.tsx"
         workers.append({
             "worker_id": f"g4-worker-{idx}",
-            "role": f"Set Plates Group {idx - 1} ({', '.join(b['locs'])})",
+            "role": f"Spatial Location Pack(s) Group {idx - 1} ({', '.join(b['locs'])})",
             "owned_files": [set_file],
             "cast_ids": [],
             "subject_ids": [],
@@ -1094,8 +1406,8 @@ def plan_g4_workers(
             "set_ids": [s["id"] for s in b["sets"]],
             "plate_count": len(b["sets"]),
             "notes": (
-                f"Author {len(b['sets'])} set plate(s) for location(s) [{', '.join(b['locs'])}] "
-                f"in {set_file}; coordinator re-exports into src/episode/sets.tsx (zero merge conflicts)."
+                f"Author complete Location Pack(s) ({len(b['sets'])} redrawn plates across [{', '.join(b['locs'])}]) "
+                f"in {set_file} with shared landmarks & cameraDir continuity; coordinator re-exports into src/episode/sets.tsx."
             ),
         })
 
@@ -1130,6 +1442,12 @@ def plan_g5_workers(
     sets_by_loc: dict[str, list[dict[str, Any]]] = {}
     for s in sets_matrix:
         sets_by_loc.setdefault(s["location"], []).append(s)
+
+    choreography_note = (
+        "Target ~65-110 rich multi-action shots (4.5-9.5 s avg); cycle across each location's 4-5 redrawn angles; >=2 motion events per shot >5s (MO-16)"
+        if is_long_16x9
+        else "Target ~50-75 punchy shots; match angle & shotScale to dramatic beat and actor pacing."
+    )
 
     workers: list[dict[str, Any]] = []
     base_size = n_segs // n_workers
@@ -1177,7 +1495,7 @@ def plan_g5_workers(
                 cmd += f" --subject {subj['id']}:{pose}"
             place_cmds.append(cmd)
 
-        est_shots = max(size, round(size * (2.1 if is_long_16x9 else 1.4)))
+        est_shots = max(14, round(size * 0.78)) if is_long_16x9 else max(size, round(size * 1.4))
         workers.append({
             "worker_id": f"g5-worker-{w}",
             "chapter": w,
@@ -1188,6 +1506,7 @@ def plan_g5_workers(
                 "count": len(chunk_ids),
             },
             "estimated_shots": est_shots,
+            "choreography_note": choreography_note,
             "locations": slice_locs,
             "set_ids": [s["id"] for s in slice_sets],
             "subjects": [s["id"] for s in slice_subjs],
@@ -1204,12 +1523,14 @@ def plan_g5_workers(
 def render_markdown(bp: dict[str, Any]) -> str:
     t = bp["targets"]
     m = bp["metrics"]
+    shot_lo, shot_hi = t["target_shots_range"]
     lines: list[str] = []
     lines.append(f"# Asset Blueprint — {bp['title']}")
     lines.append("")
     lines.append(
-        f"> Format: `{t['format']}` (`{t['length_mode']}`) · "
+        f"> Schema: `v{bp['schema_version']}` · Format: `{t['format']}` (`{t['length_mode']}`) · "
         f"Segments: `{bp['segment_count']}` · "
+        f"Target Shots: `{shot_lo}–{shot_hi}` (est. `~{m['estimated_shots']}`) · "
         f"Target SLA: `{t['target_sla_min']} min` · "
         f"Planned in `{bp['elapsed_ms']} ms`"
     )
@@ -1219,9 +1540,11 @@ def render_markdown(bp: dict[str, Any]) -> str:
     lines.append("| Metric | Target | Planned | Status |")
     lines.append("|--------|--------|---------|--------|")
     lines.append(f"| Cast (`cast.ts`) | >= {t['min_cast']} | {m['planned_cast']} ({m['extracted_cast']} extracted + {m['suggested_extras']} extras) | {'OK' if m['planned_cast'] >= t['min_cast'] else 'GAP'} |")
-    lines.append(f"| Set Plates (`sets.tsx`) | >= {t['min_sets']} | {m['planned_sets']} | {'OK' if m['planned_sets'] >= t['min_sets'] else 'GAP'} |")
+    lines.append(f"| Set Plates (`sets.tsx`) | target {t['target_sets']} (floor >= {t['min_sets']}) | {m['planned_sets']} / {t['target_sets']} | {'OK' if m['planned_sets'] >= t['target_sets'] else ('FLOOR' if m['planned_sets'] >= t['min_sets'] else 'GAP')} |")
     lines.append(f"| Distinct Set Angles | >= {t['min_angles']} | {m['distinct_angles']} ({', '.join(m['angles'])}) | {'OK' if m['distinct_angles'] >= t['min_angles'] else 'GAP'} |")
-    lines.append(f"| Locations w/ >=2 Shot Scales | >= {t['min_locations_with_subscenes']} | {m['locations_with_subscenes']} | {'OK' if m['locations_with_subscenes'] >= t['min_locations_with_subscenes'] else 'GAP'} |")
+    lines.append(f"| Locations w/ >=3 Redrawn Angles | >= {t['min_locations_with_subscenes']} (long) | {m['locations_with_3plus_angles']} / {m['primary_locations']} | {'OK' if (m['locations_with_3plus_angles'] >= t['min_locations_with_subscenes'] or t['length_mode'] != 'long_16x9') else 'GAP'} |")
+    lines.append(f"| Locations w/ >=2 Shot Scales | >= {t['min_locations_with_subscenes']} | {m['locations_with_subscenes']} / {m['primary_locations']} | {'OK' if m['locations_with_subscenes'] >= t['min_locations_with_subscenes'] else 'GAP'} |")
+    lines.append(f"| Shot Count Range | {shot_lo}–{shot_hi} rich shots | ~{m['estimated_shots']} | {'OK' if shot_lo <= m['estimated_shots'] <= shot_hi else 'INFO'} |")
     lines.append(f"| Required Hero Subjects (`>=3` segs) | auto | {len(bp['required_subjects'])} | OK |")
     lines.append("")
 
@@ -1250,18 +1573,31 @@ def render_markdown(bp: dict[str, Any]) -> str:
         lines.append("_No recurring creatures/vehicles/machines (>= 3 segments) detected._")
     lines.append("")
 
-    lines.append("## 4. Set Sub-Scene Matrix (`src/episode/sets*.tsx`)")
+    lines.append("## 4. Spatial Location Packs (Multi-Angle Room Continuity)")
     lines.append("")
-    lines.append("| Set ID | Location | shotScale | angle | actorScale | Segs | Purpose |")
-    lines.append("|--------|----------|-----------|-------|------------|------|---------|")
-    for s in bp["sets_matrix"]:
+    lines.append("| Location | Plates | Redrawn Angles | cameraDirs | Shared Landmarks |")
+    lines.append("|----------|-------:|----------------|------------|------------------|")
+    for lp in bp.get("location_packs") or []:
         lines.append(
-            f"| `{s['id']}` | `{s['location']}` | `{s['shotScale']}` | `{s['angle']}` | "
-            f"`{s['actorScale']}` | {s['segment_count']} | {s['purpose']} |"
+            f"| `{lp['location']}` ({lp['title'][:34]}) | {lp['plate_count']} | "
+            f"`{', '.join(lp['angles'])}` | `{', '.join(lp['camera_dirs'])}` | "
+            f"`{', '.join(lp['shared_landmarks'])}` |"
         )
     lines.append("")
 
-    lines.append("## 5. G4 Parallel Workers (Zero File Overlap)")
+    lines.append("## 5. Set Sub-Scene Matrix (`src/episode/sets*.tsx`)")
+    lines.append("")
+    lines.append("| Set ID | Location | shotScale | angle | cameraDir | actorScale | Landmarks | Segs | Purpose |")
+    lines.append("|--------|----------|-----------|-------|-----------|------------|-----------|------|---------|")
+    for s in bp["sets_matrix"]:
+        lm_str = ", ".join(s.get("landmarks") or [])
+        lines.append(
+            f"| `{s['id']}` | `{s['location']}` | `{s['shotScale']}` | `{s['angle']}` | `{s['cameraDir']}` | "
+            f"`{s['actorScale']}` | `{lm_str}` | {s['segment_count']} | {s['purpose']} |"
+        )
+    lines.append("")
+
+    lines.append("## 6. G4 Parallel Workers (Zero File Overlap — Whole Location Packs)")
     lines.append("")
     for w in bp["g4_workers"]:
         lines.append(f"### `{w['worker_id']}` — {w['role']}")
@@ -1276,12 +1612,13 @@ def render_markdown(bp: dict[str, Any]) -> str:
         lines.append(f"- **Notes:** {w['notes']}")
         lines.append("")
 
-    lines.append("## 6. G5 Chapter Workers & Starter `qa.mjs place` Commands")
+    lines.append("## 7. G5 Chapter Workers & Starter `qa.mjs place` Commands")
     lines.append("")
     for w in bp["g5_workers"]:
         sr = w["segment_range"]
         lines.append(f"### `{w['worker_id']}` — Chapter {w['chapter']} (`{sr['start']}–{sr['end']}`, {sr['count']} segs, ~{w['estimated_shots']} shots)")
         lines.append(f"- **Owned file:** `{w['owned_file']}`")
+        lines.append(f"- **Choreography:** {w['choreography_note']}")
         lines.append(f"- **Locations:** {', '.join(f'`{l}`' for l in w['locations'])}")
         if w["subjects"]:
             lines.append(f"- **Active subjects:** {', '.join(f'`{s}`' for s in w['subjects'])}")
@@ -1326,6 +1663,7 @@ def build_blueprint(root: Path) -> dict[str, Any]:
     required_subjects, minor_subjects = detect_subjects(segments, brief_creatures, brief_text)
     locations = extract_locations(script_data, brief_text, beats_map, is_long_16x9)
     sets_matrix = expand_subscene_matrix(locations, targets)
+    location_packs = build_location_packs(locations, sets_matrix)
     g4_workers = plan_g4_workers(cast_plan, required_subjects, locations, sets_matrix, is_long_16x9)
     g5_workers = plan_g5_workers(segments, locations, sets_matrix, required_subjects, is_long_16x9)
 
@@ -1339,14 +1677,17 @@ def build_blueprint(root: Path) -> dict[str, Any]:
 
     # Metrics summary
     angles = sorted({s["angle"] for s in sets_matrix})
+    camera_dirs = sorted({s["cameraDir"] for s in sets_matrix})
     scales_by_loc: dict[str, set[str]] = {}
     for s in sets_matrix:
         scales_by_loc.setdefault(s["location"], set()).add(s["shotScale"])
     locs_with_subscenes = sum(1 for sc in scales_by_loc.values() if len(sc) >= 2)
+    locs_with_3plus_angles = sum(1 for lp in location_packs if len(lp["angles"]) >= 3)
+    estimated_shots = sum(w["estimated_shots"] for w in g5_workers)
     elapsed_ms = round((time.perf_counter() - t0) * 1000, 1)
 
     return {
-        "schema_version": "4.5.0",
+        "schema_version": "5.1.0",
         "title": script_data.get("title") or root.name,
         "episode_dir": str(root.resolve()),
         "inputs": {
@@ -1362,9 +1703,15 @@ def build_blueprint(root: Path) -> dict[str, Any]:
             "planned_cast": cast_plan["planned_total"],
             "primary_locations": len(locations),
             "planned_sets": len(sets_matrix),
+            "target_sets": targets["target_sets"],
             "distinct_angles": len(angles),
             "angles": angles,
+            "distinct_camera_dirs": len(camera_dirs),
+            "camera_dirs": camera_dirs,
             "locations_with_subscenes": locs_with_subscenes,
+            "locations_with_3plus_angles": locs_with_3plus_angles,
+            "estimated_shots": estimated_shots,
+            "target_shots_range": list(targets["target_shots_range"]),
             "required_subjects": len(required_subjects),
             "g4_worker_count": len(g4_workers),
             "g5_worker_count": len(g5_workers),
@@ -1373,6 +1720,7 @@ def build_blueprint(root: Path) -> dict[str, Any]:
         "required_subjects": required_subjects,
         "minor_subjects": minor_subjects,
         "locations": locations,
+        "location_packs": location_packs,
         "sets_matrix": sets_matrix,
         "g4_workers": g4_workers,
         "g5_workers": g5_workers,
@@ -1401,23 +1749,28 @@ def main(argv: list[str] | None = None) -> int:
     # Compact executive summary to stdout
     t = bp["targets"]
     m = bp["metrics"]
+    shot_lo, shot_hi = t["target_shots_range"]
     subjs = ", ".join(
         f"{s['id']}({s['segment_count']}s{'+seats' if s['requires_seats'] else ''})"
         for s in bp["required_subjects"]
     ) or "none"
     print(
-        f"plan_assets: {bp['title']} [{t['format']} {t['length_mode']} · SLA {t['target_sla_min']}m] · "
+        f"plan_assets: {bp['title']} [{t['format']} {t['length_mode']} · v{bp['schema_version']} · SLA {t['target_sla_min']}m] · "
         f"{bp['segment_count']} segs · {bp['elapsed_ms']} ms"
     )
     print(
         f"  cast: {m['planned_cast']}/{t['min_cast']} ({m['extracted_cast']} extracted + {m['suggested_extras']} extras) · "
-        f"sets: {m['planned_sets']}/{t['min_sets']} ({m['primary_locations']} locs, {m['locations_with_subscenes']} multi-scale, "
+        f"sets: {m['planned_sets']}/{t['target_sets']} (floor {t['min_sets']}; {m['primary_locations']} locs, "
+        f"{m['locations_with_3plus_angles']} locs>=3angles, {m['locations_with_subscenes']} multi-scale, "
         f"{m['distinct_angles']} angles [{','.join(m['angles'])}])"
     )
-    print(f"  required_subjects ({len(bp['required_subjects'])}): {subjs}")
+    print(
+        f"  shots: ~{m['estimated_shots']} (target {shot_lo}-{shot_hi} rich shots) · "
+        f"required_subjects ({len(bp['required_subjects'])}): {subjs}"
+    )
     print(
         f"  workers: {m['g4_worker_count']} G4 ({', '.join(w['worker_id'] for w in bp['g4_workers'])}) · "
-        f"{m['g5_worker_count']} G5 ({', '.join(w['worker_id'] + ':' + w['segment_range']['start'] + '-' + w['segment_range']['end'] for w in bp['g5_workers'])})"
+        f"{m['g5_worker_count']} G5 ({', '.join(w['worker_id'] + ':' + w['segment_range']['start'] + '-' + w['segment_range']['end'] + '(~' + str(w['estimated_shots']) + 'sh)' for w in bp['g5_workers'])})"
     )
     print(f"  wrote: {out_json} & {out_md}")
     return 0

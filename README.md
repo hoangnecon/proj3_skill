@@ -1,14 +1,14 @@
-# story-video-skills (`v5.0.0`)
+# story-video-skills (`v5.1.0`)
 
-A gated production suite for **Vietnamese 2D story videos**: vertical 1080×1920 Shorts (2–3 min, **<= 15-min SLA**) and opt-in widescreen 1920×1080 Long-Form (8–12 min, **<= 45-min SLA**) at 30 fps,
+A gated production suite for **Vietnamese 2D story videos**: vertical 1080×1920 Shorts (2–3 min, **<= 15-min SLA**) and opt-in widescreen 1920×1080 Long-Form (8–12 min, **<= 45-min SLA**, **Spatial Location Packs** of 24–30 multi-angle redrawn sets + **65–110 rich choreographed shots** via `shots_long_16x9`) at 30 fps,
 narrated by the northern male voice Hải Đăng, drawn in a flat "riso ink" style (with studio 2D animation physics via `src/anim.ts` — 4-view tapered articulated rigs, 4-phase foot-roll gaits, curved spines, grounded altitude shadows, 3-layer straddle mounts, contact-locked pushing, procedural riso `ActionFx`, multi-pose Hero Subjects, Botanical Kit, atmospheric `mood`/`dof` passes, and static `url(#grainPat)` texture), and animated in Remotion
 with every shot anchored to a narration word.
 
 The suite packages the process that produced the reference episode *Thang máy ăn bí mật* (153 s, 26 segments,
 67 shots). Each phase ships with:
-- exact specs: design tokens, rig numbers, detail budgets, shot grammar and rhythm benchmarks;
-- machine checks: 135 lint rules (including studio animation & contact CI `MO-13..15`, perceptual plate quality `SE-16`, 3×3 spatial layout/scale `LA-01..04`, camera grammar `CA-06..07`, and mood grading `SH-19`), deterministic G2→G4 asset blueprinting (`scripts/plan_assets.py`), zero-cost preflight doctor (`scripts/sv_doctor.py`), zero-rework placement solver (`qa.mjs place`), and dual-format benchmark CLI (`tools/benchmark_suite.py`);
-- rendered evidence the agent must open and remark on (including `qa/design/overview_sets.jpg`);
+- exact specs: design tokens, rig numbers, detail budgets, shot grammar and dual rhythm benchmarks (`shots` for 9:16 Shorts; `shots_long_16x9` for 16:9 Long-Form);
+- machine checks: 137 lint rules (including Spatial Location-Pack Continuity `SE-17`, Long-Shot Choreography Density `MO-16`, studio animation & contact CI `MO-13..15`, perceptual plate quality `SE-16`, 3×3 spatial layout/scale `LA-01..04`, camera grammar `CA-06..07`, and mood grading `SH-19`), deterministic G2→G4 Spatial Location Pack blueprinting (`scripts/plan_assets.py`), zero-cost preflight doctor (`scripts/sv_doctor.py`), zero-rework placement solver (`qa.mjs place`), and dual-format benchmark CLI (`tools/benchmark_suite.py`);
+- rendered evidence the agent must open and remark on (including location-sorted `qa/design/overview_sets.jpg` and per-location `qa/design/location_<loc>_pack.jpg` continuity strips);
 - a gate log that goes stale when its inputs change.
 
 The goal is that any agent reproduces the same level of detail, not "a few boxes".
@@ -63,15 +63,17 @@ Every count is backed by something that has to be looked at:
 - Each evidence image needs a written remark, and the review must be newer than the evidence.
 - G1, G2 and G4 need the user's quoted approval.
 
-## Measured RSI Evolution (`v4.0 → v5.0`)
-| Dimension | `v4.0` Baseline | `v5.0` Verified Result |
+## Measured RSI Evolution (`v4.0 → v5.1`)
+| Dimension | `v4.0` Baseline | `v5.1` Verified Result |
 |---|---|---|
-| Lint rules | `108` | `135` (`validate_skills.py`: 0 errors, 0 warnings; includes `MO-13..15` Animation Craft CI) |
+| Lint rules | `108` | `137` (`validate_skills.py`: 0 errors, 0 warnings; includes `SE-17` Spatial Location Packs & `MO-13..16` Animation/Choreography CI) |
+| Spatial Location Packs (16:9 Long-Form) | 5–6 flat walls | **24–30 drawn sets** (`>= 15` floor, 5–6 locations × 3–5 redrawn `cameraDir` angles sharing `landmarks`), `SE-15`/`SE-17` + per-location `qa/design/location_<loc>_pack.jpg` |
+| Long-Form Shot Pacing & Choreography | 220+ static micro-cuts | **65–110 rich choreographed shots** (`shots_long_16x9`: `4.5–9.5 s` mean, `6–14 shots/min`, `max 14 s`) guarded by **`MO-16`** (`>= 2` events `> 5.0 s`, `>= 3` `> 8.5 s`) |
 | Character views & animation craft | `2 views / 37 poses` | `4 views (Front/Side/3Q/Back)` + `src/anim.ts` (4-phase foot-roll gaits, tapered limbs, curved torsos, `GroundShadow`/`SeatShadow`, 3-layer straddle mounts, `arcH`, `pushTarget`, `wind`, `ActionFx`) |
 | Hero Subjects | `0` | Multi-pose `SubjectSheet` A→Z + `PR-06` / `SH-18` + `SubjectSeat.straddle`/`grip`/`wind` (`MO-14`) |
-| Layout, Scale & Blind QA Gates | `0` | `LA-01..LA-04`, `SE-15..SE-16`, `CA-06..CA-07`, `GE-19`, `SH-16..SH-19`, `MO-13..MO-15` + Pasted-Sticker Blind Review Rubric + `qa.mjs place` (`0.3s`) |
+| Layout, Scale & Blind QA Gates | `0` | `LA-01..LA-04`, `SE-15..SE-17`, `CA-06..CA-07`, `GE-19`, `SH-16..SH-19`, `MO-13..MO-16` + Pasted-Sticker Blind Review Rubric + `qa.mjs place` (`0.3s`) |
 | 1920×1080 Render Speed | `4.74 fps` (`v4.2` PNG) | `12.98 fps` (`v4.4` JPEG q=95 + `grainPat` + `veryfast` + Macro-Blocks, **2.74× speedup**) |
-| Preflight & Blueprint Speed | Manual / none | `voice.py --preflight` (`0.07s`), `sv_doctor.py --stage all` (`0.83s`), `benchmark_suite.py` (`6.15s`), `plan_assets.py` (`< 0.5s`) |
+| Preflight & Blueprint Speed | Manual / none | `voice.py --preflight` (`0.07s`), `sv_doctor.py --stage all` (`0.83s`), `benchmark_suite.py` (`6.15s`, tracks `locs3+`), `plan_assets.py` (`< 0.5s`) |
 | Dual-Standard SLA | Unbounded | **<= 15 min (9:16 Short)** · **<= 45 min (16:9 Long-Form)** |
 
 ## Validate & benchmark the suite

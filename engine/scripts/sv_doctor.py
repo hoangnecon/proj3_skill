@@ -517,6 +517,35 @@ def check_g4() -> dict:
             except OSError:
                 pass
 
+    # Summarize primary locations & location pack sheets from qa/design/visual_spec.json (informational)
+    sets_spec = vs.get("sets") if isinstance(vs, dict) else None
+    if isinstance(sets_spec, dict) and sets_spec:
+        loc_groups: dict[str, list[str]] = {}
+        for sid, info in sets_spec.items():
+            if not isinstance(info, dict):
+                continue
+            if info.get("insert") or info.get("shotScale") == "insert":
+                continue
+            loc = str(info.get("location") or "").strip()
+            if not loc:
+                continue
+            loc_groups.setdefault(loc, []).append(sid)
+        locs_3plus = sum(1 for sids in loc_groups.values() if len(sids) >= 3)
+        pack_sheets: list[str] = []
+        for loc, sids in sorted(loc_groups.items()):
+            if len(sids) < 2:
+                continue
+            slug_lo = re.sub(r"[^a-z0-9_-]+", "_", loc.lower()).strip("_")
+            slug_raw = re.sub(r"[^a-zA-Z0-9_-]+", "_", loc).strip("_")
+            for slug in dict.fromkeys(s for s in (slug_lo, slug_raw) if s):
+                cand = ROOT / "qa/design" / f"location_{slug}_pack.jpg"
+                if cand.is_file():
+                    pack_sheets.append(f"qa/design/location_{slug}_pack.jpg")
+                    break
+        metrics["primary_locations"] = len(loc_groups)
+        metrics["locations_with_3plus_angles"] = locs_3plus
+        metrics["location_pack_sheets"] = pack_sheets
+
     return {
         "name": STAGE_NAMES["G4"],
         "status": "pass" if not blocking else "fail",

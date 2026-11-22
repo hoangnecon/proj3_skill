@@ -43,6 +43,7 @@ const PALKEYS = new Set(Object.keys(P.PAL));
 const ROLES = new Set(['principal', 'support', 'extra']);
 const BEDS = new Set(['room', 'hum', 'quiet', 'echo', 'outdoor', 'fan', 'motor', 'basement', 'paper', 'street', 'market', 'kitchen', 'rain', 'night']);
 const VALID_ANGLES = new Set(['wide', 'low', 'high', 'ots', 'reverse', 'closeup', 'pov']);
+const VALID_CAMERA_DIRS = new Set(['front', 'reverse', 'left', 'right', 'top', 'low', 'detail']);
 const VALID_SHOT_SCALES = new Set(['establishing', 'medium', 'closeup', 'insert']);
 const VALID_MOODS = new Set(['default', 'morning', 'golden', 'danger', 'lab', 'flashback', 'dramatic']);
 const EXPRS = new Set(['neutral', 'smug', 'angry', 'shock', 'sad', 'cry', 'joy', 'stern', 'sly', 'deadpan', 'eager', 'shh']);
@@ -180,6 +181,8 @@ if (phase !== 'shots') {
     }
     if (sets.length < 15) {
       err('SE-15', `long_16x9 episode has only ${sets.length} set(s) (minimum 15 distinct sets / angle plates required for a 10-min video)`);
+    } else if (sets.length < 24) {
+      warn('SE-15', `long_16x9 episode has ${sets.length} set(s) (minimum 15; studio target 24–30 drawn sets = 5–6 primary locations × 3–5 redrawn camera angles each)`);
     }
     const angles = new Set(sets.map((id) => P.EPISODE_SETS[id]?.angle).filter((a) => typeof a === 'string' && VALID_ANGLES.has(a)));
     if (angles.size < 3) {
@@ -189,17 +192,21 @@ if (phase !== 'shots') {
     }
     if (sets.length >= 15) {
       const byLoc = new Map();
+      const byLocCount = new Map();
       const nonInsertWithScale = [];
       for (const id of sets) {
         const d = P.EPISODE_SETS[id];
         if (!d || d.insert) continue;
-        if (typeof d.shotScale === 'string' && VALID_SHOT_SCALES.has(d.shotScale)) {
-          nonInsertWithScale.push(d);
-          if (typeof d.location === 'string' && d.location.trim()) {
-            const loc = d.location.trim();
+        if (typeof d.location === 'string' && d.location.trim()) {
+          const loc = d.location.trim();
+          byLocCount.set(loc, (byLocCount.get(loc) ?? 0) + 1);
+          if (typeof d.shotScale === 'string' && VALID_SHOT_SCALES.has(d.shotScale)) {
             if (!byLoc.has(loc)) byLoc.set(loc, new Set());
             byLoc.get(loc).add(d.shotScale);
           }
+        }
+        if (typeof d.shotScale === 'string' && VALID_SHOT_SCALES.has(d.shotScale)) {
+          nonInsertWithScale.push(d);
         }
       }
       const multiScaleLocs = [...byLoc.values()].filter((s) => s.size >= 2).length;
@@ -208,9 +215,66 @@ if (phase !== 'shots') {
       } else if (multiScaleLocs < 3) {
         warn('SE-15', `long_16x9 episode has only ${multiScaleLocs} location(s) with >= 2 drawn shotScale types (recommended >= 3 locations with establishing + medium/closeup sub-scene plates)`);
       }
+      const locsWith3Plus = [...byLocCount.values()].filter((n) => n >= 3).length;
+      if (locsWith3Plus < 3) {
+        warn('SE-15', `long_16x9 episode has only ${locsWith3Plus} primary location(s) with >= 3 redrawn angle plates (recommended >= 3 locations with 3–5 redrawn camera angles each)`);
+      }
     }
   } else if (sets.length > 0 && sets.length < 4) {
     warn('SE-15', `short episode has only ${sets.length} set(s) (recommended 4–5 sets for visual variety)`);
+  }
+  // SE-17: Spatial Location-Pack Continuity Guard (cameraDir, landmarks, multi-angle setup diversity)
+  for (const id of sets) {
+    const d = P.EPISODE_SETS[id];
+    if (!d) continue;
+    if (d.cameraDir !== undefined && !(typeof d.cameraDir === 'string' && VALID_CAMERA_DIRS.has(d.cameraDir))) {
+      err('SE-17', `${id}: invalid cameraDir '${d.cameraDir}' (expected ${[...VALID_CAMERA_DIRS].join('|')})`);
+    }
+    if (d.landmarks !== undefined && (!Array.isArray(d.landmarks) || d.landmarks.some((x) => typeof x !== 'string' || !x.trim()))) {
+      err('SE-17', `${id}: landmarks must be an array of non-empty spatial anchor strings`);
+    }
+  }
+  if (isLong16x9) {
+    const locGroups = new Map();
+    for (const id of sets) {
+      const d = P.EPISODE_SETS[id];
+      if (!d || d.insert) continue;
+      if (typeof d.location === 'string' && d.location.trim()) {
+        const loc = d.location.trim();
+        if (!locGroups.has(loc)) locGroups.set(loc, []);
+        locGroups.get(loc).push({id, d});
+      }
+    }
+    for (const [loc, locSets] of locGroups) {
+      if (locSets.length < 2) continue;
+      const setups = new Set(locSets.map(({d}) => `${d.angle ?? ''}|${d.shotScale ?? ''}|${d.cameraDir ?? ''}`));
+      const locWaived = locSets.every(({id}) => lineWaived(setsSrc, 'SE-17', id));
+      if (locSets.length >= 3 && setups.size < 2 && !locWaived) {
+        err('SE-17', `location '${loc}' has ${locSets.length} sets but only ${setups.size} distinct camera setup (angle/shotScale/cameraDir) — redraw genuinely different camera angles of the space`);
+      }
+      if (locSets.length >= 3 && !locWaived) {
+        const withLm = locSets.filter(({d}) => Array.isArray(d.landmarks) && d.landmarks.length > 0);
+        if (withLm.length === 0) {
+          warn('SE-17', `location '${loc}' (${locSets.length} redrawn sets) declares no shared landmarks — add landmarks: [...] on each angle plate to anchor spatial continuity`);
+        } else if (withLm.length >= 2) {
+          const lmCounts = new Map();
+          for (const {d} of withLm) {
+            const seenInPlate = new Set();
+            for (const x of d.landmarks) {
+              if (typeof x !== 'string') continue;
+              const norm = x.trim().toLowerCase();
+              if (!norm || seenInPlate.has(norm)) continue;
+              seenInPlate.add(norm);
+              lmCounts.set(norm, (lmCounts.get(norm) ?? 0) + 1);
+            }
+          }
+          const sharedCount = [...lmCounts.values()].filter((c) => c >= 2).length;
+          if (sharedCount === 0) {
+            warn('SE-17', `location '${loc}' has ${withLm.length} plates declaring landmarks with 0 overlapping anchors — share key room landmarks across redrawn angles for spatial continuity`);
+          }
+        }
+      }
+    }
   }
   // PR-01, PR-02, PR-03 & PR-05: human-scale guard, internal text collision, disembodied head & partial-body continuity check on custom episode WORLD_PROPS
   {
@@ -430,10 +494,38 @@ if (phase !== 'design') {
   const hot = {};
   const markHot = (i, rule) => { (hot[i] ??= []).push(rule); };
   const keyVals = (v) => (Array.isArray(v) ? v.map((x) => String(x[0])) : v !== undefined && v !== null ? [String(v)] : []);
+  const countChoreoEvents = (s, r) => {
+    let n = 0;
+    if (r.cam2 && (Math.hypot((r.cam2[0] ?? 0) - (r.cam[0] ?? 0), (r.cam2[1] ?? 0) - (r.cam[1] ?? 0)) > 10 || Math.abs((r.cam2[2] ?? 1) - (r.cam[2] ?? 1)) > 0.03)) n += 1;
+    n += Object.keys(s.keys ?? {}).length;
+    if (s.of || s.punch) n += 1;
+    for (const A of s.actors ?? []) {
+      if (A.path && A.path.length >= 3) n += 2;
+      else if (A.path && A.path.length === 2) n += 1;
+      if (A.arcH) n += 1;
+      if (A.mount) n += 1;
+      if (A.pushTarget) n += 1;
+      if (A.ride) n += 1;
+      if (Array.isArray(A.reach) && A.reach.length) n += A.reach.length;
+      for (const k of ['p', 'e', 'view', 'face', 'legs', 'arms']) {
+        if (Array.isArray(A[k]) && A[k].length >= 2) n += 1;
+      }
+      if ((Array.isArray(A.fx) && A.fx.length > 0) || A.wind || A.hop || A.shake) n += 1;
+    }
+    for (const E of s.extras ?? []) {
+      if (E.path && E.path.length > 1) n += 1;
+      if (Array.isArray(E.pose) && E.pose.length >= 2) n += 1;
+      if (Array.isArray(E.expr) && E.expr.length >= 2) n += 1;
+    }
+    return n;
+  };
+  const choreoByShot = new Map();
   rows.forEach((r, i) => {
     const s = shots[i];
     const tag = `#${i} '${r.name}'`;
     const dur = r.t1 - r.t0;
+    const choreoEvents = countChoreoEvents(s, r);
+    choreoByShot.set(r.i, choreoEvents);
     // animated set state (door opening, counters, lights): the change itself must be seen on a strip
     for (const [k, tr] of Object.entries(s.keys ?? {})) tr.slice(1).forEach(([v, tt, d], j) => {
       const T = typeof tt === 'number' ? r.t0 + tt : P.tAt(tt);
@@ -444,7 +536,8 @@ if (phase !== 'design') {
     if (i > 0 && r.t0 <= rows[i - 1].t0) err('SH-13', `${tag}: starts before/with the previous shot (anchor order)`);
     if (dur < 0.45 && !waived('SH-14', r.name)) err('SH-14', `${tag}: ${dur.toFixed(2)} s is a flash cut (< 0.45 s)`);
     else if (dur < 0.7) warn('SH-14', `${tag}: ${dur.toFixed(2)} s is very short`);
-    if (dur > 6.5 && !waived('SH-15', r.name)) warn('SH-15', `${tag}: ${dur.toFixed(1)} s — long hold; is something moving/changing?`);
+    const holdWarnS = isLong16x9 ? 11.0 : 6.5;
+    if (dur > holdWarnS && !waived('SH-15', r.name)) warn('SH-15', `${tag}: ${dur.toFixed(1)} s — long hold; is something moving/changing?`);
     const k0 = r.cam[2], k1 = r.cam2 ? r.cam2[2] : k0;
     if (Math.min(k0, k1) < 0.5 || Math.max(k0, k1) > 4) err('CA-01', `${tag}: zoom ${k0}->${k1} outside 0.5–4`);
     if (r.cam2 && dur < 1.0 && (Math.abs(r.cam2[0] - r.cam[0]) > 40 || Math.abs(k1 - k0) > 0.1)) warn('CA-02', `${tag}: camera move in a ${dur.toFixed(2)} s shot reads as a jolt`);
@@ -471,6 +564,16 @@ if (phase !== 'design') {
       (s.actors ?? []).some((A) => A.path || A.reach || A.talk || A.hop || A.shake || A.pant || A.ride || A.arcH || A.mount || A.pushTarget || (A.fx && A.fx.length) || A.wind || ['p', 'e', 'legs', 'arms', 'view'].some((k) => Array.isArray(A[k]))) ||
       (s.extras ?? []).some((E) => (E.path && E.path.length > 1) || Array.isArray(E.pose) || Array.isArray(E.expr));
     if (!lives && !waived('MO-08', r.name)) warn('MO-08', `${tag}: nothing moves or changes for ${dur.toFixed(1)} s — add a camera drift, an expression key or a gesture`);
+    // MO-16: Long-Shot Choreography Density Guard (long_16x9 rich multi-beat shots > 5.0 s)
+    if (isLong16x9 && dur > 5.0 && !waived('MO-16', r.name)) {
+      if (choreoEvents < 1) {
+        err('MO-16', `${tag}: ${dur.toFixed(1)} s long-form shot has 0 choreography events — dead static hold; add camera move + actor path/keyed acting/view/mount/keys`);
+      } else if (choreoEvents < 2) {
+        warn('MO-16', `${tag}: ${dur.toFixed(1)} s long-form shot has only ${choreoEvents} choreography event (target >= 2 for shots > 5.0 s — combine camera motion with keyed poses/expr/view/path/mount)`);
+      } else if (dur > 8.5 && choreoEvents < 3) {
+        warn('MO-16', `${tag}: ${dur.toFixed(1)} s extended long-form shot has only ${choreoEvents} choreography events (target >= 3 for shots > 8.5 s)`);
+      }
+    }
     // overlays visible at once
     const ovs = (s.over ?? []).map((o, j) => ({a: r.over[j].t, b: o.until ? P.tAt(o.until) : r.t1}));
     for (const o of ovs) { const n = ovs.filter((q) => q.a <= o.a + 0.01 && q.b > o.a + 0.01).length; if (n > 2) { err('OV-04', `${tag}: ${n} overlays on screen at once (max 2)`); break; } }
@@ -479,11 +582,12 @@ if (phase !== 'design') {
       const look = P.CAST[a.look] ?? P.EX_LOOKS[a.look];
       if (!look) continue;
       const H = look.h ?? 1;
-      // readable face when talking: standing height on screen >= 25 % of frame
+      // readable face when talking: standing height on screen >= 25 % of frame (480 px on 1920p 9:16; 270 px on 1080p 16:9)
       if (a.talks) {
         const px = 610 * H * a.s * Math.min(k0, k1);
+        const minTalkPx = isLong16x9 ? 270 : 480;
         const role = P.CAST_ROLES[a.look]?.role;
-        if (px < 480 && !waived('SZ-01', r.name)) (role === 'principal' ? err : warn)('SZ-01', `${tag}: ${a.id} talks at ${Math.round(px)} px tall (< 480 = 25 % of frame) — push in or scale up`);
+        if (px < minTalkPx && !waived('SZ-01', r.name)) (role === 'principal' ? err : warn)('SZ-01', `${tag}: ${a.id} talks at ${Math.round(px)} px tall (< ${minTalkPx} = 25 % of frame) — push in or scale up`);
       }
       // walking: must be side view while moving; speed sane
       if (A.path && A.path.length > 1) {
@@ -686,14 +790,16 @@ if (phase !== 'design') {
   for (const id of Object.keys(P.EPISODE_SETS)) if (!usedSets.has(id)) warn('CO-02', `set ${id} is built but never used`);
   // segment coverage: long segments need more than one picture
   const segs = Object.entries(P.C.seg_starts).sort((a, b) => a[1] - b[1]);
+  const co03MaxS = isLong16x9 ? 10.5 : 5;
   segs.forEach(([id, t0], j) => {
     const t1 = j + 1 < segs.length ? segs[j + 1][1] : P.C.voice_end;
     const n = rows.filter((r) => r.t0 < t1 - 0.2 && r.t1 > t0 + 0.2).length;
-    if (t1 - t0 > 5 && n < 2) warn('CO-03', `${id}: ${(t1 - t0).toFixed(1)} s of narration on a single shot`);
+    if (t1 - t0 > co03MaxS && n < 2) warn('CO-03', `${id}: ${(t1 - t0).toFixed(1)} s of narration on a single shot`);
   });
-  // pacing (standards/pacing.json): every episode cuts at the same speed
+  // pacing (standards/pacing.json): every episode cuts at the same speed (dual-format: short vs long_16x9)
   {
-    const PA = JSON.parse(fs.readFileSync(new URL('../standards/pacing.json', import.meta.url), 'utf8')).shots;
+    const pacingDoc = JSON.parse(fs.readFileSync(new URL('../standards/pacing.json', import.meta.url), 'utf8'));
+    const PA = (isLong16x9 && pacingDoc.shots_long_16x9) ? pacingDoc.shots_long_16x9 : pacingDoc.shots;
     const durs = rows.map((r) => r.t1 - r.t0).sort((a, b) => a - b);
     const total = rows.length ? rows[rows.length - 1].t1 - rows[0].t0 : 0;
     if (durs.length && total > 30) {
@@ -705,20 +811,20 @@ if (phase !== 'design') {
       if (p10 < PA.p10_s_min) err('PC-03', `10 % of shots are shorter than ${p10.toFixed(2)} s (min ${PA.p10_s_min} s): too choppy`);
       const long = rows.filter((r) => r.t1 - r.t0 > PA.max_s && !waived('PC-03', r.name));
       for (const r of long) err('PC-03', `'${r.name}' holds ${(r.t1 - r.t0).toFixed(1)} s (> ${PA.max_s} s)`);
-      console.log(`pacing: ${durs.length} shots, mean ${mean.toFixed(2)} s, ${perMin.toFixed(1)}/min, p10 ${p10.toFixed(2)} s`);
+      console.log(`pacing (${isLong16x9 ? 'long_16x9' : 'short'}): ${durs.length} shots, mean ${mean.toFixed(2)} s, ${perMin.toFixed(1)}/min, p10 ${p10.toFixed(2)} s`);
     }
   }
   // SH-16: set-fatigue & unbroken streak guard for long_16x9
   // SH-17: cinematic view diversity & WORLD_PROP reuse diversity for long_16x9
-  if (isLong16x9 && rows.length >= 30) {
+  if (isLong16x9 && rows.length >= 20) {
     const setCounts = new Map();
     let runSet = null, runStart = 0, runLen = 0;
     const flushStreak = (endIdx) => {
       if (runSet === null) return;
-      if (runLen > 10) {
-        err('SH-16', `set '${runSet}' held for ${runLen} consecutive shots (#${runStart}..#${endIdx}) — switch angle plate or location (max 10)`);
-      } else if (runLen > 7) {
-        warn('SH-16', `set '${runSet}' held for ${runLen} consecutive shots (#${runStart}..#${endIdx}) — switch angle plate or location (max 10)`);
+      if (runLen > 8) {
+        err('SH-16', `set '${runSet}' held for ${runLen} consecutive shots (#${runStart}..#${endIdx}) — switch angle plate or location (max 8)`);
+      } else if (runLen > 5) {
+        warn('SH-16', `set '${runSet}' held for ${runLen} consecutive shots (#${runStart}..#${endIdx}) — switch angle plate or location (max 8)`);
       }
     };
     for (let i = 0; i < rows.length; i++) {
@@ -1038,6 +1144,7 @@ if (phase !== 'design') {
       name: r.name,
       set: r.set,
       shotScale: P.SETS[r.set]?.shotScale ?? null,
+      choreoEvents: choreoByShot.get(r.i) ?? 0,
       gridLayout: worstGrid,
       scaleIssues: shotScaleIssues,
       creatureCutoffIssues: shotCutoffIssues,

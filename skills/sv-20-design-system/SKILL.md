@@ -1,6 +1,6 @@
 ---
 name: sv-20-design-system
-description: Design the cast and the sets of a story-video episode in the house "riso ink" style before any shot is written — exact colour tokens, line weights, halftone and glow rules, typography, character sheet procedure with trait rules, six-pass set building at exemplar detail density, props and overlays. Use whenever you create or change a character look, a location/set, a prop, an overlay, or anything visual in an episode project (src/episode/cast.ts, src/episode/sets.tsx, src/episode/geo.ts, src/props.tsx), and for gate G4.
+description: Design the cast and the sets of a story-video episode in the house "riso ink" style before any shot is written — exact colour tokens, line weights, halftone and glow rules, typography, character sheet procedure with trait rules, six-pass set building at exemplar detail density, Spatial Location Packs (cameraDir, shared landmarks, SE-17, per-location continuity strips), props and overlays. Use whenever you create or change a character look, a location/set, a prop, an overlay, or anything visual in an episode project (src/episode/cast.ts, src/episode/sets.tsx, src/episode/geo.ts, src/props.tsx), and for gate G4.
 ---
 
 # sv-20 · Design system — cast + sets (gate G4)
@@ -19,7 +19,7 @@ belongs in the same series and carry the same density of detail. Agents that ski
 ## Inputs → outputs
 - In: `brief.md` (Characters, Locations), `beats.md` (segment map: who is where), `script.json`, G2/G3 passed (run `python3 scripts/plan_assets.py` for the G2→G4 asset blueprint).
 - Out: `src/episode/cast.ts` (CAST + CAST_ROLES), `src/episode/sets.tsx` (EPISODE_SETS), `src/episode/subjects.tsx` (multi-pose Hero `SUBJECTS`), `src/episode/geo.ts` (touch
-  points), new props in `src/props.tsx` if needed, evidence in `qa/design/` (including `overview_sets.jpg`), `gates/G4.review.md`.
+  points), new props in `src/props.tsx` if needed, evidence in `qa/design/` (including `overview_sets.jpg` and per-location `location_<loc>_pack.jpg`), `gates/G4.review.md`.
 
 ## Workflow
 
@@ -31,16 +31,16 @@ belongs in the same series and carry the same density of detail. Agents that ski
    colours → story trait → register → `node scripts/design.mjs` → look at `cast_episode_p*.png` and every
    `expr_<key>.png` (open the light `_v.jpg` views; sets also get `set_<id>_zoom.jpg`, 3×3 full-resolution
    ninths to judge detail and text) → fix → `node scripts/design.mjs --changed` (re-renders only what changed) → repeat. Run `node scripts/lint.mjs design` until CH-* errors are gone.
-3. **Sets & Drawn Sub-Scenes.** For each location: location card → object list (≥ 15, sets.md §9) → blocking sketch with
+3. **Sets & Spatial Location Packs.** For each location: location card → object list (≥ 15, sets.md §9) → blocking sketch with
    touch points in `geo.ts` → six passes, rendering `node scripts/design.mjs --only set:<id>` after each
-   pass → compare with the exemplar plate of the same kind → `bounds` → register. For natural/outdoor environments, use the Botanical Kit in `kit.tsx` (`Leaf`, `GrassTuft`, `GrassStrip`, `LeafCluster`, `Bush`, `TreeCanopy`, `Vine`) rather than flat geometric blobs. In `long_16x9` episodes, every non-insert set MUST declare `actorScale: [minS, maxS]`, `shotScale: 'establishing' | 'medium' | 'closeup' | 'insert'`, and `location` (`LA-01`), and at least 3 locations should include `≥ 2` drawn `shotScale` plates (`SE-15`, never fake close-ups via camera zoom).
+   pass → compare with the exemplar plate of the same kind → `bounds` → register. For natural/outdoor environments, use the Botanical Kit in `kit.tsx` (`Leaf`, `GrassTuft`, `GrassStrip`, `LeafCluster`, `Bush`, `TreeCanopy`, `Vine`) rather than flat geometric blobs. In `long_16x9` episodes, organize sets into **Spatial Location Packs** (**target 24–30 drawn sets** = 5–6 primary locations × 3–5 redrawn camera angles each; hard floor `≥ 15` ERROR, WARN `< 24`, WARN if `< 3` primary locations have `≥ 3` redrawn angles — `SE-15`, never fake close-ups via camera zoom). Every non-insert set MUST declare `actorScale: [minS, maxS]`, `shotScale: 'establishing' | 'medium' | 'closeup' | 'insert'`, `location` (`LA-01`), **`SetDef.cameraDir`** (`'front' | 'reverse' | 'left' | 'right' | 'top' | 'low' | 'detail'`), and shared **`SetDef.landmarks: string[]`** (physical fixtures/anchors drawn consistently across every redrawn angle of the same room, guarded by `SE-17`).
 3b. **Hero Subjects (`src/episode/subjects.tsx`).** Every recurring hero creature, boss, vehicle, or rideable machine MUST be registered in `SUBJECTS` (`PR-06`) with `title`, `kind`, `relToActor: [minR, maxR]`, optional `seats` for `Actor.mount`, and **`≥ 4` distinct poses** (at least 3 producing distinct SVG markup/bounds; no copy-paste static stickers). For rideable creatures (`kind: 'creature'`), author `SubjectSeat` with `straddle: true`, subject-local IK `grip: [gx, gy]` anchors (collar, antenna base, or front rider's shoulder), and `wind` (e.g. `1.2..1.5` in `fly` / `0.8` in `hover`) so `Film.tsx` renders the 3-layer straddle sandwich with `SeatShadow` and trailing hair (`MO-14`).
-4. **Lint.** `node scripts/lint.mjs design` must print 0 errors (checks `CH-01..10`, `SE-01..16`, `PR-01..06`, `LA-01`, `TK-01..03`). It prints the density line per set
+4. **Lint.** `node scripts/lint.mjs design` must print 0 errors (checks `CH-01..10`, `SE-01..17`, `PR-01..06`, `LA-01`, `TK-01..03`). It prints the density line per set
    (`set kitchen: 118 shapes · 14 colours · 6 texts · halftone 4 · glow 3 · mid 2`). Do not weaken a
    threshold; add detail.
 5. **Render all evidence.** `node scripts/design.mjs` (writes cast pages, expression sheets for every
-   principal and support, `props_episode_p*.png` + `_v.jpg` human-scale prop sheets, `subject_<id>.png` + `_v.jpg` multi-pose Hero Subject sheets, set plates + grids with scale silhouettes, `qa/design/overview_sets.jpg` single-sheet overview of all episode sets for fast palette/angle consistency checks, and auto-generates `qa/design/visual_spec.json` with `cast`, `sets`, `subjects`, `world_props`, and `hand_props` specs).
-6. **Review.** Fill `gates/G4.review.md`: one line per evidence image — including `qa/design/overview_sets.jpg`, `props_episode_p*_v.jpg`, every `subject_<id>_v.jpg` (verify `≥ 4` distinct poses and `relToActor` human-scale proportions), and every `set_<id>_v.jpg` / `_grid_v.jpg` — with what you actually saw (≥ 4
+   principal and support, `props_episode_p*.png` + `_v.jpg` human-scale prop sheets, `subject_<id>.png` + `_v.jpg` multi-pose Hero Subject sheets, set plates + grids with scale silhouettes, location-sorted `qa/design/overview_sets.jpg` single-sheet overview of all episode sets, per-location multi-angle continuity strips **`qa/design/location_<loc>_pack.jpg`** for every location with `≥ 2` rendered sets, and auto-generates `qa/design/visual_spec.json` with `cast`, `sets`, `subjects`, `world_props`, and `hand_props` specs).
+6. **Review.** Fill `gates/G4.review.md`: one line per evidence image — including `qa/design/overview_sets.jpg`, every per-location **`qa/design/location_<loc>_pack.jpg`** (verify shared `landmarks` and 3D room continuity across redrawn `cameraDir` angles), `props_episode_p*_v.jpg`, every `subject_<id>_v.jpg` (verify `≥ 4` distinct poses and `relToActor` human-scale proportions), and every `set_<id>_v.jpg` / `_grid_v.jpg` — with what you actually saw (≥ 4
    words) and the rubric answers (characters.md §8, sets.md §11).
 7. **Show the user** the cast sheet and the set plates (send the PNGs) and get their OK. Put their words
    in `user_quote`. If they asked you to carry on without checking, use `approval: delegated` and quote that.
@@ -71,3 +71,4 @@ belongs in the same series and carry the same density of detail. Agents that ski
 | Lint PR-04 `HAND_PROPS` grip or size | keep grip origin `(0,0)` within `<= 120 px` of the prop (`gripDist <= 120`) and max dimension `<= 380 px` |
 | Lint PR-06 Hero Subject poses/spec | register in `src/episode/subjects.tsx` with `title`, `relToActor: [minR, maxR]`, and `>= 4` poses (at least 3 visually distinct SVG outputs); render `qa/design/subject_<id>.png` |
 | Lint LA-01 missing set scale/sub-scene metadata | declare `actorScale: [minS, maxS]`, `shotScale` (`establishing|medium|closeup|insert`), and `location` on every non-insert `long_16x9` set |
+| Lint SE-15 / SE-17 Spatial Location Pack continuity | build `24–30` drawn sets (`>= 15` floor, `>= 3` locations with `>= 3` angles), declare valid `cameraDir` (`front|reverse|left|right|top|low|detail`) and shared `landmarks: string[]`, avoid duplicate `(angle, shotScale, cameraDir)` in the same room, and inspect `qa/design/location_<loc>_pack.jpg` |
