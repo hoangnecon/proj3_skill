@@ -2,7 +2,7 @@
 // Gốc toạ độ = điểm giữa hai bàn chân. Trục y âm là đi lên. Chuẩn quay phải-trước (+x), lật mượt bằng scale(face, 1).
 import React from 'react';
 import {E, L, PAL, R, Rr, S, Sh, col, LINE, Smoke} from './kit';
-import {TaperLimb, curvedTorsoPath, hairWindOffset} from './anim';
+import {TaperLimb, curvedTorsoPath, hairWindOffset, livingIdle, talkGesture} from './anim';
 import type {Arm, Expr, Look, Pose} from './chars';
 
 const rad = (d: number) => (d * Math.PI) / 180;
@@ -54,18 +54,20 @@ export const Person3Q: React.FC<ThreeQProps> = ({
   const HR = 100 * (look.head ?? 1);
   const hy = shY - 8 - HR * 0.9;
   const legs = g ? 'none' : pose.legs ?? 'stand';
+  const idle = livingIdle(t, blinkPh);
+  const tg = talkGesture(t, talk, blinkPh);
   const bodyDrop = legs === 'sit' ? 70 : legs === 'crouch' ? 62 * H : legs === 'ride' ? 72 * H : legs === 'push' ? 24 * H : 0;
 
-  // Độ cong cột sống chữ C theo tư thế
+  // Độ cong cột sống chữ C theo tư thế + nhịp thở / dồn trọng tâm tự nhiên
   const bendX =
-    legs === 'ride' ? 20 :
+    (legs === 'ride' ? 20 :
     legs === 'push' ? 26 :
     legs === 'run' ? 16 :
     legs === 'crouch' ? 14 :
     legs === 'fall' ? -22 :
     legs === 'jump' ? -8 :
     legs === 'climb' ? 6 :
-    legs === 'walk' ? 4 : 0;
+    legs === 'walk' ? 4 : 0) + idle.swayX;
   const shShift = bendX * 0.35;
 
   // Độ lệch phối cảnh 3/4 (hướng mặt +x): vai gần rộng (-x), vai xa thu hẹp (+x), trục ngực lệch +x
@@ -76,8 +78,8 @@ export const Person3Q: React.FC<ThreeQProps> = ({
   const farHemX = ww * 0.78 + belly * 24;
 
   const bY = legY + bodyDrop;
-  const sY = shY + bodyDrop;
-  const hyy = hy + bodyDrop;
+  const sY = shY + bodyDrop - idle.shoulderLift;
+  const hyy = hy + bodyDrop - idle.shoulderLift + tg.headNod;
 
   // --- tay (IK + góc khớp đồng bộ POSES) ---
   const armW = 30 * Math.min(1.25, W);
@@ -107,7 +109,9 @@ export const Person3Q: React.FC<ThreeQProps> = ({
   const armPts = (sg: number, a: Arm): [number, number][] => {
     const [x0, y0] = shoulder(sg);
     if (typeof a === 'string' || !Array.isArray(a)) {
-      const [tx, ty] = typeof a === 'string' ? target(sg, a) : [a.x, a.y];
+      const [tx, rawTy] = typeof a === 'string' ? target(sg, a) : [a.x, a.y];
+      const lockedHand = typeof a === 'string' && ['hip', 'pocket'].includes(a);
+      const ty = rawTy + (!lockedHand && talk > 0 ? tg.handBob : 0);
       const dx = tx - x0, dy = ty - y0;
       let d = Math.hypot(dx, dy);
       let A = ua, B = fa;
@@ -158,8 +162,9 @@ export const Person3Q: React.FC<ThreeQProps> = ({
     }
     const t1 = rad(a0);
     const t2 = rad(a0 + a1);
-    const x1 = x0 + sg * Math.sin(t1) * ua, y1 = y0 + Math.cos(t1) * ua;
-    const x2 = x1 + sg * Math.sin(t2) * fa, y2 = y1 + Math.cos(t2) * fa;
+    const hBob = talk > 0 ? tg.handBob : 0;
+    const x1 = x0 + sg * Math.sin(t1) * ua, y1 = y0 + Math.cos(t1) * ua + hBob * 0.4;
+    const x2 = x1 + sg * Math.sin(t2) * fa, y2 = y1 + Math.cos(t2) * fa + hBob * 0.6;
     return [[x0, y0], [x1, y1], [x2, y2]];
   };
 
@@ -402,7 +407,7 @@ export const Person3Q: React.FC<ThreeQProps> = ({
     legs === 'jump' ? Math.sin(t * 8) * 5 :
     legs === 'climb' ? Math.abs(Math.sin(t * 7)) * 6 : 0;
   const bob = g ? Math.sin(t * 2.2 + blinkPh) * 10 : (pose.hop ?? 0) + modeBob;
-  const breath = Math.sin(t * 2.5 + blinkPh) * 0.008;
+  const breath = idle.breathe * 0.008 + tg.chestPulse;
   const sq = Math.max(0.5, (pose.squash ?? 1) + breath);
   const sxSq = 1 / Math.sqrt(sq);
   const totalRot = (pose.lean ?? 0) + (pose.pitch ?? 0);
@@ -413,11 +418,11 @@ export const Person3Q: React.FC<ThreeQProps> = ({
     </g>
   ) : null;
 
-  // --- chuyển động thứ cấp: gió tóc + độ trễ đầu (head lag) ---
+  // --- chuyển động thứ cấp: gió tóc + độ trễ đầu (head lag) + living micro-acting ---
   const hw = hairWindOffset(t, wind + (legs === 'run' ? 0.9 : 0), velX * face, blinkPh);
   const windTilt = Math.max(-2, Math.min(2, wind)) * 1.6;
   const headLag =
-    legs === 'ride' ? 5.5 + Math.sin(t * 6 - 0.8) * 2.0 + windTilt :
+    (legs === 'ride' ? 5.5 + Math.sin(t * 6 - 0.8) * 2.0 + windTilt :
     legs === 'push' ? 6.5 :
     legs === 'run' ? 4.5 + Math.sin(t * 14 - 0.9) * 3.2 + windTilt * 0.6 :
     legs === 'walk' ? Math.sin(t * 9 - 0.85) * 2.2 :
@@ -425,11 +430,11 @@ export const Person3Q: React.FC<ThreeQProps> = ({
     legs === 'fall' ? -10 + Math.sin(t * 18 - 0.6) * 4.0 :
     legs === 'jump' ? -3.5 :
     legs === 'climb' ? Math.sin(t * 7 - 0.7) * 2.5 :
-    windTilt * 0.8;
+    windTilt * 0.8) + idle.headTilt + tg.headTilt;
 
   const head = (
     <g transform={`translate(${shShift.toFixed(1)} 0) rotate(${headLag.toFixed(2)} 0 ${(sY - 22).toFixed(1)})`}>
-      <Head3Q look={look} hy={hyy} R={HR} expr={expr} talk={talk} t={t} gaze={gaze} blinkPh={blinkPh} hw={hw} />
+      <Head3Q look={look} hy={hyy} R={HR} expr={expr} talk={talk} t={t} gaze={gaze} blinkPh={blinkPh} hw={hw} browBob={tg.browBob} pupilDx={idle.pupilDx} />
     </g>
   );
 
@@ -483,7 +488,9 @@ const Head3Q: React.FC<{
   gaze: number;
   blinkPh: number;
   hw?: {dx: number; dy: number; rot: number};
-}> = ({look, hy, R: r, expr, talk, t, gaze, blinkPh, hw = {dx: 0, dy: 0, rot: 0}}) => {
+  browBob?: number;
+  pupilDx?: number;
+}> = ({look, hy, R: r, expr, talk, t, gaze, blinkPh, hw = {dx: 0, dy: 0, rot: 0}, browBob = 0, pupilDx = 0}) => {
   const g = look.ghost;
   const skin = g ? 'ghost' : look.skin ?? 'skin';
   const hairC = look.hairC ?? 'hair';
@@ -545,9 +552,10 @@ const Head3Q: React.FC<{
   const ey = hy + r * 0.2;
   const er = r * 0.12;
   const browC = look.brows ?? (g ? 'white' : 'hair');
+  const pxOff = pupilDx + (expr === 'shock' ? Math.sin(t * 32) * 1.4 : 0);
 
   const brow = (dl: number, dr: number, lift = 0) => {
-    const by = ey - r * 0.32 - lift;
+    const by = ey - r * 0.32 - lift + browBob;
     els.push(<L key="bl" d={`M${exN - r * 0.13} ${by + dl}Q${exN} ${by - r * 0.05} ${exN + r * 0.12} ${by - dl}`} w={7} c={browC} />);
     els.push(<L key="br" d={`M${exF + r * 0.1} ${by + dr}Q${exF} ${by - r * 0.05} ${exF - r * 0.1} ${by - dr}`} w={6.5} c={browC} />);
   };
@@ -568,8 +576,9 @@ const Head3Q: React.FC<{
       }
     } else {
       for (const [ex, sx, tag] of eyeSpecs) {
-        els.push(<ellipse key={'e' + tag} cx={ex} cy={ey} rx={er * sx * k} ry={er * 1.18 * k} fill={PAL.ink} />);
-        shine(ex, ey, 'eh' + tag, sx, k);
+        const dx = pxOff * sx;
+        els.push(<ellipse key={'e' + tag} cx={ex + dx} cy={ey} rx={er * sx * k} ry={er * 1.18 * k} fill={PAL.ink} />);
+        shine(ex + dx, ey, 'eh' + tag, sx, k);
       }
     }
   };
@@ -582,16 +591,18 @@ const Head3Q: React.FC<{
   };
   const eyesWide = () => {
     for (const [ex, sx, tag] of eyeSpecs) {
+      const dx = pxOff * sx;
       els.push(<S key={'ew' + tag} d={E(ex, ey, er * 1.42 * sx, er * 1.58)} f="white" sw={4} />);
-      els.push(<circle key={'ep' + tag} cx={ex + er * 0.15} cy={ey + 2} r={er * 0.68 * Math.min(1, sx + 0.12)} fill={PAL.ink} />);
-      shine(ex + er * 0.15, ey + 2, 'ws' + tag, sx, 0.6);
+      els.push(<circle key={'ep' + tag} cx={ex + er * 0.15 + dx} cy={ey + 2} r={er * 0.68 * Math.min(1, sx + 0.12)} fill={PAL.ink} />);
+      shine(ex + er * 0.15 + dx, ey + 2, 'ws' + tag, sx, 0.6);
     }
   };
   const eyesNarrow = () => {
     for (const [ex, sx, tag] of eyeSpecs) {
-      els.push(<ellipse key={'e' + tag} cx={ex} cy={ey + er * 0.25} rx={er * sx} ry={er * 0.8} fill={PAL.ink} />);
+      const dx = pxOff * sx;
+      els.push(<ellipse key={'e' + tag} cx={ex + dx} cy={ey + er * 0.25} rx={er * sx} ry={er * 0.8} fill={PAL.ink} />);
       els.push(<L key={'lid' + tag} d={`M${ex - er * 1.25 * sx} ${ey - er * 0.2}h${er * 2.5 * sx}`} w={6} />);
-      els.push(<circle key={'s' + tag} cx={ex + er * 0.3 * sx} cy={ey + er * 0.25} r={er * 0.21} fill={PAL.white} />);
+      els.push(<circle key={'s' + tag} cx={ex + dx + er * 0.3 * sx} cy={ey + er * 0.25} r={er * 0.21} fill={PAL.white} />);
     }
   };
 

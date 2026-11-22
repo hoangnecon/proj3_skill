@@ -275,6 +275,14 @@ if (phase !== 'shots') {
         }
       }
     }
+    // SE-18: Perspective-Horizon Consistency Guard (design)
+    for (const id of sets) {
+      const d = P.EPISODE_SETS[id];
+      if (!d || d.insert) continue;
+      if (d.cameraDir === 'top' && d.angle !== 'high' && !lineWaived(setsSrc, 'SE-18', id)) {
+        warn('SE-18', `${id}: cameraDir 'top' should pair with angle 'high' and 3/4 elevated perspective (not a flat 90° floorplan) so horizon-rig characters sit naturally in space`);
+      }
+    }
   }
   // PR-01, PR-02, PR-03 & PR-05: human-scale guard, internal text collision, disembodied head & partial-body continuity check on custom episode WORLD_PROPS
   {
@@ -548,7 +556,7 @@ if (phase !== 'design') {
     if (i > 0 && r.t0 <= rows[i - 1].t0) err('SH-13', `${tag}: starts before/with the previous shot (anchor order)`);
     if (dur < 0.45 && !waived('SH-14', r.name)) err('SH-14', `${tag}: ${dur.toFixed(2)} s is a flash cut (< 0.45 s)`);
     else if (dur < 0.7) warn('SH-14', `${tag}: ${dur.toFixed(2)} s is very short`);
-    const holdWarnS = isLong16x9 ? 11.0 : 6.5;
+    const holdWarnS = isLong16x9 ? 8.0 : 6.5;
     if (dur > holdWarnS && !waived('SH-15', r.name)) warn('SH-15', `${tag}: ${dur.toFixed(1)} s — long hold; is something moving/changing?`);
     const k0 = r.cam[2], k1 = r.cam2 ? r.cam2[2] : k0;
     const resolvedCamKeys = Array.isArray(r.camKeys)
@@ -628,8 +636,24 @@ if (phase !== 'design') {
         err('LA-03', `${tag}: fake close-up via camera zoom (${maxK.toFixed(2)}×) on establishing/wide set '${r.set}' — draw a dedicated 'medium' or 'closeup' sub-scene plate instead`);
       }
     }
-    // first appearance of a set: establish it
-    if (!P.SETS[r.set]?.insert && r.set !== 'solid' && !rows.slice(0, i).some((q) => q.set === r.set) && Math.min(k0, k1) > 1.2 && !waived('CA-04', r.name))
+    // SE-18: Perspective-Horizon Consistency Guard (shots)
+    if (setDef?.cameraDir === 'top' && !waived('SE-18', r.name)) {
+      const hasHorizonRig = (s.actors ?? []).some((A) => {
+        if (A.mount) return false;
+        const defV = (A.path && A.path.length > 1) || A.ride ? 'side' : 'front';
+        const vs = Array.isArray(A.view) && A.view.length > 0 ? A.view.map(([vv]) => vv) : [A.view ?? defV];
+        return vs.some((v) => v === 'side' || v === 'front');
+      });
+      if (hasHorizonRig) {
+        warn('SE-18', `${tag}: horizon-rig actor on cameraDir:'top' set '${r.set}' risks board-game perspective mismatch — draw 3/4 elevated 'high' perspective (cameraDir:'front'|'left'|'right') or use view:'3q'/'back'`);
+        markHot(r.i, 'SE-18');
+      }
+    }
+    // first appearance of a set: establish it (unless it's a closeup/POV sub-scene of an already-established location pack)
+    const setLoc = typeof setDef?.location === 'string' ? setDef.location.trim() : '';
+    const locAlreadyEstablished = !!setLoc && rows.slice(0, i).some((q) => (P.SETS[q.set]?.location ?? '').trim() === setLoc);
+    const isDetailSubPlate = setDef?.shotScale === 'closeup' || setDef?.angle === 'closeup' || setDef?.angle === 'pov' || setDef?.cameraDir === 'detail';
+    if (!setDef?.insert && r.set !== 'solid' && !(isDetailSubPlate && locAlreadyEstablished) && !rows.slice(0, i).some((q) => q.set === r.set) && Math.min(k0, k1) > 1.2 && !waived('CA-04', r.name))
       err('CA-04', `${tag}: first shot in '${r.set}' is not an establishing frame (zoom ${Math.min(k0, k1)} > 1.2)`);
     // something must change in every shot (actor motion, camera move, set state, talk, expression, overlay)
     const lives = r.cam2 || (Array.isArray(s.camKeys) && s.camKeys.length >= 2) || (s.keys && Object.keys(s.keys).length) || (s.over ?? []).length || s.of || s.punch ||
@@ -915,6 +939,128 @@ if (phase !== 'design') {
         }
       }
     }
+    // MO-18: Anti-Frozen-Statue & Frozen-Attack Guard
+    {
+      const resolveShotTT = (tt) => {
+        if (typeof tt === 'number') return Number.isFinite(tt) ? r.t0 + tt : NaN;
+        if (typeof tt === 'string') {
+          try { return P.tAt(tt); } catch { return NaN; }
+        }
+        return NaN;
+      };
+      // 1. Frozen Creature Attack Guard (all formats)
+      const ATTACK_POSES = new Set(['pounce', 'charge', 'dive', 'attack']);
+      for (const ex of s.extras ?? []) {
+        if (!P.SUBJECTS?.[ex.k] || !Array.isArray(ex.pose)) continue;
+        const resolvedPoses = ex.pose.map(([pv, tt]) => [String(pv), resolveShotTT(tt)]);
+        for (let pi = 0; pi < resolvedPoses.length; pi++) {
+          const [pv, tAct] = resolvedPoses[pi];
+          if (!ATTACK_POSES.has(pv) || !Number.isFinite(tAct)) continue;
+          const hasSubseqPose = resolvedPoses.some(([, t2], pj) => pj !== pi && Number.isFinite(t2) && t2 > tAct + 1e-4);
+          const hasPathAfter = Array.isArray(ex.path) && ex.path.length >= 2 && ex.path.some((w) => {
+            const tw = Array.isArray(w) ? resolveShotTT(w[2]) : NaN;
+            return Number.isFinite(tw) && tw > tAct + 0.4;
+          });
+          if (!hasSubseqPose && !hasPathAfter && (r.t1 - tAct) > 1.8 && !waived('MO-18', r.name)) {
+            err('MO-18', `${tag}: subject '${ex.k}' switches to active attack pose '${pv}' at ${tAct.toFixed(2)}s and freezes in place for ${(r.t1 - tAct).toFixed(1)}s until shot end — add a lunge path, follow-through pose, or cut on impact`);
+            markHot(r.i, 'MO-18');
+          }
+        }
+      }
+      // 2. Actor Dead-Freeze Window Guard (isLong16x9 && dur > 4.2)
+      if (isLong16x9 && dur > 4.2 && !waived('MO-18', r.name)) {
+        for (const a of r.actors) {
+          const role = P.CAST_ROLES[a.look]?.role;
+          if (role !== 'principal' && role !== 'support') continue;
+          const A = (s.actors ?? []).find((q) => q.id === a.id);
+          if (!A) continue;
+          if (A.mount?.target) {
+            const targetEx = (s.extras ?? []).find((e) => e.id === A.mount.target);
+            if (targetEx && Array.isArray(targetEx.path) && targetEx.path.length >= 2) continue;
+          }
+          const activeIntervals = [];
+          if (Array.isArray(a.path) && a.path.length >= 2) {
+            const p0 = a.path[0][2];
+            const p1 = a.path[a.path.length - 1][2];
+            if (Number.isFinite(p0) && Number.isFinite(p1) && p1 > p0) {
+              activeIntervals.push([p0, p1]);
+            }
+          }
+          for (const [ts, te] of A.talk ?? []) {
+            try {
+              const tStart = typeof ts === 'number' ? r.t0 + ts : P.tAt(ts);
+              const tEnd = typeof te === 'number' ? r.t0 + te : P.tAt(te, true);
+              if (Number.isFinite(tStart) && Number.isFinite(tEnd) && tEnd > tStart) {
+                activeIntervals.push([tStart, tEnd]);
+              }
+            } catch {}
+          }
+          const hasValidPushTarget = Array.isArray(A.pushTarget) && A.pushTarget.length === 2
+            && Number.isFinite(A.pushTarget[0]) && Number.isFinite(A.pushTarget[1]);
+          if (hasValidPushTarget) {
+            const collectPushSpans = (spec) => {
+              if (spec === undefined || spec === null) return;
+              if (!Array.isArray(spec)) {
+                if (String(spec).includes('push')) activeIntervals.push([r.t0, r.t1]);
+                return;
+              }
+              const ks = spec.map(([v, tt]) => [String(v), resolveShotTT(tt)]).filter(([, t]) => Number.isFinite(t));
+              for (let ki = 0; ki < ks.length; ki++) {
+                if (ks[ki][0].includes('push')) {
+                  const s0 = ki === 0 ? Math.min(r.t0, ks[0][1]) : ks[ki][1];
+                  const s1 = ki + 1 < ks.length ? ks[ki + 1][1] : r.t1;
+                  if (s1 > s0) activeIntervals.push([s0, s1]);
+                }
+              }
+            };
+            collectPushSpans(A.p);
+            collectPushSpans(A.legs);
+            collectPushSpans(A.arms);
+          }
+          const evSet = new Set([+r.t0.toFixed(4), +r.t1.toFixed(4)]);
+          const addEv = (t) => {
+            if (Number.isFinite(t) && t >= r.t0 && t <= r.t1) evSet.add(+t.toFixed(4));
+          };
+          for (const k of ['p', 'e', 'view', 'face', 'legs', 'arms']) {
+            if (Array.isArray(A[k])) {
+              for (const [, tt] of A[k]) addEv(resolveShotTT(tt));
+            }
+          }
+          for (const rc of A.reach ?? []) {
+            addEv(resolveShotTT(rc.at));
+          }
+          const evTimes = [...evSet].sort((x, y) => x - y);
+          const merged = [];
+          const clipped = activeIntervals
+            .map(([x0, x1]) => [Math.max(r.t0, x0), Math.min(r.t1, x1)])
+            .filter(([x0, x1]) => Number.isFinite(x0) && Number.isFinite(x1) && x1 > x0)
+            .sort((p, q) => p[0] - q[0]);
+          for (const [x0, x1] of clipped) {
+            if (merged.length && x0 <= merged[merged.length - 1][1] + 1e-6) {
+              merged[merged.length - 1][1] = Math.max(merged[merged.length - 1][1], x1);
+            } else {
+              merged.push([x0, x1]);
+            }
+          }
+          let maxGap = 0;
+          for (let ei = 0; ei + 1 < evTimes.length; ei++) {
+            let cur = evTimes[ei];
+            const end = evTimes[ei + 1];
+            for (const [m0, m1] of merged) {
+              if (m1 <= cur) continue;
+              if (m0 >= end) break;
+              if (m0 > cur) maxGap = Math.max(maxGap, m0 - cur);
+              cur = Math.max(cur, m1);
+            }
+            if (end > cur) maxGap = Math.max(maxGap, end - cur);
+          }
+          if (maxGap > 3.4) {
+            warn('MO-18', `${tag}: actor '${a.id}' holds static for ${maxGap.toFixed(1)}s without a pose/expr/view/talk/path beat — add reaction keyframes or cut to a close-up`);
+            markHot(r.i, 'MO-18');
+          }
+        }
+      }
+    }
     if (i > 0 && i < rows.length - 1
       && r.cam[2] <= 1.15 && (r.cam2 ? r.cam2[2] <= 1.15 : true)
       && r.actors.length === 0
@@ -1094,6 +1240,52 @@ if (phase !== 'design') {
         }
       }
     }
+  }
+  // SH-20: Shot-Scale Alternation & Anti-Dollhouse-Wide Streak Guard
+  if (isLong16x9 && rows.length >= 5) {
+    const isWideStage = (r) => {
+      const sd = P.SETS[r.set];
+      if (sd?.insert) return false;
+      if (sd?.shotScale === 'closeup' || sd?.shotScale === 'insert') return false;
+      if (sd?.angle === 'closeup' || sd?.angle === 'pov') return false;
+      const sDef = shots[r.i];
+      const cks = Array.isArray(r.camKeys) ? r.camKeys : (Array.isArray(sDef?.camKeys) ? sDef.camKeys : []);
+      const zooms = [
+        r.cam?.[2],
+        ...(r.cam2 ? [r.cam2[2]] : []),
+        ...cks.map((ck) => (Array.isArray(ck) ? ck[2] : NaN)),
+      ].filter((z) => typeof z === 'number' && Number.isFinite(z));
+      const maxZoom = zooms.length ? Math.max(...zooms) : 1;
+      if (!(maxZoom <= 1.16)) return false;
+      if ((r.actors ?? []).some((a) => a.fg) || (sDef?.actors ?? []).some((a) => a.fg)) return false;
+      return true;
+    };
+    let wStart = -1;
+    const flushWideStreak = (endIdx) => {
+      if (wStart < 0) return;
+      const len = endIdx - wStart + 1;
+      if (len >= 3) {
+        const s0 = rows[wStart].i;
+        const s1 = rows[endIdx].i;
+        const streakWaived = rows.slice(wStart, endIdx + 1).some((q) => waived('SH-20', q.name));
+        if (!streakWaived) {
+          if (len >= 4) {
+            err('SH-20', `shots #${s0}..#${s1} (${len} consecutive full-stage wide/medium shots at zoom <= 1.16 with 0 close-up/POV/OTS breaks) — dollhouse stage monotony; intercut drawn 'closeup'/'insert'/'pov' reaction & detail shots`);
+          } else {
+            warn('SH-20', `shots #${s0}..#${s1} (3 consecutive full-stage wide/medium shots) — consider intercutting a close-up reaction, OTS, or POV detail shot`);
+          }
+        }
+      }
+      wStart = -1;
+    };
+    for (let i = 0; i < rows.length; i++) {
+      if (isWideStage(rows[i])) {
+        if (wStart < 0) wStart = i;
+      } else {
+        flushWideStreak(i - 1);
+      }
+    }
+    flushWideStreak(rows.length - 1);
   }
   // ---- screen geometry (GE-*, LA-*): measured from the shot table, no render. Each hit makes the shot HOT:
   // its review must open the measurement crops (node scripts/qa.mjs crops <i>) — see sv-22 "review cards".

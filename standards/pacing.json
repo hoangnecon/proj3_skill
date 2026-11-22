@@ -35,11 +35,11 @@
   "_why": "Approved episodes cut every 2.0-3.0 s on average (20-28 shots/min); cuts land on word anchors."
  },
  "shots_long_16x9": {
-  "mean_s": [4.5, 9.5],
-  "shots_per_min": [6.0, 14.0],
-  "p10_s_min": 1.6,
-  "max_s": 14.0,
-  "_why": "10-minute 16:9 cinematic episodes use fewer, richer choreographed shots (~60-110 shots total, 4.5-9.5 s mean, 6-14 shots/min) packed with multi-beat character motion, keyed acting/views, camera moves, and 24-30 redrawn multi-angle sets across 5-6 primary locations."
+  "mean_s": [2.8, 6.2],
+  "shots_per_min": [9.5, 21.0],
+  "p10_s_min": 1.3,
+  "max_s": 9.5,
+  "_why": "10-minute 16:9 cinematic episodes alternate crisp 1.8-3.2 s close-up/reaction/POV cuts with rich 4.0-6.5 s dynamic tracking/action shots (~95-180 shots total, 2.8-6.2 s mean, 9.5-21.0 shots/min) across 24-30 redrawn multi-angle & multi-scale sets."
  },
  "music": {"bpm": 118, "theme": "series"}
 }

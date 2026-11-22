@@ -1071,29 +1071,124 @@ const shotNeedsStrip = (r, hot) => {
   return false;
 };
 
+const PY_MOTION_ENERGY = `
+import json, sys
+import numpy as np
+from PIL import Image
+
+spec = json.loads(open(sys.argv[1], encoding="utf-8").read())
+y0, y1 = int(spec["y0"]), int(spec["y1"])
+out = {}
+for k, paths in spec["shots"].items():
+    arrs = []
+    for p in paths:
+        with Image.open(p) as im:
+            g = np.asarray(im.convert("L"), dtype=np.int16)
+        ih = g.shape[0]
+        cy0 = max(0, min(ih - 1, y0))
+        cy1 = max(cy0 + 1, min(ih, y1))
+        arrs.append(g[cy0:cy1, :])
+    raw_deltas = []
+    streak = 0
+    max_streak = 0
+    for i in range(len(arrs) - 1):
+        a, b = arrs[i], arrs[i + 1]
+        if a.shape != b.shape:
+            h = min(a.shape[0], b.shape[0])
+            w = min(a.shape[1], b.shape[1])
+            a, b = a[:h, :w], b[:h, :w]
+        pct = float((np.abs(a - b) > 18).mean() * 100.0)
+        raw_deltas.append(pct)
+        if pct < 0.18:
+            streak += 1
+            if streak > max_streak:
+                max_streak = streak
+        else:
+            streak = 0
+    pair_deltas = [round(v, 2) for v in raw_deltas]
+    out[k] = {
+        "mean_delta_pct": round(sum(raw_deltas) / len(raw_deltas), 2) if raw_deltas else 0.0,
+        "min_delta_pct": round(min(raw_deltas), 2) if raw_deltas else 0.0,
+        "pair_deltas": pair_deltas,
+        "frozen_streak": max_streak,
+    }
+sys.stdout.write(json.dumps(out))
+`;
+
+const measureShotStripsMotion = (targetRows) => {
+  const rawExisting = readJson('qa/motion_energy.json', {});
+  const motionEnergy = {};
+  for (const [k, v] of Object.entries(rawExisting ?? {})) {
+    const idx = Number(k);
+    if (Number.isInteger(idx) && idx >= 0 && idx < rows.length && v && typeof v === 'object') {
+      motionEnergy[idx] = v;
+    }
+  }
+  if (targetRows.length > 0) {
+    const specPath = 'qa/_f/motion_energy_spec.json';
+    const shotsPayload = Object.fromEntries(targetRows.map((r) => [
+      r.i,
+      SHOT_STRIP_FRACS.map((_, idx) => `qa/_f/s${r.i}_${idx}.jpg`),
+    ]));
+    fs.writeFileSync(specPath, JSON.stringify({
+      y0: Math.round(95 * SCALE),
+      y1: Math.round((geom.CAPTION[0] - 12) * SCALE),
+      shots: shotsPayload,
+    }));
+    const stdout = execFileSync(PYTHON, ['-c', PY_MOTION_ENERGY, specPath], {
+      encoding: 'utf8',
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    const computed = JSON.parse(stdout);
+    for (const [k, v] of Object.entries(computed)) {
+      motionEnergy[Number(k)] = v;
+    }
+  }
+  fs.writeFileSync('qa/motion_energy.json', JSON.stringify(motionEnergy, null, 1) + '\n');
+  return motionEnergy;
+};
+
 const runShotStrips = async (forceAll, which = null) => {
   const hot = readJson('qa/hot.json', {});
   fs.mkdirSync('qa/shots', {recursive: true});
   cache.shot_strips ??= {};
+  const existingEnergy = readJson('qa/motion_energy.json', {});
   const sel = which === 'all'
     ? rows
     : which
       ? rows.filter((r) => which.split(',').map(Number).includes(r.i))
       : rows.filter((r) => shotNeedsStrip(r, hot));
-  const todo = sel.filter((r) => forceAll || cache.shot_strips[r.i] !== hashes[r.i] || !fs.existsSync(`qa/shots/${pad(r.i)}.jpg`));
+  const todo = sel.filter((r) =>
+    forceAll ||
+    cache.shot_strips[r.i] !== hashes[r.i] ||
+    !fs.existsSync(`qa/shots/${pad(r.i)}.jpg`) ||
+    !Array.isArray(existingEnergy?.[r.i]?.pair_deltas)
+  );
   const jobs = todo.flatMap((r) => SHOT_STRIP_FRACS.map((u, idx) => ({
     r, idx, t: r.t0 + (r.t1 - r.t0) * u, out: `qa/_f/s${r.i}_${idx}.jpg`,
   })));
   const st = await renderAll(jobs, (j) => !forceAll && cache.shot_strips[j.r.i] === hashes[j.r.i]);
+  const motionEnergy = measureShotStripsMotion(todo);
+  for (const r of sel) {
+    const frozen_streak = motionEnergy[r.i]?.frozen_streak ?? 0;
+    if (frozen_streak >= 2) {
+      console.log(`WARN motion-freeze: shot #${r.i} has ${frozen_streak} consecutive near-static strip intervals (<0.18% active px change)`);
+    }
+  }
   const stripW = is16x9 ? 420 : 300;
   for (const r of todo) {
     const rJobs = jobs.filter((j) => j.r === r);
+    const pairDeltas = motionEnergy[r.i]?.pair_deltas ?? [];
     tile({
       out: `qa/shots/${pad(r.i)}.jpg`,
       cols: 4,
       w: stripW,
       title: `TIỂU ĐOẠN #${r.i} ${r.name} · ${r.set} · ${fmt(r.t1 - r.t0)} · hash ${hashes[r.i]}`,
-      cells: rJobs.map((j) => ({img: j.out, label: `f${j.idx + 1} · ${fmt(j.t)}`, sub: ''})),
+      cells: rJobs.map((j) => ({
+        img: j.out,
+        label: `f${j.idx + 1} · ${fmt(j.t)}`,
+        sub: j.idx > 0 && pairDeltas[j.idx - 1] !== undefined ? `Δ=${pairDeltas[j.idx - 1]}%` : '',
+      })),
     });
     cache.shot_strips[r.i] = hashes[r.i];
   }
@@ -1220,12 +1315,22 @@ try {
     fs.mkdirSync('qa/shots', {recursive: true});
     const jobs = SHOT_STRIP_FRACS.map((u, idx) => ({idx, t: r.t0 + (r.t1 - r.t0) * u, out: `qa/_f/s${r.i}_${idx}.jpg`}));
     await renderAll(jobs);
+    const motionEnergy = measureShotStripsMotion([r]);
+    const frozen_streak = motionEnergy[r.i]?.frozen_streak ?? 0;
+    if (frozen_streak >= 2) {
+      console.log(`WARN motion-freeze: shot #${r.i} has ${frozen_streak} consecutive near-static strip intervals (<0.18% active px change)`);
+    }
+    const pairDeltas = motionEnergy[r.i]?.pair_deltas ?? [];
     tile({
       out: `qa/shots/${pad(r.i)}.jpg`,
       cols: 4,
       w: is16x9 ? 420 : 300,
       title: `TIỂU ĐOẠN #${r.i} ${r.name} · ${r.set} · ${fmt(r.t1 - r.t0)} · hash ${hashes[r.i]}`,
-      cells: jobs.map((j) => ({img: j.out, label: `f${j.idx + 1} · ${fmt(j.t)}`, sub: ''})),
+      cells: jobs.map((j) => ({
+        img: j.out,
+        label: `f${j.idx + 1} · ${fmt(j.t)}`,
+        sub: j.idx > 0 && pairDeltas[j.idx - 1] !== undefined ? `Δ=${pairDeltas[j.idx - 1]}%` : '',
+      })),
     });
     cache.shot_strips ??= {};
     cache.shot_strips[r.i] = hashes[r.i];

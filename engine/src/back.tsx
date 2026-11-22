@@ -2,7 +2,7 @@
 // Gốc toạ độ = điểm giữa hai bàn chân. Trục y âm là đi lên. Dùng cho OTS & nhân vật đi/nhìn vào không gian.
 import React from 'react';
 import {E, L, PAL, R, Rr, S, Sh, col, LINE, Smoke} from './kit';
-import {TaperLimb, curvedTorsoPath, hairWindOffset} from './anim';
+import {TaperLimb, curvedTorsoPath, hairWindOffset, livingIdle, talkGesture} from './anim';
 import type {Arm, Look, Pose} from './chars';
 
 const rad = (d: number) => (d * Math.PI) / 180;
@@ -14,6 +14,7 @@ export type BackProps = {
   pose: Pose;
   t: number;
   gaze?: number; // -1..1 nghiêng đầu nhẹ hé má / gọng kính
+  blinkPh?: number;
   lean?: number; // độ nghiêng thêm (độ)
   wind?: number; // luồng gió thổi ngang/lùa tóc (mặc định 0)
   velX?: number; // vận tốc ngang thế giới px/s (mặc định 0)
@@ -27,6 +28,7 @@ export const PersonBack: React.FC<BackProps> = ({
   pose,
   t,
   gaze = 0,
+  blinkPh = 0,
   lean = 0,
   wind = 0,
   velX = 0,
@@ -46,20 +48,22 @@ export const PersonBack: React.FC<BackProps> = ({
   const HR = 100 * (look.head ?? 1); // bán kính đầu
   const hy = shY - 8 - HR * 0.9;
   const legs = g ? 'none' : pose.legs ?? 'stand';
+  const idle = livingIdle(t, blinkPh);
   const bodyDrop = legs === 'sit' ? 70 : legs === 'crouch' ? 62 * H : legs === 'ride' ? 72 * H : legs === 'push' ? 24 * H : 0;
   const bY = legY + bodyDrop;
-  const sY = shY + bodyDrop;
+  const sY = shY + bodyDrop - idle.shoulderLift;
+  const hyy = hy + bodyDrop - idle.shoulderLift;
 
-  // Độ cong/lắc cột sống hữu cơ theo tư thế nhìn từ phía sau
+  // Độ cong/lắc cột sống hữu cơ theo tư thế nhìn từ phía sau + nhịp thở dồn trọng tâm
   const bendX =
-    legs === 'push' ? 16 :
+    (legs === 'push' ? 16 :
     legs === 'crouch' ? 8 :
     legs === 'ride' ? 10 + Math.sin(t * 6) * 4 :
     legs === 'run' ? Math.sin(t * 14) * 12 :
     legs === 'fall' ? -18 + Math.sin(t * 18) * 5 :
     legs === 'jump' ? -8 :
     legs === 'climb' ? Math.sin(t * 7) * 8 :
-    legs === 'walk' ? Math.sin(t * 9) * 4 : 0;
+    legs === 'walk' ? Math.sin(t * 9) * 4 : 0) + idle.swayX;
   const shShift = bendX * 0.35;
 
   // --- tay (hỗ trợ đầy đủ POSES + IK target hướng vào cảnh) ---
@@ -67,7 +71,6 @@ export const PersonBack: React.FC<BackProps> = ({
   const ua = 104 * H, fa = 96 * H;
   const shoulder = (sg: number): [number, number] => [sg * (sw - 14) + shShift, sY + 18];
   const target = (sg: number, n: string): [number, number] => {
-    const hyy = hy + bodyDrop;
     switch (n) {
       case 'mouth': return [sg * HR * 0.32 + shShift, hyy + HR * 0.6];
       case 'taste': return [sg * HR * 0.32 + 33 + shShift, hyy + HR * 0.6 + 90];
@@ -370,8 +373,8 @@ export const PersonBack: React.FC<BackProps> = ({
     legs === 'ride' ? Math.sin(t * 6) * 4 :
     legs === 'jump' ? Math.sin(t * 8) * 5 :
     legs === 'climb' ? Math.abs(Math.sin(t * 7)) * 6 : 0;
-  const bob = g ? Math.sin(t * 2.2) * 10 : (pose.hop ?? 0) + modeBob;
-  const breath = Math.sin(t * 2.5) * 0.008;
+  const bob = g ? Math.sin(t * 2.2 + blinkPh) * 10 : (pose.hop ?? 0) + modeBob;
+  const breath = idle.breathe * 0.008;
   const sq = Math.max(0.5, (pose.squash ?? 1) + breath);
   const sxSq = 1 / Math.sqrt(sq);
   const tail = g ? (
@@ -384,21 +387,20 @@ export const PersonBack: React.FC<BackProps> = ({
   const totalLean = (pose.lean ?? 0) + lean + (pose.pitch ?? 0);
 
   // --- chuyển động thứ cấp: gió tóc + độ trễ lắc đầu nhẹ (cho OTS sống động) ---
-  const hw = hairWindOffset(t, wind + (legs === 'run' ? 0.9 : 0), velX, 0);
+  const hw = hairWindOffset(t, wind + (legs === 'run' ? 0.9 : 0), velX, blinkPh);
   const headLag =
-    legs === 'run' ? Math.sin(t * 14 - 0.9) * 3.0 :
+    (legs === 'run' ? Math.sin(t * 14 - 0.9) * 3.0 :
     legs === 'walk' ? Math.sin(t * 9 - 0.85) * 1.8 :
     legs === 'ride' ? Math.sin(t * 6 - 0.8) * 2.2 :
     legs === 'fall' ? Math.sin(t * 18 - 0.6) * 4.5 :
-    legs === 'climb' ? Math.sin(t * 7 - 0.7) * 2.0 :
-    Math.sin(t * 2.2) * 0.8;
+    legs === 'climb' ? Math.sin(t * 7 - 0.7) * 2.0 : 0) + idle.headTilt;
 
   const showFar = layer !== 'near';
   const showNear = layer !== 'far';
 
   return (
     <g transform={`translate(0 ${(-bob).toFixed(1)}) rotate(${totalLean.toFixed(2)} 0 ${bY.toFixed(1)}) scale(${sxSq.toFixed(4)} ${sq.toFixed(4)})`} opacity={g ? 0.93 : 1}>
-      {showNear && g && <ellipse cx={0} cy={hy + bodyDrop} rx={HR * 3.2} ry={HR * 4} fill="url(#glowG)" />}
+      {showNear && g && <ellipse cx={0} cy={hyy} rx={HR * 3.2} ry={HR * 4} fill="url(#glowG)" />}
       {showFar && propBack?.(hands)}
       {showFar && lBehind && drawArm(lp, 'la', true)}
       {showFar && rBehind && drawArm(rp, 'ra', true)}
@@ -425,7 +427,7 @@ export const PersonBack: React.FC<BackProps> = ({
           {!lBehind && drawHand(hands.l, 'hl')}
           {!rBehind && drawHand(hands.r, 'hr')}
           {/* đầu sau vẽ sau cùng để tóc dài / gáy phủ tự nhiên lên vai */}
-          <HeadBack look={look} hy={hy + bodyDrop} R={HR} gaze={gaze} t={t} wind={wind} velX={velX} hw={hw} headLag={headLag} shShift={sx0} />
+          <HeadBack look={look} hy={hyy} R={HR} gaze={gaze} t={t} wind={wind} velX={velX} hw={hw} headLag={headLag} shShift={sx0} />
         </>
       )}
     </g>
@@ -619,3 +621,4 @@ const HeadBack: React.FC<{
     : undefined;
   return <g transform={xf}>{els}</g>;
 };
+void talkGesture;

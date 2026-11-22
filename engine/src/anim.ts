@@ -56,6 +56,93 @@ export function parabolicArc(u: number, height: number): number {
   return 4 * c * (1 - c) * height;
 }
 
+/**
+ * Whole-body 3-stage anticipation dip -> overshoot pop -> damped cosine settle
+ * impulse for pose/expression transitions and Hero Subject pose switches (RSI v5.4.0).
+ */
+export function poseImpulse(
+  u: number,
+  intensity = 1,
+): {squash: number; dy: number; leanKick: number} {
+  if (!Number.isFinite(u) || u <= 0 || u >= 1) {
+    return {squash: 1, dy: 0, leanKick: 0};
+  }
+  if (u < 0.25) {
+    const w = Math.sin((u / 0.25) * Math.PI * 0.5);
+    return {
+      squash: 1 - 0.065 * intensity * w,
+      dy: 7 * intensity * w,
+      leanKick: -3.5 * intensity * w,
+    };
+  }
+  if (u < 0.65) {
+    const w = Math.sin(((u - 0.25) / 0.4) * Math.PI);
+    return {
+      squash: 1 + 0.055 * intensity * w,
+      dy: -6 * intensity * w,
+      leanKick: 3.0 * intensity * w,
+    };
+  }
+  const r = (u - 0.65) / 0.35;
+  const w = Math.sin(r * Math.PI) * Math.cos(r * Math.PI * 0.5) * (1 - r);
+  return {
+    squash: 1 - 0.02 * intensity * w,
+    dy: 2.2 * intensity * w,
+    leanKick: -1.1 * intensity * w,
+  };
+}
+
+/**
+ * Continuous organic idle micro-acting: breathing chest/shoulder lift, subtle
+ * weight sway, gentle head micro-tilt, and natural eye micro-saccades (RSI v5.4.0).
+ */
+export function livingIdle(
+  t: number,
+  ph: number,
+): {
+  breathe: number;
+  swayX: number;
+  headTilt: number;
+  shoulderLift: number;
+  pupilDx: number;
+} {
+  const breathe = Math.sin(t * 2.7 + ph);
+  const swayX = Math.sin(t * 1.45 + ph * 1.3) * 3.2;
+  const headTilt = Math.sin(t * 1.85 + ph * 0.7) * 1.8;
+  const shoulderLift = breathe * 3.0;
+  const sac = Math.sin(t * 1.1 + ph * 2.1);
+  const pupilDx = sac > 0.82 ? 2.2 : sac < -0.82 ? -2.2 : 0;
+  return {breathe, swayX, headTilt, shoulderLift, pupilDx};
+}
+
+/**
+ * Expressive speech micro-acting driven by active `talk` envelope: vertical
+ * speech nod, conversational head tilt, lively brow emphasis, open-hand gesture
+ * bounce, and chest breath pulse (RSI v5.4.0).
+ */
+export function talkGesture(
+  t: number,
+  talk: number,
+  ph: number,
+): {
+  headNod: number;
+  headTilt: number;
+  browBob: number;
+  handBob: number;
+  chestPulse: number;
+} {
+  if (!Number.isFinite(talk) || talk <= 0.01) {
+    return {headNod: 0, headTilt: 0, browBob: 0, handBob: 0, chestPulse: 0};
+  }
+  const amp = Math.min(1, talk * 1.25);
+  const headNod = Math.sin(t * 9.5 + ph) * 4.5 * amp;
+  const headTilt = Math.sin(t * 5.2 + ph * 1.4) * 3.6 * amp;
+  const browBob = -Math.abs(Math.sin(t * 8.4 + ph)) * 4.2 * amp;
+  const handBob = Math.sin(t * 7.8 + ph * 0.9) * 9.0 * amp;
+  const chestPulse = Math.abs(Math.sin(t * 9.5 + ph)) * 0.018 * amp;
+  return {headNod, headTilt, browBob, handBob, chestPulse};
+}
+
 // ============================================================================
 // 2. 4-Phase Foot-Roll Gait Biomechanics
 // ============================================================================

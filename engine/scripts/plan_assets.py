@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic G2->G4 Asset Blueprint & Parallel Worker Planner (RSI v5.1.0).
+"""Deterministic G2->G4 Asset Blueprint & Parallel Worker Planner (RSI v5.4.0).
 
 Zero-dependency stdlib planner that reads script.json, brief.md (if present), and
 beats.md (if present) in < 0.5s and produces:
@@ -39,7 +39,7 @@ TARGETS_LONG_16X9 = {
     "min_angles": 5,
     "min_locations_with_subscenes": 4,
     "min_subscenes_per_primary_loc": 3,
-    "target_shots_range": [65, 110],
+    "target_shots_range": [95, 175],
     "target_sla_min": 45,
 }
 
@@ -1111,7 +1111,7 @@ def expand_subscene_matrix(
     locations: list[dict[str, Any]],
     targets: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    """Expand primary locations into a Spatial Location-Pack Sub-Scene Matrix (RSI v5.1.0)."""
+    """Expand primary locations into a Spatial Location-Pack Sub-Scene Matrix (RSI v5.4.0)."""
     is_16x9 = targets["format"] == "16:9"
     scale_map = ACTOR_SCALE_16X9 if is_16x9 else ACTOR_SCALE_9X16
     min_sets = targets["min_sets"]
@@ -1122,6 +1122,7 @@ def expand_subscene_matrix(
     matrix: list[dict[str, Any]] = []
     used_ids: set[str] = set()
     loc_scales: dict[str, set[str]] = {loc["id"]: set() for loc in locations}
+    loc_combos: dict[str, set[tuple[str, str, str]]] = {loc["id"]: set() for loc in locations}
     loc_plate_counts: dict[str, int] = {loc["id"]: 0 for loc in locations}
     used_angles: set[str] = set()
     loc_order = {loc["id"]: idx for idx, loc in enumerate(locations)}
@@ -1144,6 +1145,7 @@ def expand_subscene_matrix(
             n += 1
         used_ids.add(set_id)
         loc_scales[base].add(shot_scale)
+        loc_combos[base].add((angle, shot_scale, camera_dir))
         p_idx = loc_plate_counts[base]
         loc_plate_counts[base] = p_idx + 1
         used_angles.add(angle)
@@ -1170,8 +1172,12 @@ def expand_subscene_matrix(
     ordered_priority = [loc for _, loc in priority_locs]
 
     if is_16x9:
-        # Spatial Location Pack: 4 core redrawn plates for EVERY primary location
-        # (Wide front + 180deg Reverse + Diagonal OTS left/right + Vertical Low/High)
+        # Spatial Location Pack (v5.4.0): 5 core redrawn plates for EVERY primary location
+        # (Wide front + 180deg Reverse + Diagonal OTS left/right + Vertical Low or 3/4 High + Dedicated Closeup/POV)
+        detail_specs = [
+            ("Closeup", "closeup", "closeup", "detail", "Tight drawn close-up plate — hero reaction, hand-prop & landmark detail (SH-20, CA-07)"),
+            ("Pov", "closeup", "pov", "detail", "First-person POV / hero-interaction insert plate (SH-20, CA-07)"),
+        ]
         for idx, loc in enumerate(locations):
             # Plate 1: Master establishing front view
             add_plate(
@@ -1201,7 +1207,7 @@ def expand_subscene_matrix(
                 camera_dir=ots_dir,
                 purpose=f"Diagonal OTS / side staging plate ({ots_dir}) — two-shot foreground depth & landmarks",
             )
-            # Plate 4: Vertical contrast (Low worm-eye or High aerial) redrawn from floor/ceiling
+            # Plate 4: Vertical contrast — Low worm-eye or 3/4 elevated High overview (never flat 90deg 'top' per SE-18)
             if idx % 2 == 0:
                 add_plate(
                     loc,
@@ -1212,47 +1218,42 @@ def expand_subscene_matrix(
                     purpose="Low worm-eye vertical contrast — redrawn from floor plane looking up at fixtures/threats",
                 )
             else:
+                high_dir = "front" if (idx // 2) % 2 == 0 else "right"
                 add_plate(
                     loc,
                     suffix="High",
                     shot_scale="establishing",
                     angle="high",
-                    camera_dir="top",
-                    purpose="High aerial vertical overview — redrawn from elevated ceiling/balcony vantage",
+                    camera_dir=high_dir,
+                    purpose=f"3/4 elevated bird's-eye overview ({high_dir}) — 35-45 deg horizon perspective with visible wall/fixture height (SE-18)",
                 )
-
-        # Plate 5: Tight detail / Closeup or POV on top-priority locations until >= target_sets (25) up to ~30
-        desired_total = min(30, max(target_sets, len(locations) * 4 + min(3, len(locations))))
-        detail_specs = [
-            ("Closeup", "closeup", "closeup", "detail", "Tight drawn close-up plate — hero expression, hand-prop & landmark detail"),
-            ("Pov", "closeup", "pov", "detail", "First-person POV / hero-interaction detail plate"),
-        ]
-        detail_added = 0
-        for p_idx, loc in enumerate(ordered_priority):
-            if len(matrix) >= desired_total and detail_added >= min(2, len(ordered_priority)):
-                break
-            if len(matrix) >= 30 and detail_added >= min(2, len(ordered_priority)):
-                break
-            suf, sc, ang, cdir, purp = detail_specs[p_idx % len(detail_specs)]
+            # Plate 5: Dedicated Closeup or POV plate in EVERY Location Pack (actorScale [0.95, 1.25] for SH-20 & CA-07)
+            suf, sc, ang, cdir, purp = detail_specs[idx % len(detail_specs)]
             add_plate(loc, suffix=suf, shot_scale=sc, angle=ang, camera_dir=cdir, purpose=purp)
-            detail_added += 1
 
         # Safety fill for episodes with <= 4 primary locations so planned_sets always reaches target_sets (25)
         fill_specs = [
-            ("HighAlt", "establishing", "high", "top", "Complementary high-angle spatial overview"),
+            ("PovDetail", "closeup", "pov", "detail", "Complementary POV hero-interaction insert plate (SH-20, CA-07)"),
+            ("CloseupAlt", "closeup", "closeup", "detail", "Complementary tight reaction/prop close-up plate (SH-20, CA-07)"),
+            ("HighAlt", "establishing", "high", "right", "Complementary 3/4 elevated bird's-eye overview (SE-18)"),
             ("LowAlt", "medium", "low", "low", "Complementary low worm-eye threat/scale plate"),
-            ("PovDetail", "closeup", "pov", "detail", "Complementary POV hero-interaction plate"),
-            ("CloseupAlt", "closeup", "closeup", "detail", "Complementary tight dialogue/prop close-up"),
             ("OtsOpposite", "medium", "ots", "right", "Opposite diagonal side staging plate"),
+            ("OtsLeft", "medium", "ots", "left", "Alternate left diagonal side staging plate"),
+            ("HighFront", "establishing", "high", "front", "Complementary 3/4 elevated front bird's-eye overview (SE-18)"),
         ]
         f_idx = 0
         while len(matrix) < target_sets or len(used_angles) < min_angles:
             loc = ordered_priority[f_idx % len(ordered_priority)]
-            suf, sc, ang, cdir, purp = fill_specs[f_idx % len(fill_specs)]
+            existing = loc_combos[loc["id"]]
+            chosen_spec = next(
+                (sp for sp in fill_specs if (sp[2], sp[1], sp[3]) not in existing),
+                fill_specs[f_idx % len(fill_specs)],
+            )
+            suf, sc, ang, cdir, purp = chosen_spec
             add_plate(loc, suffix=suf, shot_scale=sc, angle=ang, camera_dir=cdir, purpose=purp)
             f_idx += 1
 
-        # Sort so all 4-5 redrawn angles of each Location Pack appear adjacent
+        # Sort so all redrawn angles of each Location Pack appear adjacent
         matrix.sort(key=lambda item: item["_order"])
         for item in matrix:
             item.pop("_order", None)
@@ -1302,7 +1303,7 @@ def expand_subscene_matrix(
         ("ReverseDetail", "medium", "reverse", "reverse", "Secondary reverse-angle action plate"),
         ("OtsAlt", "medium", "ots", "right", "Alternate over-the-shoulder staging plate"),
         ("PovDetail", "closeup", "pov", "detail", "Dedicated detail/POV plate for climax beat"),
-        ("HighWide", "establishing", "high", "top", "Elevated overview angle for spatial staging"),
+        ("HighWide", "establishing", "high", "right", "3/4 elevated overview angle for spatial staging (SE-18)"),
     ]
     ex_idx = 0
     while len(matrix) < min_sets or len(used_angles) < min_angles:
@@ -1444,7 +1445,8 @@ def plan_g5_workers(
         sets_by_loc.setdefault(s["location"], []).append(s)
 
     choreography_note = (
-        "Target ~65-110 rich multi-action shots (4.5-9.5 s avg); cycle across each location's 4-5 redrawn angles; >=2 motion events per shot >5s (MO-16)"
+        "Target ~95-175 crisp multi-scale cinematic shots (2.8-6.2 s avg); alternate establishing/medium action shots (3.8-6.0 s) "
+        "with drawn closeup/pov/ots reaction & insert cuts (1.8-3.2 s) every 2-3 wide shots (SH-20); >=2 choreography events per shot >5s (MO-16) and zero frozen attacks or >3.4s static actor holds (MO-18)."
         if is_long_16x9
         else "Target ~50-75 punchy shots; match angle & shotScale to dramatic beat and actor pacing."
     )
@@ -1495,7 +1497,7 @@ def plan_g5_workers(
                 cmd += f" --subject {subj['id']}:{pose}"
             place_cmds.append(cmd)
 
-        est_shots = max(14, round(size * 0.78)) if is_long_16x9 else max(size, round(size * 1.4))
+        est_shots = max(18, round(size * 1.25)) if is_long_16x9 else max(size, round(size * 1.4))
         workers.append({
             "worker_id": f"g5-worker-{w}",
             "chapter": w,
@@ -1544,7 +1546,7 @@ def render_markdown(bp: dict[str, Any]) -> str:
     lines.append(f"| Distinct Set Angles | >= {t['min_angles']} | {m['distinct_angles']} ({', '.join(m['angles'])}) | {'OK' if m['distinct_angles'] >= t['min_angles'] else 'GAP'} |")
     lines.append(f"| Locations w/ >=3 Redrawn Angles | >= {t['min_locations_with_subscenes']} (long) | {m['locations_with_3plus_angles']} / {m['primary_locations']} | {'OK' if (m['locations_with_3plus_angles'] >= t['min_locations_with_subscenes'] or t['length_mode'] != 'long_16x9') else 'GAP'} |")
     lines.append(f"| Locations w/ >=2 Shot Scales | >= {t['min_locations_with_subscenes']} | {m['locations_with_subscenes']} / {m['primary_locations']} | {'OK' if m['locations_with_subscenes'] >= t['min_locations_with_subscenes'] else 'GAP'} |")
-    lines.append(f"| Shot Count Range | {shot_lo}–{shot_hi} rich shots | ~{m['estimated_shots']} | {'OK' if shot_lo <= m['estimated_shots'] <= shot_hi else 'INFO'} |")
+    lines.append(f"| Shot Count Range | {shot_lo}–{shot_hi} multi-scale shots | ~{m['estimated_shots']} | {'OK' if shot_lo <= m['estimated_shots'] <= shot_hi else 'INFO'} |")
     lines.append(f"| Required Hero Subjects (`>=3` segs) | auto | {len(bp['required_subjects'])} | OK |")
     lines.append("")
 
@@ -1687,7 +1689,7 @@ def build_blueprint(root: Path) -> dict[str, Any]:
     elapsed_ms = round((time.perf_counter() - t0) * 1000, 1)
 
     return {
-        "schema_version": "5.1.0",
+        "schema_version": "5.4.0",
         "title": script_data.get("title") or root.name,
         "episode_dir": str(root.resolve()),
         "inputs": {
@@ -1765,7 +1767,7 @@ def main(argv: list[str] | None = None) -> int:
         f"{m['distinct_angles']} angles [{','.join(m['angles'])}])"
     )
     print(
-        f"  shots: ~{m['estimated_shots']} (target {shot_lo}-{shot_hi} rich shots) · "
+        f"  shots: ~{m['estimated_shots']} (target {shot_lo}-{shot_hi} multi-scale shots) · "
         f"required_subjects ({len(bp['required_subjects'])}): {subjs}"
     )
     print(

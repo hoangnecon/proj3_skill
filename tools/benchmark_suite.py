@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unified Dual-Format Quality & Speed Benchmark CLI (RSI v5.2.0).
+"""Unified Dual-Format Quality & Speed Benchmark CLI (RSI v5.4.0).
 
 Runs a clean, read-only regression & speed benchmark across the suite and
 representative 9:16 Short + 16:9 Long-Form projects inside isolated temporary
