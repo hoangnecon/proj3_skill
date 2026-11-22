@@ -28,6 +28,7 @@ export type SideProps = {
   speed?: number; // 0 đứng .. 1 đi
   slope?: number; // độ dốc mặt đất dy/dx (âm = đi lên)
   legs?: SideLegs;
+  jumpPhase?: number; // 0..1 4-stage jump phase (takeoff crouch -> rising apex -> descending reach -> landing squash)
   seatH?: number;
   arms?: SideArms;
   expr?: Expr;
@@ -57,7 +58,7 @@ const ik = (a: P, b: P, l1: number, l2: number, bend: number): P => {
   return bend > 0 ? (p1[0] > p2[0] ? p1 : p2) : p1[0] < p2[0] ? p1 : p2;
 };
 
-export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, slope = 0, legs = 'walk', seatH = 120, arms = 'swing', expr = 'neutral', talk = 0, blinkPh = 0, lean = 0, look2 = 0, squash, pitch, wind = 0, velX = 0, layer = 'all', prop}) => {
+export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, slope = 0, legs = 'walk', jumpPhase, seatH = 120, arms = 'swing', expr = 'neutral', talk = 0, blinkPh = 0, lean = 0, look2 = 0, squash, pitch, wind = 0, velX = 0, layer = 'all', prop}) => {
   const W = look.w ?? 1;
   const H = look.h ?? 1;
   const belly = look.belly ?? 0;
@@ -71,6 +72,10 @@ export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, 
 
   const runPhase = phase !== 0 ? phase : t * 2.1;
   const runSpd = speed > 0.05 ? Math.min(1.3, speed) : 1;
+  const jp =
+    jumpPhase !== undefined
+      ? Math.max(0, Math.min(1, jumpPhase))
+      : 0.38 + Math.sin(t * 5 + blinkPh) * 0.08;
 
   // ---- chân (4-phase foot-roll biomechanics + 2-segment IK) ----
   const feet: FootSample[] = [];
@@ -116,10 +121,34 @@ export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, 
     autoLean = 14;
     autoSquash = 0.92;
   } else if (legs === 'jump') {
-    const jCyc = Math.sin(t * 7 + blinkPh);
-    hipY = -178 * H - 55 + jCyc * 6;
-    autoLean = 6;
-    autoSquash = 1.07;
+    if (jp < 0.14) {
+      // Stage 1: Takeoff Crouch Anticipation
+      const u = jp / 0.14;
+      hipY = -178 * H + 48 * Math.sin(u * Math.PI * 0.5) * H;
+      hipX = -14;
+      autoLean = 18;
+      autoSquash = 0.9;
+    } else if (jp < 0.52) {
+      // Stage 2: Rising Ascent -> Apex
+      const u = (jp - 0.14) / 0.38;
+      hipY = -178 * H - 18 * Math.sin(u * Math.PI * 0.85);
+      autoLean = 8 - u * 14;
+      autoSquash = 1.09 - u * 0.05;
+    } else if (jp < 0.86) {
+      // Stage 3: Descending Landing Reach
+      const u = (jp - 0.52) / 0.34;
+      hipY = -178 * H - 12 * (1 - u);
+      autoLean = -4 + u * 16;
+      autoSquash = 1.02 + u * 0.03;
+    } else {
+      // Stage 4: Grounded Landing Squash Absorb
+      const u = (jp - 0.86) / 0.14;
+      const sqWave = Math.sin(u * Math.PI);
+      hipY = -178 * H + 52 * sqWave * H;
+      hipX = -12 * sqWave;
+      autoLean = 18 * sqWave;
+      autoSquash = 1 - 0.12 * sqWave;
+    }
   } else if (legs === 'fall') {
     hipY = -148 * H;
     autoPitch = -65;
@@ -142,13 +171,18 @@ export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, 
   const hip: P = [hipX, hipY];
 
   // ---- C-arc spine curvature ----
+  const jumpBendX =
+    jp < 0.14 ? 16 :
+    jp < 0.52 ? -8 :
+    jp < 0.86 ? 4 * ((jp - 0.52) / 0.34) :
+    18 * Math.sin(((jp - 0.86) / 0.14) * Math.PI);
   const bendX =
     legs === 'run' ? 18 * runSpd + gaitTwist * 0.8 :
     legs === 'ride' ? 22 :
     legs === 'push' ? 28 :
     legs === 'crouch' ? 16 :
     legs === 'fall' ? -24 :
-    legs === 'jump' ? -6 :
+    legs === 'jump' ? jumpBendX :
     legs === 'climb' ? 10 :
     legs === 'walk' ? 4 * speed + gaitTwist * 0.5 + Math.sin(t * 2.5 + blinkPh) * 1.2 :
     Math.sin(t * 2.5 + blinkPh) * 1.2;
@@ -180,15 +214,34 @@ export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, 
       knee = ik(hip, ankle, thigh, shin, +1);
       toeRot = 0;
     } else if (legs === 'jump') {
-      const jCyc = Math.sin(t * 7 + blinkPh);
-      if (i === 0) {
-        // front knee tucked high with subtle mid-air hover tuck
-        ankle = [hip[0] + (24 + jCyc * 4) * H, hip[1] + (94 - jCyc * 8) * H];
-        toeRot = 24 + jCyc * 6;
+      if (jp < 0.14) {
+        // Stage 1: Takeoff Crouch — feet planted flat on ground, deep athletic knee bend
+        ankle = [hip[0] + (i === 0 ? 34 : -14) * H, -14];
+        toeRot = 0;
+      } else if (jp < 0.52) {
+        // Stage 2: Rising Ascent -> Apex
+        const u = (jp - 0.14) / 0.38;
+        if (i === 0) {
+          ankle = [hip[0] + (34 + 14 * u) * H, hip[1] + (88 - 18 * u) * H];
+          toeRot = 20 + 14 * u;
+        } else {
+          ankle = [hip[0] - (58 + 18 * (1 - u)) * H, hip[1] + (122 - 14 * u) * H];
+          toeRot = 42 - 10 * u;
+        }
+      } else if (jp < 0.86) {
+        // Stage 3: Descending Landing Reach
+        const u = (jp - 0.52) / 0.34;
+        if (i === 0) {
+          ankle = [hip[0] + (42 - 6 * u) * H, hip[1] + (88 + 68 * u) * H];
+          toeRot = 24 - 28 * u;
+        } else {
+          ankle = [hip[0] - (56 - 40 * u) * H, hip[1] + (116 + 44 * u) * H];
+          toeRot = 30 - 24 * u;
+        }
       } else {
-        // back leg trailing bent
-        ankle = [hip[0] - (66 - jCyc * 5) * H, hip[1] + (116 - jCyc * 6) * H];
-        toeRot = 32 + jCyc * 5;
+        // Stage 4: Grounded Landing Squash Absorb — feet planted flat, zero sliding
+        ankle = [hip[0] + (i === 0 ? 32 : -18) * H, -14];
+        toeRot = 0;
       }
       knee = ik(hip, ankle, thigh, shin, +1);
     } else if (legs === 'fall') {
@@ -275,10 +328,41 @@ export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, 
       a = near ? 26 : 36;
       e = near ? 68 : 60;
     } else if (resolvedArms === 'jump') {
-      // arms swept up/forward with subtle mid-air lift
-      const jCyc = Math.sin(t * 7 + blinkPh);
-      a = (near ? 128 : 142) + jCyc * 8;
-      e = (near ? 26 : 18) - jCyc * 4;
+      if (jp < 0.14) {
+        // Stage 1: arms swing BACK winding up
+        a = near ? -42 : -34;
+        e = near ? -22 : -16;
+      } else if (jp < 0.52) {
+        // Stage 2: arms drive UP & forward
+        const u = (jp - 0.14) / 0.38;
+        if (near) {
+          a = 52 + 18 * u;
+          e = 56;
+        } else {
+          a = -24 + 45 * u;
+          e = 36;
+        }
+      } else if (jp < 0.86) {
+        // Stage 3: arms flare out/forward for balance
+        const u = (jp - 0.52) / 0.34;
+        if (near) {
+          a = 62 - 38 * u;
+          e = 44 - 20 * u;
+        } else {
+          a = -34 - 14 * u;
+          e = 24;
+        }
+      } else {
+        // Stage 4: arms swing forward-down to absorb shock
+        const sqWave = Math.sin(((jp - 0.86) / 0.14) * Math.PI);
+        if (near) {
+          a = 28 * sqWave;
+          e = 24;
+        } else {
+          a = -18 * sqWave;
+          e = 16;
+        }
+      }
     } else if (resolvedArms === 'fall') {
       // arms flailing up/back
       const fl = Math.sin(t * 20 + (near ? 0 : 2.3)) * 22;
@@ -361,11 +445,21 @@ export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, 
   if (look.chain) det.push(<path key="ch" d={`M${hipX + 6 + topShift} ${sY - 12}Q${fr + topShift * 0.8} ${sY + 40} ${fr - 6 + topShift} ${sY - 2}`} fill="none" stroke={PAL.gold} strokeWidth={7} strokeDasharray="2 9" strokeLinecap="round" />);
 
   // ---- secondary motion: wind hair + gait head lag ----
-  const effWind = wind + (legs === 'run' ? runSpd * 0.9 : legs === 'walk' ? speed * 0.25 : 0);
+  const effWind = wind + (legs === 'run' ? runSpd * 0.9 : legs === 'walk' ? speed * 0.25 : legs === 'jump' && jp >= 0.14 && jp < 0.86 ? 0.65 : 0);
   const hw = hairWindOffset(t, effWind, velX, blinkPh);
+  const jumpHeadLag =
+    jumpPhase === undefined
+      ? Math.cos(t * 7 + blinkPh) * 3
+      : jp < 0.14
+        ? -4
+        : jp < 0.52
+          ? 3
+          : jp < 0.86
+            ? -3
+            : 5 * Math.sin(((jp - 0.86) / 0.14) * Math.PI);
   const dynamicHeadLag =
     gaitHeadLag +
-    (legs === 'jump' ? Math.cos(t * 7 + blinkPh) * 3 : legs === 'fall' ? Math.sin(t * 16 + blinkPh) * 4.5 : 0) -
+    (legs === 'jump' ? jumpHeadLag : legs === 'fall' ? Math.sin(t * 16 + blinkPh) * 4.5 : 0) -
     (lean + autoLean) * 0.14 +
     Math.max(-2, Math.min(2, hw.rot * 0.06));
 

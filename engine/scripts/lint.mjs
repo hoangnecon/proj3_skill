@@ -785,6 +785,53 @@ if (phase !== 'design') {
           warn('MO-15', `${tag}: actor '${a.id}' uses fall/trip with zero fx and zero camera shake — add fx: ['impact', 'stars'] or fx: ['dust'] for physical impact weight`);
         }
       }
+      // MO-17: No Mid-Air Walking / Bounded Jump-Arc Guard
+      if ((A.arcH ?? 0) > 0 || keyVals(A.legs).includes('jump')) {
+        const jumpWindows = [];
+        if (Array.isArray(A.legs)) {
+          const legKeys = A.legs.map(([mode, tt]) => [String(mode), typeof tt === 'number' ? r.t0 + tt : P.tAt(tt)]);
+          for (let li = 0; li < legKeys.length; li++) {
+            if (legKeys[li][0] === 'jump') {
+              const w0 = legKeys[li][1];
+              let nextNonJump = null;
+              for (let lj = li + 1; lj < legKeys.length; lj++) {
+                if (legKeys[lj][0] !== 'jump') {
+                  nextNonJump = legKeys[lj][1];
+                  break;
+                }
+              }
+              const w1 = nextNonJump !== null ? nextNonJump : r.t1;
+              jumpWindows.push([w0, w1]);
+              while (li + 1 < legKeys.length && legKeys[li + 1][0] === 'jump') li++;
+            }
+          }
+        }
+        const boundedJump = jumpWindows.find(([w0, w1]) => w1 >= w0 && (w1 - w0) <= 2.2) ?? null;
+        if ((A.arcH ?? 0) > 0 && a.path && a.path.length >= 2) {
+          const pathDur = a.path[a.path.length - 1][2] - a.path[0][2];
+          if (pathDur > 1.85 && !boundedJump && !waived('MO-17', r.name)) {
+            err('MO-17', `${tag}: actor '${a.id}' has arcH=${A.arcH} across a ${pathDur.toFixed(1)}s path without a bounded legs:['jump', t0]..['run'|'walk', t1] window (<= 2.2s) — causes moon-floating / mid-air walking`);
+            markHot(r.i, 'MO-17');
+          } else if (Array.isArray(A.legs)) {
+            for (const [w0, w1] of jumpWindows) {
+              if ((w1 - w0) > 2.2 && !waived('MO-17', r.name)) {
+                warn('MO-17', `${tag}: actor '${a.id}' has 'jump' window ${(w1 - w0).toFixed(2)}s (> 2.2s) — shorten jump arc to prevent moon-floating`);
+                markHot(r.i, 'MO-17');
+              }
+            }
+          }
+        }
+        if (boundedJump) {
+          const [w0, w1] = boundedJump;
+          const jt0 = Math.max(r.t0, w0 - 0.25);
+          const jt1 = Math.min(r.t1, w1 + 0.25);
+          strips.push({name: `s${String(i).padStart(2, '0')}_${a.id}_jump`, t0: +jt0.toFixed(2), t1: +Math.max(jt0 + 0.1, jt1).toFixed(2), n: 8, why: 'jump takeoff/apex/land'});
+        } else {
+          const jt0 = dur > 0.25 ? Math.max(r.t0, r.t0 + 0.1) : r.t0;
+          const jt1 = dur > 0.25 ? Math.min(r.t1, r.t1 - 0.1) : r.t1;
+          strips.push({name: `s${String(i).padStart(2, '0')}_${a.id}_jump`, t0: +jt0.toFixed(2), t1: +jt1.toFixed(2), n: 8, why: 'jump arc'});
+        }
+      }
     }
     // MO-14: Straddle Mount & Rider Cohesion Guard
     {
@@ -846,6 +893,26 @@ if (phase !== 'design') {
       const poses = keyVals(ex.pose);
       if (poses.some((pv) => pv === 'fly' || pv === 'hover') && ex.altitude === undefined && !waived('MO-15', r.name)) {
         warn('MO-15', `${tag}: extra '${ex.k}' uses pose 'fly'/'hover' without altitude — set altitude: 160..280 so the flying creature casts a grounding shadow below`);
+      }
+    }
+    // GE-20: Mandatory 8-frame flight/action strip for animated or airborne registered SUBJECTS
+    {
+      const subjStripSeen = new Set();
+      for (const ex of s.extras ?? []) {
+        if (!P.SUBJECTS?.[ex.k]) continue;
+        const poses = keyVals(ex.pose);
+        const isMovingOrAirborne = (ex.altitude ?? 0) > 0
+          || poses.some((pv) => ['fly', 'hover', 'land', 'pounce'].includes(pv))
+          || (ex.path && ex.path.length > 1);
+        if (isMovingOrAirborne) {
+          const baseName = `s${String(i).padStart(2, '0')}_${ex.id ?? ex.k}_motion`;
+          let sName = baseName;
+          let suffix = 2;
+          while (subjStripSeen.has(sName)) sName = `${baseName}${suffix++}`;
+          subjStripSeen.add(sName);
+          const padIn = Math.min(0.08, dur * 0.05);
+          strips.push({name: sName, t0: +(r.t0 + padIn).toFixed(2), t1: +(r.t1 - padIn).toFixed(2), n: 8, why: 'subject motion/occlusion'});
+        }
       }
     }
     if (i > 0 && i < rows.length - 1
@@ -1114,7 +1181,16 @@ if (phase !== 'design') {
           flag(r, 'GE-11', `${occ.kind} ${occ.id} covers ${Math.round(occ.frac * 100)}% of sign '${sg.text}'${sg.source !== 'set' ? ` (${sg.source})` : ''} at ${t.toFixed(2)} s`, `occ:${sg.source}:${sg.text}:${occ.id}`, occ.kind !== 'prop');
         }
       }
-      for (const pr of g.props) {
+      const shotDef = shots[r.i] ?? {};
+      const rawExtras = shotDef.extras ?? [];
+      const effPropDepth = (prop, idx) => {
+        const rawEx = (rawExtras[idx] && rawExtras[idx].k === prop.k && (rawExtras[idx].id ?? null) === (prop.id ?? null))
+          ? rawExtras[idx]
+          : rawExtras.find((e) => (e.id && e.id === prop.id) || e.k === prop.k);
+        return (rawEx?.altitude ?? 0) > 20 ? prop.depthY + (rawEx.altitude ?? 0) + 1200 : prop.depthY;
+      };
+      for (let prIdx = 0; prIdx < g.props.length; prIdx++) {
+        const pr = g.props[prIdx];
         if (pr.edgeClipped) {
           flag(r, 'GE-15', `prop '${pr.k}' clipped ${Math.round(pr.clippedFrac * 100)}% off frame edge at ${t.toFixed(2)} s — ${pr.dxHint}`, `prop:${pr.k}`);
         }
@@ -1126,6 +1202,33 @@ if (phase !== 'design') {
             const frac = inter(pr.screenBox, x.head) / Math.max(1, area(x.head));
             if (frac > 0.35) {
               flag(r, 'GE-17', `prop '${pr.k}' (depthY=${Math.round(pr.depthY)}) covers ${Math.round(frac * 100)}% of ${x.id}'s head (depthY=${Math.round(x.depthY)}) at ${t.toFixed(2)} s`, `${pr.k}:${x.id}`);
+            }
+          }
+          // GE-20: Hero Subject / Flying Creature Occlusion Guard
+          if (P.SUBJECTS?.[pr.k]) {
+            const prDepth = effPropDepth(pr, prIdx);
+            const prArea = Math.max(1, area(pr.screenBox));
+            const checkBlocker = (blockerBox, blockerName) => {
+              const frac = inter(pr.screenBox, blockerBox) / prArea;
+              if (frac > 0.45 && !waived('GE-20', r.name)) {
+                if (!seen.has(`${r.i}|GE-20-ERR|${pr.k}:${blockerName}`)) {
+                  seen.add(`${r.i}|GE-20-ERR|${pr.k}:${blockerName}`);
+                  err('GE-20', `#${r.i} '${r.name}': hero subject '${pr.k}' occluded ${Math.round(frac * 100)}% by ${blockerName} at ${t.toFixed(2)}s`);
+                  markHot(r.i, 'GE-20');
+                }
+              } else if (frac > 0.25 && !waived('GE-20', r.name)) {
+                flag(r, 'GE-20', `hero subject '${pr.k}' occluded ${Math.round(frac * 100)}% by ${blockerName} at ${t.toFixed(2)}s`, `ge20:${pr.k}:${blockerName}`);
+              }
+            };
+            for (const x of B) {
+              if (x.mountedOn && x.mountedOn === pr.id) continue;
+              if (x.depthY > prDepth + 5) checkBlocker(x.all, x.id);
+            }
+            for (let pr2Idx = 0; pr2Idx < g.props.length; pr2Idx++) {
+              const pr2 = g.props[pr2Idx];
+              if (pr2 === pr || !pr2.onScreen) continue;
+              const pr2Depth = effPropDepth(pr2, pr2Idx);
+              if (pr2Depth > prDepth + 5) checkBlocker(pr2.screenBox, pr2.id ?? pr2.k);
             }
           }
         }

@@ -56,6 +56,8 @@ if (!Array.isArray(shots)) {
 const qaStatus = readJson('qa/qa_status.json', {hashes: {}});
 const hot = readJson('qa/hot.json', {});
 const stripsNeeded = readJson('qa/strips_needed.json', []);
+const segIndex = readJson('qa/contact_segments/index.json', {});
+const contactIndex = readJson('qa/contact_index.json', null);
 const layoutReport = readJson('qa/layout_report.json', null);
 const plateStats = readJson('qa/design/plate_stats.json', null);
 const layoutByShot = new Map();
@@ -90,7 +92,10 @@ const entries = orderedShots.map((r) => {
   const cardPath = `qa/cards/${pad(i)}.jpg`;
   const cropCandidate = `qa/crops/${pad(i)}.jpg`;
   const cropPath = fs.existsSync(cropCandidate) ? cropCandidate : null;
-  const contactPage = `qa/contact_p${Math.floor(i / 12) + 1}.jpg`;
+  const contactPage = contactIndex?.[i] ?? contactIndex?.[String(i)] ?? `qa/contact_p${Math.floor(i / 12) + 1}.jpg`;
+  const segmentContactPath = segIndex?.[i] ?? segIndex?.[String(i)] ?? null;
+  const shotStripCandidate = `qa/shots/${pad(i)}.jpg`;
+  const shotStripPath = fs.existsSync(shotStripCandidate) ? shotStripCandidate : null;
   const prefix = `s${pad(i)}_`;
   const shotStrips = (Array.isArray(stripsNeeded) ? stripsNeeded : [])
     .filter((s) => s && typeof s.name === 'string' && (s.name.startsWith(prefix) || (typeof s.t0 === 'number' && s.t0 >= r.t0 - 0.01 && s.t0 < r.t1)))
@@ -98,7 +103,12 @@ const entries = orderedShots.map((r) => {
 
   const cardSha = sha256File(cardPath);
   const cropSha = cropPath ? sha256File(cropPath) : '';
-  const blindSha = sha256Hex(`${hash}|${narration}|${cardSha}|${cropSha}`).slice(0, 12);
+  const shotStripSha = shotStripPath ? sha256File(shotStripPath) : '';
+  const blindSha = sha256Hex(
+    shotStripSha
+      ? `${hash}|${narration}|${cardSha}|${cropSha}|${shotStripSha}`
+      : `${hash}|${narration}|${cardSha}|${cropSha}`
+  ).slice(0, 12);
   const lr = layoutByShot.get(i) ?? null;
   const ps = plateStats && typeof plateStats === 'object' ? (plateStats[r.set] ?? null) : null;
   const layout = lr
@@ -128,6 +138,8 @@ const entries = orderedShots.map((r) => {
       card: cardPath,
       crop: cropPath,
       contact_page: contactPage,
+      segment_contact: segmentContactPath,
+      shot_strip: shotStripPath,
       strips: [...new Set(shotStrips)],
     },
     hash,
@@ -196,6 +208,8 @@ const formatSliceShot = (e) => ({
     ? e.images
     : {
         contact_page: e.images.contact_page,
+        segment_contact: e.images.segment_contact,
+        shot_strip: e.images.shot_strip,
         strips: e.images.strips,
         card_fallback: e.images.card,
       },
@@ -224,6 +238,7 @@ for (let k = 0; k < 3; k++) {
     byPage.get(cp).push(formatSliceShot(e));
   }
   const contactPages = [...byPage.keys()];
+  const segmentContacts = [...new Set(sl.map((e) => e.images.segment_contact).filter(Boolean))];
   const pages = contactPages.map((cp) => ({contact_page: cp, shots: byPage.get(cp)}));
   const payload = {
     slice: k + 1,
@@ -232,6 +247,7 @@ for (let k = 0; k < 3; k++) {
     count: sl.length,
     hot_count: sl.filter((e) => e.is_hot).length,
     contact_pages: contactPages,
+    segment_contacts: segmentContacts,
     hot_shots: sl.filter((e) => e.is_hot).map((e) => e.shot),
     pages,
   };
@@ -239,19 +255,20 @@ for (let k = 0; k < 3; k++) {
 }
 
 const rubric = isLong16x9
-  ? `# Blind Visual QA Rubric (Contact-First · 16:9 Long-Form)
+  ? `# Blind Visual QA Rubric (3-Tier Hierarchical Contact Protocol · 16:9 Long-Form)
 
 1. **Judge ONLY from the rendered images and \`narration\`** in \`qa/blind_review/slice_*.json\`.
 2. **NEVER read \`src/episode/shotlist.ts\`** or inspect coordinates, actor rigs, or prop code while reviewing.
-3. **Contact-First Workflow (Token-Lean)**:
-   - **First**, open every image in \`contact_pages\` at the top of your slice (typically only 2 contact pages covering ~12 shots each in a wide 4-column 16:9 grid). Use these contact pages to inspect all non-HOT shots in each \`pages[]\` group.
-   - **Next**, for every HOT shot (\`is_hot: true\`), open its \`images.card\`, \`images.crop\` (if non-null), and any \`images.strips\`, and include \`"crops"\` in \`looked\`.
-   - For non-HOT shots with non-empty \`images.strips\`, open those strips; only open \`images.card_fallback\` if a frame on the contact page is ambiguous or looks suspicious.
-   - In \`looked\`, include \`"contact"\` (or \`"card"\`) for every shot, plus \`"crops"\` for HOT shots.
+3. **Mandatory 3-Tier Hierarchical Contact Sheet Review Protocol**:
+   - **Tier 1 — Đại đoạn (\`contact_pages\`: \`qa/contact_p*.jpg\`)**: Open every image in \`contact_pages\` first to audit episode-wide pacing, shot variety, set transitions, and macro framing (4 frames per shot > 4.0s, 2 frames for shorter shots).
+   - **Tier 2 — Trung đoạn (\`segment_contacts\`: \`qa/contact_segments/*.jpg\`)**: Open each contiguous location block sheet (\`images.segment_contact\`) to verify spatial continuity, scale consistency, camera-angle variety, and lighting coherence across every beat in the same location.
+   - **Tier 3 — Tiểu đoạn (\`images.shot_strip\`: \`qa/shots/NN.jpg\` 8-frame strip + \`images.strips\`: \`qa/strips/*.jpg\`)**: Whenever a shot has a non-null \`images.shot_strip\` (8-frame 4×2 motion strip) or non-empty \`images.strips\`, you **MUST** open it to inspect frame-by-frame motion, takeoff/apex/landing arcs, flight trajectories, and prop/creature depth ordering, and include \`"shot_strip"\` or \`"strips"\` in \`looked\` (reviews that omit it are rejected).
+   - **HOT Shots (\`is_hot: true\`)**: Also open \`images.card\` and \`images.crop\` (if non-null), and include \`"crops"\` in \`looked\`. Only open \`images.card_fallback\` for non-HOT shots if a frame on the contact sheet is ambiguous.
+   - In \`looked\`, include \`"contact"\` (or \`"card"\`) for every shot, \`"shot_strip"\` / \`"strips"\` whenever motion strips exist, plus \`"crops"\` for HOT shots.
 4. **Include \`"blind_sha"\`** from the slice entry verbatim in each JSONL review line.
 5. **Check ALL 10 criteria** (\`acting\`, \`contact\`, \`overlap\`, \`set\`, \`text\`, \`caption\`, \`beat\`, \`model\`, \`framing\`, \`variety\`) formatted as \`"ok — ..."\` or \`"fix — ..."\`, with a \`note\` of >= 6 words describing what you actually saw:
-   - \`acting\`: expression, gesture, posture, and gaze match the narration beat; **verify articulated bent knees/elbows and dynamic physics** (no stiff, board-like standing on mounts or mid-action!). **Pasted-Sticker Anti-Pattern Check (MANDATORY \`fix\`):** flag automatic \`fix\` if limbs/torso read as a rigid brick with zero spine curve, knee flexion, or secondary hair/FX life, or if a character looks frozen mid-air during a jump/fall instead of showing real arc weight and reaction FX.
-   - \`contact\`: feet planted on ground/floor, hands actually meet props/targets, seated bodies rest on seats; **verify mounted riders sit physically on their mount facing the travel direction, and verify non-OTS creatures are not half-sliced off the frame edge**. **Pasted-Sticker Anti-Pattern Check (MANDATORY \`fix\`):** flag automatic \`fix\` if (a) a grounded character floats with no contact shadow or frozen mid-air jump, (b) hands in \`push\`/\`hold\`/\`ride\` grab empty air instead of the physical target/grip point, or (c) riders sit pasted flat on one side of a creature instead of straddling with a seat shadow.
+   - \`acting\`: expression, gesture, posture, and gaze match the narration beat; **verify articulated bent knees/elbows and dynamic physics** (no stiff, board-like standing on mounts or mid-action!). **Pasted-Sticker & Airborne / Jump / Flight Realism Check (MANDATORY \`fix\`):** flag automatic \`fix\` if (a) limbs/torso read as a rigid brick with zero spine curve, knee flexion, or secondary hair/FX life, (b) ANY frame in the 8-frame \`shot_strip\` or \`strips\` shows a character walking/running in mid-air or moon-floating without takeoff/landing squash, or (c) a flying creature (\`ladybug\`, etc.) is occluded behind ground/tabletop props!
+   - \`contact\`: feet planted on ground/floor, hands actually meet props/targets, seated bodies rest on seats; **verify mounted riders sit physically on their mount facing the travel direction, and verify non-OTS creatures are not half-sliced off the frame edge**. **Pasted-Sticker & Airborne / Jump / Flight Realism Check (MANDATORY \`fix\`):** flag automatic \`fix\` if (a) ANY frame in the 8-frame \`shot_strip\` or \`strips\` shows a character walking/running in mid-air, moon-floating without takeoff/landing squash, or a grounded character floating with no contact shadow, (b) a flying creature (\`ladybug\`, etc.) is occluded behind ground/tabletop props instead of flying clearly above them, (c) hands in \`push\`/\`hold\`/\`ride\` grab empty air instead of the physical target/grip point, or (d) riders sit pasted flat on one side of a creature instead of straddling with a seat shadow.
    - \`overlap\`: no unintended character/prop collisions or faces hidden behind props/overlays.
    - \`set\`: environment reads clearly, clean perspective, no stray/clipped set geometry.
    - \`text\`: every sign, label, and overlay is legible, unclipped, and unoccluded.
@@ -262,19 +279,20 @@ const rubric = isLong16x9
    - \`variety\` (**visual freshness — MANDATORY \`fix\` trigger**): inspect \`set_streak\` and \`prev_set\` on each shot entry alongside the rendered contact page. **Same-wall / same-prop copy-paste fatigue**, repeating the same static wall framing/pose/prop layout across consecutive shots, or **recurring hero creatures/subjects failing to vary their poses/expressions across shots (copy-pasted static stickers!)** is an automatic \`fix\`!
 6. Submit reviews via \`node scripts/qa.mjs review --batch <file.jsonl>\`.
 `
-  : `# Blind Visual QA Rubric (Contact-First)
+  : `# Blind Visual QA Rubric (3-Tier Hierarchical Contact Protocol)
 
 1. **Judge ONLY from the rendered images and \`narration\`** in \`qa/blind_review/slice_*.json\`.
 2. **NEVER read \`src/episode/shotlist.ts\`** or inspect coordinates, actor rigs, or prop code while reviewing.
-3. **Contact-First Workflow (Token-Lean)**:
-   - **First**, open every image in \`contact_pages\` at the top of your slice (typically only 2 contact pages covering ~12 shots each). Use these contact pages to inspect all non-HOT shots in each \`pages[]\` group.
-   - **Next**, for every HOT shot (\`is_hot: true\`), open its \`images.card\`, \`images.crop\` (if non-null), and any \`images.strips\`, and include \`"crops"\` in \`looked\`.
-   - For non-HOT shots with non-empty \`images.strips\`, open those strips; only open \`images.card_fallback\` if a frame on the contact page is ambiguous or looks suspicious.
-   - In \`looked\`, include \`"contact"\` (or \`"card"\`) for every shot, plus \`"crops"\` for HOT shots.
+3. **Mandatory 3-Tier Hierarchical Contact Sheet Review Protocol**:
+   - **Tier 1 — Đại đoạn (\`contact_pages\`: \`qa/contact_p*.jpg\`)**: Open every image in \`contact_pages\` first to audit episode-wide pacing and framing.
+   - **Tier 2 — Trung đoạn (\`segment_contacts\`: \`qa/contact_segments/*.jpg\`)**: Open each contiguous location block sheet (\`images.segment_contact\`) to verify spatial continuity and scale consistency within each location.
+   - **Tier 3 — Tiểu đoạn (\`images.shot_strip\`: \`qa/shots/NN.jpg\` 8-frame strip + \`images.strips\`: \`qa/strips/*.jpg\`)**: Whenever a shot has a non-null \`images.shot_strip\` (8-frame 4×2 motion strip) or non-empty \`images.strips\`, you **MUST** open it to inspect frame-by-frame motion, jump arcs, flight trajectories, and prop/creature depth ordering, and include \`"shot_strip"\` or \`"strips"\` in \`looked\` (reviews that omit it are rejected).
+   - **HOT Shots (\`is_hot: true\`)**: Also open \`images.card\` and \`images.crop\` (if non-null), and include \`"crops"\` in \`looked\`. Only open \`images.card_fallback\` for non-HOT shots if a frame on the contact sheet is ambiguous.
+   - In \`looked\`, include \`"contact"\` (or \`"card"\`) for every shot, \`"shot_strip"\` / \`"strips"\` whenever motion strips exist, plus \`"crops"\` for HOT shots.
 4. **Include \`"blind_sha"\`** from the slice entry verbatim in each JSONL review line.
 5. **Check ALL 8 criteria** (\`acting\`, \`contact\`, \`overlap\`, \`set\`, \`text\`, \`caption\`, \`beat\`, \`model\`) formatted as \`"ok — ..."\` or \`"fix — ..."\`, with a \`note\` of >= 6 words describing what you actually saw:
-   - \`acting\`: expression, gesture, posture, and gaze match the narration beat. **Pasted-Sticker Anti-Pattern Check (MANDATORY \`fix\`):** flag automatic \`fix\` if limbs/torso read as a rigid brick with zero spine curve, knee flexion, or secondary hair/FX life, or if a character looks frozen mid-air during a jump/fall.
-   - \`contact\`: feet planted on ground/floor, hands actually meet props/targets, seated bodies rest on seats. **Pasted-Sticker Anti-Pattern Check (MANDATORY \`fix\`):** flag automatic \`fix\` if (a) a grounded character floats with no contact shadow or frozen mid-air jump, (b) hands in \`push\`/\`hold\`/\`ride\` grab empty air instead of the physical target/grip point, or (c) riders sit pasted flat on one side of a creature instead of straddling with a seat shadow.
+   - \`acting\`: expression, gesture, posture, and gaze match the narration beat. **Pasted-Sticker & Airborne / Jump / Flight Realism Check (MANDATORY \`fix\`):** flag automatic \`fix\` if (a) limbs/torso read as a rigid brick with zero spine curve, knee flexion, or secondary hair/FX life, (b) ANY frame in the 8-frame \`shot_strip\` or \`strips\` shows a character walking/running in mid-air or moon-floating without takeoff/landing squash, or (c) a flying creature (\`ladybug\`, etc.) is occluded behind ground/tabletop props!
+   - \`contact\`: feet planted on ground/floor, hands actually meet props/targets, seated bodies rest on seats. **Pasted-Sticker & Airborne / Jump / Flight Realism Check (MANDATORY \`fix\`):** flag automatic \`fix\` if (a) ANY frame in the 8-frame \`shot_strip\` or \`strips\` shows a character walking/running in mid-air, moon-floating without takeoff/landing squash, or a grounded character floating with no contact shadow, (b) a flying creature (\`ladybug\`, etc.) is occluded behind ground/tabletop props instead of flying clearly above them, (c) hands in \`push\`/\`hold\`/\`ride\` grab empty air instead of the physical target/grip point, or (d) riders sit pasted flat on one side of a creature instead of straddling with a seat shadow.
    - \`overlap\`: no unintended character/prop collisions or faces hidden behind props/overlays.
    - \`set\`: environment reads clearly, clean perspective, no stray/clipped set geometry.
    - \`text\`: every sign, label, and overlay is legible, unclipped, and unoccluded.

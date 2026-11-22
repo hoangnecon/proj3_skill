@@ -1,4 +1,4 @@
-# Conventions (`v5.2.0`)
+# Conventions (`v5.3.0`)
 
 Enforced by `tools/validate_skills.py`.
 
@@ -42,11 +42,11 @@ pin `standards/` by hash.
 | OV-01..04 | overlays | `lint.mjs shots` |
 | CA-01..08 | camera: zoom, move jolt, ratio, establish, world bounds (`CA-01..05`), 180° axis/eyeline continuity (`CA-06`), Long-Form shot-size progression & variety rhythm (`CA-07`), multi-waypoint `ShotDef.camKeys` choreography guard (`CA-08`) | `lint.mjs shots` |
 | SZ-01..02 | on-screen size and framing | `lint.mjs shots` |
-| MO-01..16 | motion (`src/anim.ts`): walk/reach/sit/ride (`MO-01..09`), turnaround-squash (`MO-10`), reach-across-face / raised-arms walk (`MO-11`), floating `seatH` (`MO-12`), contact-locked `pushTarget` (`MO-13`), straddle mount & rider cohesion (`MO-14`), valid `ActionFx`, fall/trip impact weight & flying `altitude` shadow (`MO-15`), Long-Shot Choreography Density Guard on `long_16x9` (`MO-16`: `> 5.0 s` / `> 8.5 s`) | `lint.mjs shots` |
+| MO-01..17 | motion (`src/anim.ts`, `side.tsx`, `Film.tsx`): walk/reach/sit/ride (`MO-01..09`), turnaround-squash (`MO-10`), reach-across-face / raised-arms walk (`MO-11`), floating `seatH` (`MO-12`), contact-locked `pushTarget` (`MO-13`), straddle mount & rider cohesion (`MO-14`), valid `ActionFx`, fall/trip impact weight & flying `altitude` shadow (`MO-15`), Long-Shot Choreography Density Guard on `long_16x9` (`MO-16`: `> 5.0 s` / `> 8.5 s`), 4-stage `jumpPhase` bounded `legs: 'jump'` window & zero mid-air walking guard (`MO-17`, auto-queues 8-frame jump strip) | `lint.mjs shots` |
 | KY-01 | animated set keys | `lint.mjs shots` |
 | CO-01..03 | coverage | `lint.mjs shots` |
 | PC-01..03 | dual shot pacing (`standards/pacing.json`: `shots` for 9:16 Shorts; `shots_long_16x9` for 16:9 Long-Form) | `lint.mjs shots` |
-| GE-01, GE-04, GE-07, GE-10, GE-11, GE-15..19 | screen geometry: overlap, head/caption, size jump, sign clip/occlusion, prop clip, overlay/prop head cover, cast continuity, severed mid-frame giant limb (`GE-19`) | `lint.mjs shots` |
+| GE-01, GE-04, GE-07, GE-10, GE-11, GE-15..20 | screen geometry: overlap, head/caption, size jump, sign clip/occlusion, prop clip, overlay/prop head cover, cast continuity, severed mid-frame giant limb (`GE-19`), Hero Subject / flying creature airspace occlusion (`GE-20`: `> 45%` ERROR, `> 25%` WARN + HOT, auto-queues 8-frame subject strip) | `lint.mjs shots` |
 
 A rule documented in a skill must name its lint ID when one exists. A waiver is
 `// lint-ok: <ID> <reason>` on the shot's line, and it must be justified in the G5 review.
@@ -54,6 +54,7 @@ A rule documented in a skill must name its lint ID when one exists. A waiver is
 ## Gates
 - There are seven gates, G1 to G7 (see sv-00). Run `scripts/sv_doctor.py --stage G#` for fast zero-cost preflight before checking or passing a gate, `scripts/plan_assets.py` at the G2→G4 handoff to derive the deterministic asset blueprint (cast, Hero Subjects, and multi-angle/sub-scene set targets), and `scripts/plan_audio.py` at the G5→G6 handoff to derive synchronized physical foley cues and ambience bed spans from `qa/shots.json`.
 - `scripts/design.mjs` renders all design sheets plus location-sorted `qa/design/overview_sets.jpg` (single-page set overview contact sheet), per-location multi-angle continuity strips `qa/design/location_<loc>_pack.jpg` (for every location with `>= 2` rendered sets), and `qa/design/visual_spec.json`.
+- `scripts/qa.mjs pass` generates **Mandatory 3-Tier Hierarchical Contact Sheets** in one browser session: Tier 1 **Đại đoạn** (`qa/contact_p<N>.jpg`: 4 frames/shot `> 4.0 s`, 2 frames `<= 4.0 s`), Tier 2 **Trung đoạn** (`qa/contact_segments/seg_<NN>_<loc>.jpg` per-location/per-scene sequences), and Tier 3 **Tiểu đoạn** (`qa/shots/<NN>.jpg` 8-frame `4×2` action filmstrips + `qa/strips/<name>.jpg` 8-frame action strips for dynamic/long/HOT shots); `scripts/blind_pack.mjs` wires `shot_strip` into `blind_sha`, and `qa.mjs review --batch` + `scripts/sv_gate.py` enforce `"shot_strip"` or `"strips"` in `looked` (zero blind review).
 - `scripts/sv_gate.py` writes `gates/log.jsonl` with hashes of each gate's inputs. When an input changes, that gate and every later gate become STALE.
 - Review files must name every evidence file with a remark of at least 4 words, and must be newer than the evidence.
 - G1, G2 and G4 need `approval: user` (with `user_quote`) or `approval: delegated`.

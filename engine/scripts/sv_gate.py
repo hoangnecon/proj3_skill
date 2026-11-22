@@ -304,7 +304,7 @@ def shot_reviews(st):
     """Per-shot review files qa/review/NN.json (sv-22 "review cards"). Each must match the shot's CURRENT hash,
     come from a reviewer who is not the builder, answer every check, and — for a HOT shot (geometry lint,
     reach, key event) — say it opened the measurement crops, which must be current."""
-    bad, miss, old, notok, thin, nocrop, nomodel, noblind = [], [], [], [], [], [], [], []
+    bad, miss, old, notok, thin, nocrop, nomodel, noblind, missing_shot_strip, nostrip_looked = [], [], [], [], [], [], [], [], [], []
     _sc5 = jload("script.json") or {}
     is_16x9 = _sc5.get("format") == "16:9" or _sc5.get("length") == "long_16x9"
     req_checks = REVIEW_CHECKS_16X9 if is_16x9 else REVIEW_CHECKS
@@ -320,6 +320,10 @@ def shot_reviews(st):
         elif isinstance(raw_shots, dict):
             manifest_shots = {int(k): v for k, v in raw_shots.items() if isinstance(v, dict)}
     for i, h in sorted(hashes.items()):
+        m_images = (manifest_shots.get(i, {}).get("images") or {}) if manifest else {}
+        shot_strip_path = m_images.get("shot_strip") if isinstance(m_images, dict) else None
+        if shot_strip_path and not (ROOT / shot_strip_path).exists():
+            missing_shot_strip.append(i)
         r = jload(f"qa/review/{i:02d}.json")
         if not r:
             miss.append(i)
@@ -338,6 +342,10 @@ def shot_reviews(st):
             expected_blind = manifest_shots.get(i, {}).get("blind_sha")
             if not expected_blind or r.get("blind_sha") != expected_blind:
                 noblind.append(i)
+            if shot_strip_path:
+                looked = r.get("looked") or []
+                if "shot_strip" not in looked and "strips" not in looked:
+                    nostrip_looked.append(i)
         if not r.get("reviewer") or r.get("reviewer") == r.get("builder", "builder"):
             bad.append(f"qa/review/{i:02d}.json: reviewer must be named and must not be the builder")
         checks = r.get("checks") or {}
@@ -368,6 +376,10 @@ def shot_reviews(st):
         bad.append(f"HOT shots {fmt(nocrop)} need current crops opened — node scripts/qa.mjs crops <i>, add \"crops\" to looked")
     if noblind:
         bad.append(f"shots {fmt(noblind)} missing or mismatched blind_sha from qa/blind_review/manifest.json — re-review using qa/blind_review/slice_*.json")
+    if missing_shot_strip:
+        bad.append(f"shots {fmt(missing_shot_strip)} declare images.shot_strip in qa/blind_review/manifest.json but qa/shots/NN.jpg is missing — node scripts/qa.mjs shotstrips")
+    if nostrip_looked:
+        bad.append(f"shots {fmt(nostrip_looked)} have 8-frame Tiểu đoạn shot_strip in qa/blind_review/manifest.json but review looked lacks 'shot_strip' or 'strips' — open qa/shots/NN.jpg and re-review")
     return bad
 
 

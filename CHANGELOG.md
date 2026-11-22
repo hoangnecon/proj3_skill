@@ -1,5 +1,19 @@
 # Changelog
 
+## `v5.3.0` — 2026-11-22 · 4-Stage Jump/Airspace Physics (Zero Mid-Air Walking `MO-17`, Zero Flight Occlusion `GE-20`) & Mandatory 3-Tier Hierarchical Contact Sheets (Đại/Trung/Tiểu Đoạn)
+- **Pillar 1 — 4-Stage Jump/Takeoff/Landing Physics, Elevated Airspace Sorting & Lint CI (`side.tsx`, `Film.tsx`, `lint.mjs`):**
+  - Added 4-stage `jumpPhase` (`0..1`) biomechanics in `PersonSide` (`side.tsx`): Takeoff crouch anticipation (`0..0.14`, feet grounded) → Rising ascent / apex tuck (`0.14..0.52`, stretch + arms driving UP) → Descending landing reach (`0.52..0.86`, legs reaching down) → Grounded landing squash absorb (`0.86..1.0`, feet flat + automatic `<DustPuff>` burst).
+  - Upgraded `Film.tsx` to bind `arcH` strictly to the keyed `legs: 'jump'` window (`[w0, w1]`) with an unbreakable mid-air physics lock (`arcY > 4` cannot animate `walk`/`run` feet), and to split airborne `SUBJECTS` (`altitude > 20`) into a ground-plane `GroundShadow` plus an elevated airspace body (`+1200` depth) so flying creatures and straddling riders are never occluded by tabletop/ground `mid` props while still passing beneath overhead `layers.fg` ceiling elements.
+  - Added `MO-17` (`lint.mjs shots`, total **140 lint rules**): bans `arcH > 0` stretched across a path `> 1.85 s` without a bounded `legs: [..., ['jump', t0], ['run'|'walk', t1]]` window (`<= 2.2 s`) and auto-queues an 8-frame `jump takeoff/apex/land` strip into `qa/strips_needed.json`.
+  - Added `GE-20` (`lint.mjs shots`, total **140 lint rules**): checks Hero Subject / flying creature occlusion (`> 45%` ERROR, `> 25%` WARN + HOT) and auto-queues 8-frame `subject motion/occlusion` strips into `qa/strips_needed.json` for every flying/moving Hero Subject.
+- **Pillar 2 — Mandatory 3-Tier Hierarchical Contact Sheets & Zero-Blind-Review Enforcement (`qa.mjs`, `blind_pack.mjs`, `sv_gate.py`):**
+  - **Tier 1 — Đại đoạn (`qa/contact_p<N>.jpg`):** renders 4 frames per shot (`12%, 38%, 64%, 88%`) for shots `> 4.0 s` and 2 frames for fast `<= 4.0 s` Short shots.
+  - **Tier 2 — Trung đoạn (`qa/contact_segments/seg_<NN>_<loc>.jpg`):** generates per-location / per-scene sequence contact sheets via `qa.mjs segments` and automatically during `qa.mjs pass`.
+  - **Tier 3 — Tiểu đoạn (`qa/shots/<NN>.jpg` + `qa/strips/<name>.jpg`):** automatically renders 8-frame `4×2` action filmstrips (`qa/shots/<NN>.jpg`, also via `qa.mjs shotstrips` / `qa.mjs shot <i>`) alongside 8-frame action strips for every dynamic/long/HOT shot during `qa.mjs pass`.
+  - Wired `shot_strip` into `qa/blind_review/slice_*.json` (covered by `blind_sha`) in `blind_pack.mjs`, and enforced `"shot_strip"` or `"strips"` in `looked` across both `qa.mjs review --batch` and `sv_gate.py` (zero blind review).
+- **Pillar 3 — `v5.3.0` Docs, Skills & Manifest (`sv-02-long-form`, `sv-21-motion`, `sv-22-shots-camera`, `CONVENTIONS.md`, `README.md`, `CHANGELOG.md`, `.claude-plugin/plugin.json`):**
+  - Updated `sv-02-long-form`, `sv-21-motion`, `sv-22-shots-camera`, `CONVENTIONS.md`, `README.md` (with `v4.0 → v5.3` Measured RSI Evolution table), `CHANGELOG.md`, and `.claude-plugin/plugin.json` (`5.3.0`, **140 lint rules**).
+
 ## `v5.2.0` — 2026-11-22 · Multi-Waypoint Cinematic Camera (`ShotDef.camKeys`, `CA-08`), Zero-Leak Adaptive Chunk Delivery & Action-to-Foley Planner (`plan_audio.py`)
 - **Pillar 1 — Multi-Waypoint Cinematic Camera Engine (`engine.ts`, `Film.tsx`, `entry.tsx`, `geom.mjs`):**
   - Added `ShotDef.camKeys` (`[cx, cy, zoom, at][]`) multi-waypoint camera choreography so rich 5–14 s shots can smoothly track, hold, pan, and push across beats inside one continuous take instead of a single linear `cam → cam2` slide.

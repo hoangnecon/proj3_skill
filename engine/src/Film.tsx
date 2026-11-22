@@ -282,24 +282,65 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx; renderLayer?: 'all' | 'far' | 'ne
   const H = look.h ?? 1;
   const rb = reachBlend(a, shot, t);
 
-  const computeArcY = (activeLegs: string | undefined): number => {
+  type JumpState = {
+    arcY: number;
+    jumpPhase: number | undefined;
+    airborne: boolean;
+    landingBurst: boolean;
+  };
+  const GROUNDED_JUMP: JumpState = {arcY: 0, jumpPhase: undefined, airborne: false, landingBurst: false};
+  const evalJumpPhase = (jpRaw: number, arcH: number): JumpState => {
+    const jp = clamp(jpRaw);
+    const landingBurst = jp >= 0.85 && jp <= 0.98;
+    if (jp < 0.14 || jp > 0.86) {
+      return {arcY: 0, jumpPhase: jp, airborne: false, landingBurst};
+    }
+    const uAir = (jp - 0.14) / 0.72;
+    const arcY = parabolicArc(uAir, arcH);
+    return {arcY, jumpPhase: jp, airborne: arcY > 3, landingBurst};
+  };
+  const computeJumpState = (activeLegs: string | undefined): JumpState => {
+    if (Array.isArray(a.legs)) {
+      let hasKeyedJump = false;
+      for (let j = 0; j < a.legs.length; j++) {
+        if (a.legs[j][0] !== 'jump') continue;
+        hasKeyedJump = true;
+        const w0 = abs(a.legs[j][1], shot);
+        const w1 = j + 1 < a.legs.length ? abs(a.legs[j + 1][1], shot) : Math.min(shot.t1, w0 + 1.15);
+        if (t >= w0 && t <= w1) {
+          const jp = clamp((t - w0) / Math.max(0.18, w1 - w0));
+          return evalJumpPhase(jp, a.arcH ?? 56);
+        }
+      }
+      if (hasKeyedJump) return GROUNDED_JUMP;
+    }
     if (a.arcH) {
       if (a.path && a.path.length >= 2) {
         const pt0 = abs(a.path[0][2], shot);
         const pt1 = abs(a.path[a.path.length - 1][2], shot);
-        const uPath = clamp((t - pt0) / Math.max(0.01, pt1 - pt0));
-        return parabolicArc(uPath, a.arcH);
+        const span = pt1 - pt0;
+        let w0 = pt0;
+        let w1 = pt1;
+        if (span > 1.85) {
+          const mid = (pt0 + pt1) * 0.5;
+          w0 = mid - 0.55;
+          w1 = mid + 0.55;
+        }
+        if (t < w0 || t > w1) return GROUNDED_JUMP;
+        const jp = clamp((t - w0) / Math.max(0.18, w1 - w0));
+        return evalJumpPhase(jp, a.arcH);
       }
-      const uCycle = (((t * 1.15 + ph) % 1) + 1) % 1;
-      return parabolicArc(uCycle, a.arcH);
+      const jp = (((t / 1.1 + ph) % 1) + 1) % 1;
+      return evalJumpPhase(jp, a.arcH);
     }
-    if (activeLegs === 'jump') {
-      const uCycle = (((t * 1.1 + ph) % 1) + 1) % 1;
-      return parabolicArc(uCycle, 44);
+    if (a.legs === 'jump' || (!Array.isArray(a.legs) && activeLegs === 'jump')) {
+      const jp = (((t / 1.1 + ph) % 1) + 1) % 1;
+      return evalJumpPhase(jp, 48);
     }
-    return 0;
+    return GROUNDED_JUMP;
   };
 
+  let jumpState: JumpState = GROUNDED_JUMP;
   let arcY = 0;
   let poseLegs: string | undefined;
   let body: React.ReactNode;
@@ -344,8 +385,14 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx; renderLayer?: 'all' | 'far' | 'ne
     let seatH = a.seatH ?? 120;
     if (legs === 'sit' && lk.prev === 'walk' && lk.u < 1) seatH = lerp(200 * H, seatH, easeIO(lk.u));
     if (legs === 'walk' && lk.prev === 'sit' && lk.u < 1) { legs = 'sit'; seatH = lerp(seatH, 200 * H, easeIO(lk.u)); }
+    jumpState = computeJumpState(legs);
+    // Unbreakable mid-air physics lock: zero mid-air walking/running cycles
+    if (jumpState.airborne && !a.mount && !a.ride && (legs === 'walk' || legs === 'run')) {
+      legs = 'jump';
+      speed = 0;
+    }
     poseLegs = legs;
-    arcY = computeArcY(poseLegs);
+    arcY = jumpState.arcY;
 
     let sideSquash: number | undefined;
     let sidePitch: number | undefined;
@@ -400,7 +447,7 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx; renderLayer?: 'all' | 'far' | 'ne
         far: {x: gLoc.x + 6, y: gLoc.y - 4},
       };
     }
-    if (a.pushTarget) {
+    if (a.pushTarget && (legs === 'push' || ak.cur === 'push' || (a.legs === undefined && a.arms === undefined))) {
       const pRaw = toRigLocal(a.pushTarget[0], a.pushTarget[1], s * sideXSign, arcY);
       const pNear = invertBodyTransform({x: pRaw.x, y: pRaw.y + 12}, sideTotalRot, sideHipX, sideHipY, sideSq);
       const pFar = invertBodyTransform({x: pRaw.x, y: pRaw.y - 12}, sideTotalRot, sideHipX, sideHipY, sideSq);
@@ -427,6 +474,7 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx; renderLayer?: 'all' | 'far' | 'ne
             speed={speed}
             slope={a.slope ?? 0}
             legs={legs}
+            jumpPhase={legs === 'jump' ? jumpState.jumpPhase : undefined}
             seatH={seatH}
             arms={arms}
             expr={ek.cur}
@@ -456,7 +504,8 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx; renderLayer?: 'all' | 'far' | 'ne
     const spU = clamp(springSettle(pk.u, 0.12), -0.15, 1.15);
     let pose = pk.u < 1 ? poseMix(p0, p1, spU) : p1;
     poseLegs = pose.legs ?? (a.legs !== undefined ? keyAt<string>(a.legs, 'stand', shot, t).cur : 'stand');
-    arcY = computeArcY(poseLegs);
+    jumpState = computeJumpState(poseLegs);
+    arcY = jumpState.arcY;
 
     const face3q: 1 | -1 = dir < 0 ? -1 : 1;
     const flipSign = view === '3q' ? face3q : (a.flip ? -1 : 1);
@@ -514,9 +563,10 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx; renderLayer?: 'all' | 'far' | 'ne
   const rotStr = mountRot ? ` rotate(${mountRot.toFixed(2)})` : '';
   const showShadow = renderLayer !== 'far' && !a.fg && !a.mount && !a.ride && !look.ghost && a.shadow !== false;
   const fxList = renderLayer !== 'far' && a.fx && a.fx.length > 0 ? a.fx : null;
+  const showLandingDust = renderLayer !== 'far' && !a.mount && !a.ride && jumpState.landingBurst;
   const bodyTransform = `translate(${x + sh} ${y - hop - arcY + bob})${rotStr} scale(${s * sx} ${s})`;
 
-  if (!showShadow && !fxList) {
+  if (!showShadow && !fxList && !showLandingDust) {
     return (
       <g transform={bodyTransform} opacity={op < 1 ? op : undefined}>
         {body}
@@ -535,6 +585,9 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx; renderLayer?: 'all' | 'far' | 'ne
         />
       )}
       <g transform={bodyTransform}>{body}</g>
+      {showLandingDust && (
+        <DustPuff key="fx-land-dust" x={x} y={y + 2} t={t} dir={dir} seed={ph + 3.1} scale={s * 0.85} />
+      )}
       {fxList && fxList.map((fx, fi) => {
         switch (fx) {
           case 'dust':
@@ -712,7 +765,8 @@ export const Film: React.FC = () => {
       const ms = ctx.extraStates.get(a.mount.target);
       if (ms) {
         const seat = ms.def ? resolveSeat(ms.def, ms.pose, a.mount.slot ?? 0) : null;
-        yy = ms.y + (ms.ex.z ?? 0) + (seat?.zOffset ?? 20);
+        const msAirborne = Boolean(ms.def) && !ms.ex.fg && (ms.ex.altitude ?? 0) > 20;
+        yy = ms.y + (msAirborne ? (ms.ex.altitude ?? 0) + 1200 : 0) + (ms.ex.z ?? 0) + (seat?.zOffset ?? 20);
       }
     }
     return {y: yy + (a.z ?? 0), key: 'a-' + a.id, node: <ActorView key={a.id} a={a} ctx={ctx} />};
@@ -734,6 +788,7 @@ export const Film: React.FC = () => {
     const straddlers = ex.id ? (straddleByTarget.get(ex.id) ?? []) : [];
     const subjectTransform = `translate(${st.x} ${st.y}) rotate(${st.tilt}) scale(${st.s * (st.flip ? -1 : 1)} ${st.s})`;
     const showSubjShadow = Boolean(subj) && ex.shadow !== false;
+    const isAirborne = Boolean(subj) && (ex.altitude ?? 0) > 20;
     const seatShadows = mounted.map(({actor: rider, seat}) => {
       const rOp = actorOpacity(rider, shot, t);
       if (rOp <= 0.01) return null;
@@ -743,6 +798,46 @@ export const Film: React.FC = () => {
         </g>
       );
     });
+    if (isAirborne && !ex.fg) {
+      const groundY = st.y + (ex.altitude ?? 0) + 6;
+      if (showSubjShadow) {
+        midExtras.push({
+          y: groundY,
+          key: ex.id ? `xsh-${i}-${ex.id}` : 'xsh' + i,
+          node: (
+            <GroundShadow
+              x={st.x}
+              y={groundY}
+              rx={170 * st.s}
+              ry={26 * st.s}
+              alt={ex.altitude ?? 0}
+              opacity={0.22}
+            />
+          ),
+        });
+      }
+      midExtras.push({
+        y: st.y + (ex.altitude ?? 0) + 1200 + (ex.z ?? 0),
+        key: ex.id ? `x-${i}-${ex.id}` : 'x' + i,
+        node: straddlers.length > 0 || mounted.length > 0 ? (
+          <g>
+            {straddlers.map(({actor: rider}) => (
+              <ActorView key={`far-${rider.id}`} a={rider} ctx={ctx} renderLayer="far" />
+            ))}
+            <g transform={subjectTransform}>
+              {content}
+              {seatShadows}
+            </g>
+            {straddlers.map(({actor: rider}) => (
+              <ActorView key={`near-${rider.id}`} a={rider} ctx={ctx} renderLayer="near" />
+            ))}
+          </g>
+        ) : (
+          <g transform={subjectTransform}>{content}</g>
+        ),
+      });
+      continue;
+    }
     const item: Item = {
       y: st.y + (ex.z ?? 0),
       key: ex.id ? `x-${i}-${ex.id}` : 'x' + i,

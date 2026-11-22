@@ -3,16 +3,18 @@
 //   node scripts/qa.mjs where <i> [t] [--free WxH] -> terminal layout table of frame boxes + 3x3 grid + scale/cutoff (no render)
 //   node scripts/qa.mjs layout [i] [t]             -> 3x3 grid + scale + creature-cutoff summary for 1 shot or all shots (no render)
 //   node scripts/qa.mjs place <setId> [--actors N] [--subject key[:pose]] [--ots] [--cam cx,cy,k] -> zero-browser auto-layout solver
-//   node scripts/qa.mjs pass [changed|all]         -> ONE bundle/browser: contact + stale strips + cards + HOT crops + carry.py
+//   node scripts/qa.mjs pass [changed|all]         -> ONE bundle/browser: Đại đoạn + Trung đoạn + Tiểu đoạn + strips + cards + HOT crops + carry.py
 //   node scripts/qa.mjs review --batch <file.jsonl> -> validate & atomically write batch qa/review/NN.json (no render)
-//   node scripts/qa.mjs contact [--all]            -> qa/contact_p<N>.jpg : every shot at 25 % and 75 % (full frame)
+//   node scripts/qa.mjs contact [--all]            -> qa/contact_p<N>.jpg : Đại đoạn (4 frames if > 4.0s, else 2 frames)
+//   node scripts/qa.mjs segments [--all]           -> qa/contact_segments/seg_NN_<loc>.jpg : Trung đoạn grouped by location (4 frames/shot)
+//   node scripts/qa.mjs shotstrips [all|0,1] [--all] -> qa/shots/NN.jpg : Tiểu đoạn 8-frame strips for long/motion/HOT shots
 //   node scripts/qa.mjs strips [names] [--all]     -> qa/strips/<name>.jpg : motion strips from qa/strips_needed.json
 //   node scripts/qa.mjs frames 12.5,13.0           -> qa/frames/t<sec>.jpg : single full-size frames at absolute seconds
 //   node scripts/qa.mjs cards [changed|hot|all|3,7] -> qa/cards/NN.jpg : review card per shot (3 frames + beat words + flags)
 //   node scripts/qa.mjs crops 7                    -> qa/crops/07.jpg : measurement crops (head/hands/feet/overlap, 1:1+)
 //   node scripts/qa.mjs status                     -> qa/qa_status.json : shots/strips whose evidence is stale (no render)
 //   node scripts/qa.mjs adopt                      -> once, episode reviewed under v3.6: snapshot reviewed card frames
-//   node scripts/qa.mjs shot 7                     -> qa/shots/07.jpg : 6 frames across shot #7 (the fix loop)
+//   node scripts/qa.mjs shot 7                     -> qa/shots/07.jpg : 8 frames (4×2) across shot #7 (Tiểu đoạn / fix loop)
 // Speed: ONE shared browser, a pool of parallel workers (SV_QA_WORKERS, default 4), QA frames at half size.
 // Only one render at a time per episode (qa/.render.lock).
 // Run `node scripts/lint.mjs` first (it writes qa/strips_needed.json; qa/shots.json is refreshed here).
@@ -77,7 +79,10 @@ const readJson = (p, fallback) => (fs.existsSync(p) ? JSON.parse(fs.readFileSync
 const computeStatus = () => {
   const need = readJson('qa/strips_needed.json', []);
   return {
-    contact_stale: rows.filter((r) => cache.contact?.[r.i] !== hashes[r.i] || !fs.existsSync(`qa/_f/c${r.i}_0.25.jpg`)).map((r) => r.i),
+    contact_stale: rows.filter((r) => {
+      const firstU = (r.t1 - r.t0) > 4.0 ? 0.12 : 0.25;
+      return cache.contact?.[r.i] !== hashes[r.i] || !fs.existsSync(`qa/_f/c${r.i}_${firstU}.jpg`);
+    }).map((r) => r.i),
     cards_stale: rows.filter((r) => cache.cards?.[r.i] !== hashes[r.i]).map((r) => r.i),
     crops_ok: Object.fromEntries(rows.map((r) => [r.i, cache.crops?.[r.i] === hashes[r.i] && fs.existsSync(`qa/crops/${pad(r.i)}.jpg`)])),
     strips_stale: need.filter((s) => cache.strips?.[s.name] !== stripKey(s) || !fs.existsSync(`qa/strips/${s.name}.jpg`)).map((s) => s.name),
@@ -240,6 +245,13 @@ if (mode === 'review') {
     const looked = Array.isArray(item.looked) ? item.looked : null;
     if (!looked || (!looked.includes('card') && !looked.includes('contact') && !looked.includes('contact_page'))) {
       errs.push(`${tag}: looked must be an array including 'contact' or 'card'`);
+    }
+    if (blindManifest) {
+      const mShot = blindByShot.get(i);
+      const hasMotionStrip = Boolean(mShot?.images?.shot_strip) || (Array.isArray(mShot?.images?.strips) && mShot.images.strips.length > 0);
+      if (hasMotionStrip && (!looked || (!looked.includes('shot_strip') && !looked.includes('strips')))) {
+        errs.push(`${tag}: shot has 8-frame Tiểu đoạn motion strip (${mShot?.images?.shot_strip || mShot?.images?.strips?.[0]}) — looked must include 'shot_strip' or 'strips'`);
+      }
     }
     if (Array.isArray(hot[i]) && hot[i].length > 0) {
       if (!looked || !looked.includes('crops')) {
@@ -932,20 +944,160 @@ const fmt = (t) => t.toFixed(2) + 's';
 
 // ---- shared render pipelines
 const is16x9 = geom.FORMAT === '16:9';
+const CONTACT_LABELS = ['a', 'b', 'c', 'd'];
+const SEG_FRACS = [0.12, 0.38, 0.64, 0.88];
+const SHOT_STRIP_FRACS = [0.04, 0.17, 0.30, 0.43, 0.57, 0.70, 0.83, 0.96];
+const contactFracs = (r) => ((r.t1 - r.t0) > 4.0 ? SEG_FRACS : [0.25, 0.75]);
+const slugify = (s) => String(s ?? 'set').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'set';
+
+// Tier 1 — Đại đoạn: episode-wide contact sheets (4 frames for >4.0s shots, 2 frames for <=4.0s shots)
 const runContact = async (forceAll) => {
   const changed = rows.filter((r) => cache.contact?.[r.i] !== hashes[r.i]).map((r) => r.i);
-  const jobs = rows.flatMap((r) => [0.25, 0.75].map((u) => ({r, u, t: r.t0 + (r.t1 - r.t0) * u, out: `qa/_f/c${r.i}_${u}.jpg`})));
+  const jobs = rows.flatMap((r) => contactFracs(r).map((u, idx) => ({r, u, idx, t: r.t0 + (r.t1 - r.t0) * u, out: `qa/_f/c${r.i}_${u}.jpg`})));
   const st = await renderAll(jobs, (j) => !forceAll && !changed.includes(j.r.i));
   const unreviewed = new Set(rows.filter((r) => { try { const v = JSON.parse(fs.readFileSync(`qa/review/${pad(r.i)}.json`, 'utf8')); return v.verdict !== 'ok' || v.hash !== hashes[r.i]; } catch { return true; } }).map((r) => r.i));
-  const cells = jobs.map(({r, u, t, out}) => ({img: out, label: `#${r.i} ${u === 0.25 ? 'a' : 'b'} · ${fmt(t)}${unreviewed.has(r.i) ? ' ●' : ''}`, sub: u === 0.25 ? r.name : `${r.set} · ${fmt(r.t1 - r.t0)}`}));
   const per = 24;
   const contactCols = is16x9 ? 4 : 6;
   const contactW = is16x9 ? 380 : 300;
-  for (const f of fs.readdirSync('qa')) { const m = /^contact_p(\d+)\.(png|jpg)$/.exec(f); if (m && (m[2] === 'png' || +m[1] > Math.ceil(cells.length / per))) fs.unlinkSync(path.join('qa', f)); }
-  for (let p = 0; p * per < cells.length; p++) tile({out: `qa/contact_p${p + 1}.jpg`, cols: contactCols, w: contactW, title: `CONTACT · trang ${p + 1} · ${rows.length} shot · ${fmt(P.DURATION)} · ● = chưa review ở bản này`, cells: cells.slice(p * per, (p + 1) * per)});
+  const jobsByShot = new Map();
+  for (const j of jobs) {
+    if (!jobsByShot.has(j.r.i)) jobsByShot.set(j.r.i, []);
+    jobsByShot.get(j.r.i).push(j);
+  }
+  const pages = [];
+  const contactIndex = {};
+  let curPage = [];
+  for (const r of rows) {
+    const rJobs = jobsByShot.get(r.i) ?? [];
+    const rCells = rJobs.map(({idx, t, out}) => ({
+      img: out,
+      label: `#${r.i} ${CONTACT_LABELS[idx] ?? idx} · ${fmt(t)}${unreviewed.has(r.i) ? ' ●' : ''}`,
+      sub: idx === 0 ? r.name : (idx === 1 ? `${r.set} · ${fmt(r.t1 - r.t0)}` : ''),
+    }));
+    if (curPage.length > 0 && curPage.length + rCells.length > per) {
+      pages.push(curPage);
+      curPage = [];
+    }
+    contactIndex[r.i] = `qa/contact_p${pages.length + 1}.jpg`;
+    curPage.push(...rCells);
+  }
+  if (curPage.length) pages.push(curPage);
+  for (const f of fs.readdirSync('qa')) { const m = /^contact_p(\d+)\.(png|jpg)$/.exec(f); if (m && (m[2] === 'png' || +m[1] > pages.length)) fs.unlinkSync(path.join('qa', f)); }
+  for (let p = 0; p < pages.length; p++) {
+    tile({out: `qa/contact_p${p + 1}.jpg`, cols: contactCols, w: contactW, title: `CONTACT · trang ${p + 1} · ${rows.length} shot · ${fmt(P.DURATION)} · ● = chưa review ở bản này`, cells: pages[p]});
+  }
   cache.contact = {...hashes};
+  fs.writeFileSync('qa/contact_index.json', JSON.stringify(contactIndex, null, 1) + '\n');
   fs.writeFileSync('qa/changed.json', JSON.stringify({at: new Date().toISOString(), shots: changed, all: rows.length}, null, 1));
-  console.log(`contact: ${Math.ceil(cells.length / per)} page(s) · ${st.rendered} rendered, ${st.reused} reused · changed shots: ${changed.join(',') || 'none'} · ${((Date.now() - t00) / 1000).toFixed(0)} s`);
+  console.log(`contact: ${pages.length} page(s) · ${st.rendered} rendered, ${st.reused} reused · changed shots: ${changed.join(',') || 'none'} · ${((Date.now() - t00) / 1000).toFixed(0)} s`);
+};
+
+// Tier 2 — Trung đoạn: contiguous location-grouped contact sheets (4 frames/shot, max 8 shots/sheet)
+const runSegmentContacts = async (forceAll) => {
+  fs.mkdirSync('qa/contact_segments', {recursive: true});
+  cache.segments ??= {};
+  cache.segment_sheets ??= {};
+  const groups = [];
+  for (const r of rows) {
+    const locRaw = P.SETS?.[r.set]?.location;
+    const loc = (typeof locRaw === 'string' && locRaw.trim()) ? locRaw.trim() : r.set;
+    const prev = groups[groups.length - 1];
+    if (prev && prev.loc === loc && prev.shots.length < 8) {
+      prev.shots.push(r);
+    } else {
+      groups.push({loc, shots: [r]});
+    }
+  }
+  const jobs = rows.flatMap((r) => SEG_FRACS.map((u, idx) => ({
+    r, u, idx, t: r.t0 + (r.t1 - r.t0) * u, out: `qa/_f/c${r.i}_${u}.jpg`,
+  })));
+  const st = await renderAll(jobs, (j) => {
+    if (forceAll) return false;
+    if (cache.segments[j.r.i] === hashes[j.r.i]) return true;
+    return (j.r.t1 - j.r.t0) > 4.0 && cache.contact?.[j.r.i] === hashes[j.r.i];
+  });
+  const segIndex = {};
+  const keptFiles = new Set();
+  const segW = is16x9 ? 420 : 300;
+  let tiled = 0;
+  for (let gIdx = 1; gIdx <= groups.length; gIdx++) {
+    const g = groups[gIdx - 1];
+    const fname = `seg_${pad(gIdx)}_${slugify(g.loc)}.jpg`;
+    const outPath = `qa/contact_segments/${fname}`;
+    keptFiles.add(fname);
+    const first = g.shots[0].i;
+    const last = g.shots[g.shots.length - 1].i;
+    const groupSig = g.shots.map((r) => `${r.i}:${hashes[r.i]}`).join(',');
+    if (forceAll || !fs.existsSync(outPath) || cache.segment_sheets[fname] !== groupSig) {
+      const cells = g.shots.flatMap((r) => SEG_FRACS.map((u, idx) => ({
+        img: `qa/_f/c${r.i}_${u}.jpg`,
+        label: `#${r.i} ${CONTACT_LABELS[idx]} · ${fmt(r.t0 + (r.t1 - r.t0) * u)}`,
+        sub: idx === 0 ? r.name : (idx === 1 ? `${r.set} · ${fmt(r.t1 - r.t0)}` : ''),
+      })));
+      tile({
+        out: outPath,
+        cols: 4,
+        w: segW,
+        title: `TRUNG ĐOẠN ${gIdx} · ${g.loc} · shots #${first}–#${last}`,
+        cells,
+      });
+      cache.segment_sheets[fname] = groupSig;
+      tiled++;
+    }
+    for (const r of g.shots) segIndex[r.i] = outPath;
+  }
+  for (const f of fs.readdirSync('qa/contact_segments')) {
+    if (/^seg_\d+_.*\.jpg$/.test(f) && !keptFiles.has(f)) {
+      try { fs.unlinkSync(path.join('qa/contact_segments', f)); } catch {}
+    }
+  }
+  for (const r of rows) cache.segments[r.i] = hashes[r.i];
+  fs.writeFileSync('qa/contact_segments/index.json', JSON.stringify(segIndex, null, 1) + '\n');
+  console.log(`segments: ${groups.length} sheet(s) (${tiled} tiled) · ${st.rendered} rendered, ${st.reused} reused · ${((Date.now() - t00) / 1000).toFixed(0)} s`);
+};
+
+// Tier 3 — Tiểu đoạn: 8-frame (4×2) motion strips for long (>4.0s), motion/subject, or HOT shots
+const shotNeedsStrip = (r, hot) => {
+  if ((r.t1 - r.t0) > 4.0) return true;
+  if (Array.isArray(hot[r.i]) && hot[r.i].length > 0) return true;
+  const s = P.SHOTS?.[r.i];
+  if ((r.actors ?? []).some((a) => a.walks || (a.path && a.path.length > 1))) return true;
+  if ((s?.actors ?? []).some((A) =>
+    A.walks || (A.path && A.path.length > 1) || (A.arcH ?? 0) > 0 || A.pushTarget || A.mount || A.ride ||
+    (Array.isArray(A.reach) && A.reach.length > 0) ||
+    (Array.isArray(A.legs) ? A.legs.some(([m]) => String(m) === 'jump') : A.legs === 'jump')
+  )) return true;
+  if ((s?.extras ?? []).some((ex) => !!P.SUBJECTS?.[ex.k])) return true;
+  return false;
+};
+
+const runShotStrips = async (forceAll, which = null) => {
+  const hot = readJson('qa/hot.json', {});
+  fs.mkdirSync('qa/shots', {recursive: true});
+  cache.shot_strips ??= {};
+  const sel = which === 'all'
+    ? rows
+    : which
+      ? rows.filter((r) => which.split(',').map(Number).includes(r.i))
+      : rows.filter((r) => shotNeedsStrip(r, hot));
+  const todo = sel.filter((r) => forceAll || cache.shot_strips[r.i] !== hashes[r.i] || !fs.existsSync(`qa/shots/${pad(r.i)}.jpg`));
+  const jobs = todo.flatMap((r) => SHOT_STRIP_FRACS.map((u, idx) => ({
+    r, idx, t: r.t0 + (r.t1 - r.t0) * u, out: `qa/_f/s${r.i}_${idx}.jpg`,
+  })));
+  const st = await renderAll(jobs, (j) => !forceAll && cache.shot_strips[j.r.i] === hashes[j.r.i]);
+  const stripW = is16x9 ? 420 : 300;
+  for (const r of todo) {
+    const rJobs = jobs.filter((j) => j.r === r);
+    tile({
+      out: `qa/shots/${pad(r.i)}.jpg`,
+      cols: 4,
+      w: stripW,
+      title: `TIỂU ĐOẠN #${r.i} ${r.name} · ${r.set} · ${fmt(r.t1 - r.t0)} · hash ${hashes[r.i]}`,
+      cells: rJobs.map((j) => ({img: j.out, label: `f${j.idx + 1} · ${fmt(j.t)}`, sub: ''})),
+    });
+    cache.shot_strips[r.i] = hashes[r.i];
+  }
+  console.log(`shotstrips: ${todo.length}/${sel.length} sheet(s) · ${st.rendered} rendered, ${st.reused} reused · ${((Date.now() - t00) / 1000).toFixed(0)} s`);
 };
 
 const runStrips = async (onlyNames, forceAll, staleOnly = false) => {
@@ -1039,6 +1191,8 @@ try {
       throw new Error(`unknown pass scope '${arg}' (expected changed | all)`);
     }
     await runContact(passAll);
+    await runSegmentContacts(passAll);
+    await runShotStrips(passAll);
     await runStrips(null, false, true);
     await runCards(passAll ? 'all' : 'changed', passAll, true);
     const hot = readJson('qa/hot.json', {});
@@ -1047,6 +1201,10 @@ try {
     console.log(`pass (${passAll ? 'all' : 'changed'}): ${hotTodo.length} HOT crop(s) rendered · render total ${((Date.now() - t00) / 1000).toFixed(0)} s`);
   } else if (mode === 'contact') {
     await runContact(ALL);
+  } else if (mode === 'segments') {
+    await runSegmentContacts(ALL);
+  } else if (mode === 'shotstrips') {
+    await runShotStrips(ALL, arg ?? null);
   } else if (mode === 'strips') {
     await runStrips(arg ? arg.split(',') : null, ALL, false);
   } else if (mode === 'cards') {
@@ -1060,12 +1218,20 @@ try {
     const r = rows[+arg];
     if (!r) throw new Error(`no shot #${arg} (0–${rows.length - 1})`);
     fs.mkdirSync('qa/shots', {recursive: true});
-    const jobs = Array.from({length: 6}, (_, i) => ({i, t: r.t0 + 0.02 + ((r.t1 - r.t0 - 0.04) * i) / 5, out: `qa/_f/s${r.i}_${i}.jpg`}));
+    const jobs = SHOT_STRIP_FRACS.map((u, idx) => ({idx, t: r.t0 + (r.t1 - r.t0) * u, out: `qa/_f/s${r.i}_${idx}.jpg`}));
     await renderAll(jobs);
-    tile({out: `qa/shots/${pad(r.i)}.jpg`, cols: 3, w: 300, title: `#${r.i} ${r.name} · ${r.set} · hash ${hashes[r.i]}`, cells: jobs.map((j) => ({img: j.out, label: fmt(j.t), sub: ''}))});
+    tile({
+      out: `qa/shots/${pad(r.i)}.jpg`,
+      cols: 4,
+      w: is16x9 ? 420 : 300,
+      title: `TIỂU ĐOẠN #${r.i} ${r.name} · ${r.set} · ${fmt(r.t1 - r.t0)} · hash ${hashes[r.i]}`,
+      cells: jobs.map((j) => ({img: j.out, label: `f${j.idx + 1} · ${fmt(j.t)}`, sub: ''})),
+    });
+    cache.shot_strips ??= {};
+    cache.shot_strips[r.i] = hashes[r.i];
     console.log('ok', r.i, `${((Date.now() - t00) / 1000).toFixed(0)} s`);
   } else {
-    console.log('modes: pass [changed|all] | where <i> [t] [--free WxH] | layout [i] [t] | place <setId> [--actors N] [--subject key[:pose]] [--ots] [--cam cx,cy,k] | review --batch <file.jsonl> | contact [--all] | strips [names] [--all] | cards [changed|hot|all|i,j] | crops <i> | frames t1,t2 | shot <i> | status');
+    console.log('modes: pass [changed|all] | where <i> [t] [--free WxH] | layout [i] [t] | place <setId> [--actors N] [--subject key[:pose]] [--ots] [--cam cx,cy,k] | review --batch <file.jsonl> | contact [--all] | segments [--all] | shotstrips [all|0,1] [--all] | strips [names] [--all] | cards [changed|hot|all|i,j] | crops <i> | frames t1,t2 | shot <i> | status');
     process.exitCode = 1;
   }
 } finally {
