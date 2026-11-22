@@ -21,6 +21,10 @@ export type SubjectRenderOpts = {
   expr?: string;
   flip?: boolean;
   c?: string;
+  phase?: number;    // distance-locked stride cycle along ExtraDef.path (0 when stationary)
+  speed?: number;    // normalized locomotion speed 0..1.5
+  moving?: boolean;  // true when actively traveling along path (speed > 0.05)
+  altitude?: number; // elevation above ground plane (px)
 };
 
 export type SubjectDef = {

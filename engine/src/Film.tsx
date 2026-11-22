@@ -20,6 +20,9 @@ import {
   springSettle,
   parabolicArc,
   poseImpulse,
+  computeSubjectKinematics,
+  inferHandKind,
+  HandKind,
   GroundShadow,
   SeatShadow,
   DustPuff,
@@ -63,11 +66,11 @@ const segsFromPath = (p: [number, number, TT][], shot: Shot): Seg[] => {
   return out;
 };
 const segsOf = (a: Actor, shot: Shot): Seg[] => segsFromPath(a.path!, shot);
-/** vị trí + vận tốc (px/s) + hướng tại t */
+/** vị trí + vận tốc (px/s) + quãng đường tích luỹ + hướng tại t */
 const motion = (segs: Seg[], t: number) => {
   const first = segs.find((g) => Math.abs(g.x1 - g.x0) > 2);
   const d0 = first ? Math.sign(first.x1 - first.x0) : 0;
-  let x = segs[0].x0, y = segs[0].y0, v = 0, vx = 0, dir = d0, lastDir = d0, segStart = -99, prevDir = d0;
+  let x = segs[0].x0, y = segs[0].y0, v = 0, vx = 0, dist = 0, dir = d0, lastDir = d0, segStart = -99, prevDir = d0;
   for (const g of segs) {
     const dx = g.x1 - g.x0, dy = g.y1 - g.y0;
     const D = Math.hypot(dx, dy);
@@ -80,13 +83,14 @@ const motion = (segs: Seg[], t: number) => {
     y = g.y0 + dy * m.s;
     v = (D / T) * m.v;
     vx = (dx / T) * m.v;
+    dist += t >= g.t1 ? D : D * m.s;
     if (sd) {
       if (sd !== lastDir) { prevDir = lastDir; segStart = g.t0; }
       lastDir = sd;
     }
     dir = lastDir;
   }
-  return {x, y, v, vx, dir, prevDir, segStart};
+  return {x, y, v, vx, dist, dir, prevDir, segStart};
 };
 
 const propFor = (name: string | undefined, t: number) => {
@@ -109,10 +113,10 @@ const SIDE_ARMS = new Set([
 const SIDE_LEGS = new Set<SideLegs>(['walk', 'run', 'sit', 'carried', 'ride', 'crouch', 'jump', 'fall', 'push', 'climb']);
 
 export const extraStateOf = (ex: ExtraDef, shot: Shot, t: number) => {
-  let x = ex.x, y = ex.y, dir = ex.flip ? -1 : 1;
+  let x = ex.x, y = ex.y, dir = ex.flip ? -1 : 1, dist = 0, v = 0;
   if (ex.path && ex.path.length > 1) {
     const m = motion(segsFromPath(ex.path, shot), t);
-    x = m.x; y = m.y;
+    x = m.x; y = m.y; dist = m.dist; v = m.v;
     if (m.dir) dir = m.dir;
   }
   const subj = SUBJECTS[ex.k];
@@ -122,7 +126,10 @@ export const extraStateOf = (ex: ExtraDef, shot: Shot, t: number) => {
   const s = ex.s ?? 1;
   const tilt = ex.tilt ?? 0;
   const flip = ex.flip ?? (dir < 0);
-  return {x, y, dir, pose, poseU: pk.u, expr, s, tilt, flip};
+  const speed = Math.min(1.5, v / (180 * Math.max(0.4, s)));
+  const phase = dist / (165 * Math.max(0.4, s));
+  const moving = speed > 0.05;
+  return {x, y, dir, pose, poseU: pk.u, expr, s, tilt, flip, dist, speed, phase, moving};
 };
 
 type ExtraState = ReturnType<typeof extraStateOf> & {def?: SubjectDef; ex: ExtraDef; idx: number};
@@ -239,29 +246,35 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx; renderLayer?: 'all' | 'far' | 'ne
       if (seat) {
         mountSeat = seat;
         const fSign: 1 | -1 = ms.flip ? -1 : 1;
-        const mImp = ms.poseU < 1 ? poseImpulse(ms.poseU, 1.35) : {squash: 1, dy: 0, leanKick: 0};
-        const mBreathe = 1 + Math.sin(t * 3.1 + ms.idx) * 0.012;
-        const mSx = ms.s / Math.sqrt(mImp.squash);
-        const mSy = ms.s * mImp.squash * mBreathe;
-        const mDy = mImp.dy - (ms.poseU < 1 ? Math.sin(ms.poseU * Math.PI) * 12 : 0);
-        const mTilt = ms.tilt + mImp.leanKick * fSign;
-        const lx = seat.dx * fSign * mSx;
-        const ly = seat.dy * mSy;
-        const ang = (mTilt * Math.PI) / 180;
+        const kin = computeSubjectKinematics({
+          poseU: ms.poseU,
+          pose: ms.pose,
+          speed: ms.speed,
+          phase: ms.phase,
+          altitude: ms.ex.altitude ?? 0,
+          s: ms.s,
+          tilt: ms.tilt,
+          flip: ms.flip,
+          t,
+          idx: ms.idx,
+        });
+        const lx = seat.dx * kin.sx;
+        const ly = seat.dy * kin.sy;
+        const ang = (kin.rot * Math.PI) / 180;
         const cosA = Math.cos(ang), sinA = Math.sin(ang);
         x = ms.x + lx * cosA - ly * sinA;
-        y = ms.y + mDy + lx * sinA + ly * cosA;
+        y = ms.y + kin.dy + lx * sinA + ly * cosA;
         const seatFace: 1 | -1 = (seat.face ? seat.face * fSign : fSign) as 1 | -1;
         if (a.face === undefined) dir = seatFace;
-        mountRot = (seat.angle ?? 0) * fSign + mTilt;
+        mountRot = (seat.angle ?? 0) * fSign + kin.rot;
         wind = a.wind ?? seat.wind ?? (ms.ex.path ? 1.2 : 0);
         vx = 0;
         if (seat.grip) {
-          const glx = seat.grip[0] * fSign * mSx;
-          const gly = seat.grip[1] * mSy;
+          const glx = seat.grip[0] * kin.sx;
+          const gly = seat.grip[1] * kin.sy;
           mountGripWorld = [
             ms.x + glx * cosA - gly * sinA,
-            ms.y + mDy + glx * sinA + gly * cosA,
+            ms.y + kin.dy + glx * sinA + gly * cosA,
           ];
         }
       }
@@ -312,6 +325,29 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx; renderLayer?: 'all' | 'far' | 'ne
 
   const H = look.h ?? 1;
   const rb = reachBlend(a, shot, t);
+
+  // ---- directional focal gaze (Actor.lookAt + smart pose/push auto-bias) ----
+  let lookTarget: [number, number] | null = null;
+  if (Array.isArray(a.lookAt) && a.lookAt.length > 0) {
+    if (Array.isArray(a.lookAt[0])) {
+      const rawKeys = a.lookAt as [number, number, TT][];
+      const mapped: [[number, number], TT][] = rawKeys.map(([lx, ly, ltt]) => [[lx, ly], ltt]);
+      const lk = keyAt<[number, number]>(mapped, mapped[0][0], shot, t, 0.22);
+      const su = smooth(lk.u);
+      lookTarget = [lerp(lk.prev[0], lk.cur[0], su), lerp(lk.prev[1], lk.cur[1], su)];
+    } else {
+      const stLook = a.lookAt as [number, number];
+      lookTarget = [stLook[0], stLook[1]];
+    }
+  }
+  const eyeWorldY = y - hop + bob + pImp.dy - turnHop - (382 * H + 70 * (look.head ?? 1)) * s;
+  const effGazeY = lookTarget
+    ? clamp((lookTarget[1] - eyeWorldY) / (260 * Math.max(0.5, s)), -1, 1)
+    : pk.cur === 'pointUp' || pk.cur === 'sitRaise'
+      ? -0.45
+      : a.pushTarget
+        ? clamp((a.pushTarget[1] - eyeWorldY) / (340 * Math.max(0.5, s)), -0.4, 0.4)
+        : 0;
 
   type JumpState = {
     arcY: number;
@@ -517,7 +553,7 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx; renderLayer?: 'all' | 'far' | 'ne
             talk={talk}
             blinkPh={ph}
             lean={sideLean}
-            look2={a.look2 ?? 0}
+            look2={a.look2 ?? -effGazeY * 8}
             squash={passedSideSquash}
             pitch={sidePitch}
             prop={sidePropFor(a.prop, t)}
@@ -590,15 +626,44 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx; renderLayer?: 'all' | 'far' | 'ne
     }
 
     const localVelX = vx * flipSign;
+    const autoGazeX =
+      pk.cur === 'pointR' ? 0.45 :
+      pk.cur === 'pointL' ? -0.45 :
+      a.pushTarget ? clamp(((a.pushTarget[0] - x) / (280 * Math.max(0.5, s))) * flipSign, -0.5, 0.5) : 0;
+    const effGazeX = lookTarget
+      ? clamp((a.gaze ?? 0) + clamp((lookTarget[0] - x) / (320 * Math.max(0.5, s)), -1, 1) * flipSign, -1, 1)
+      : clamp((a.gaze ?? 0) + (a.gaze === undefined ? autoGazeX : 0), -1, 1);
+
+    let handL: HandKind = inferHandKind(pk.cur, 'l');
+    let handR: HandKind = inferHandKind(pk.cur, 'r');
+    if (mountGripWorld) {
+      const isCheer = pk.cur === 'rideCheer' || (Array.isArray(pose.la) && pose.la[0] > 90);
+      if (isCheer) {
+        handL = 'open';
+        handR = 'fist';
+      } else if (pk.cur === 'ride' || poseLegs === 'ride') {
+        handL = 'fist';
+        handR = 'fist';
+      }
+    }
+    if (a.pushTarget) {
+      handL = 'fist';
+      handR = 'fist';
+    }
+    if (rb && rb.w > 0.35) {
+      if (rb.hand === 'l') handL = 'point';
+      else handR = 'point';
+    }
+
     if (view === 'back') {
       sx = (a.flip ? -1 : 1) * Math.abs(sx);
-      body = <PersonBack look={look} pose={pose} t={t} gaze={a.gaze ?? 0} blinkPh={ph} lean={a.lean} prop={propFor(a.prop, t)} wind={wind} velX={localVelX} layer={renderLayer} />;
+      body = <PersonBack look={look} pose={pose} t={t} gaze={effGazeX} blinkPh={ph} lean={a.lean} prop={propFor(a.prop, t)} wind={wind} velX={localVelX} layer={renderLayer} />;
     } else if (view === '3q') {
       sx = Math.abs(sx);
-      body = <Person3Q look={look} pose={pose} expr={ek.cur} talk={talk} t={t} face={face3q} gaze={a.gaze ?? 0} blinkPh={ph} prop={propFor(a.prop, t)} wind={wind} velX={vx} layer={renderLayer} />;
+      body = <Person3Q look={look} pose={pose} expr={ek.cur} talk={talk} t={t} face={face3q} gaze={effGazeX} gazeY={effGazeY} handL={handL} handR={handR} blinkPh={ph} prop={propFor(a.prop, t)} wind={wind} velX={vx} layer={renderLayer} />;
     } else {
       sx = (a.flip ? -1 : 1) * Math.abs(sx);
-      body = <Person look={look} pose={pose} expr={ek.cur} talk={talk} t={t} gaze={a.gaze ?? 0} blinkPh={ph} prop={propFor(a.prop, t)} wind={wind} velX={localVelX} layer={renderLayer} />;
+      body = <Person look={look} pose={pose} expr={ek.cur} talk={talk} t={t} gaze={effGazeX} gazeY={effGazeY} handL={handL} handR={handR} blinkPh={ph} prop={propFor(a.prop, t)} wind={wind} velX={localVelX} layer={renderLayer} />;
     }
   }
 
@@ -820,7 +885,16 @@ export const Film: React.FC = () => {
   for (const {i, ex, st, def: subj} of extraList) {
     let content: React.ReactNode;
     if (subj) {
-      content = subj.render(st.pose, {t, expr: st.expr, flip: false, c: ex.c});
+      content = subj.render(st.pose, {
+        t,
+        expr: st.expr,
+        flip: false,
+        c: ex.c,
+        phase: st.phase,
+        speed: st.speed,
+        moving: st.moving,
+        altitude: ex.altitude ?? 0,
+      });
     } else {
       const f = WORLD_PROPS[ex.k];
       if (!f) throw new Error('unknown world prop ' + ex.k + ' (register it in props.tsx WORLD_PROPS or episode/subjects.tsx SUBJECTS)');
@@ -831,19 +905,26 @@ export const Film: React.FC = () => {
     let subjectTransform: string;
     let subjHopLift = 0;
     if (subj) {
-      const cImp = st.poseU < 1 ? poseImpulse(st.poseU, 1.35) : {squash: 1, dy: 0, leanKick: 0};
-      const cBreathe = 1 + Math.sin(t * 3.1 + i) * 0.012;
-      const sy = st.s * cImp.squash * cBreathe;
-      const sx = (st.s / Math.sqrt(cImp.squash)) * (st.flip ? -1 : 1);
-      const dyImp = cImp.dy - (st.poseU < 1 ? Math.sin(st.poseU * Math.PI) * 12 : 0);
-      const rot = st.tilt + cImp.leanKick * (st.flip ? -1 : 1);
-      subjHopLift = Math.max(0, -dyImp);
-      subjectTransform = `translate(${st.x} ${st.y + dyImp}) rotate(${rot}) scale(${sx} ${sy})`;
+      const kin = computeSubjectKinematics({
+        poseU: st.poseU,
+        pose: st.pose,
+        speed: st.speed,
+        phase: st.phase,
+        altitude: ex.altitude ?? 0,
+        s: st.s,
+        tilt: st.tilt,
+        flip: st.flip,
+        t,
+        idx: i,
+      });
+      subjHopLift = kin.hopLift;
+      subjectTransform = `translate(${st.x} ${st.y + kin.dy}) rotate(${kin.rot}) scale(${kin.sx} ${kin.sy})`;
     } else {
       subjectTransform = `translate(${st.x} ${st.y}) rotate(${st.tilt}) scale(${st.s * (st.flip ? -1 : 1)} ${st.s})`;
     }
     const showSubjShadow = Boolean(subj) && ex.shadow !== false;
     const isAirborne = Boolean(subj) && (ex.altitude ?? 0) > 20;
+    const showSubjDust = Boolean(subj) && !isAirborne && st.pose !== 'fly' && st.pose !== 'hover' && st.speed > 0.45;
     const seatShadows = mounted.map(({actor: rider, seat}) => {
       const rOp = actorOpacity(rider, shot, t);
       if (rOp <= 0.01) return null;
@@ -896,7 +977,7 @@ export const Film: React.FC = () => {
     const item: Item = {
       y: st.y + (ex.z ?? 0),
       key: ex.id ? `x-${i}-${ex.id}` : 'x' + i,
-      node: showSubjShadow || straddlers.length > 0 || mounted.length > 0 ? (
+      node: showSubjShadow || showSubjDust || straddlers.length > 0 || mounted.length > 0 ? (
         <g>
           {showSubjShadow && (
             <GroundShadow
@@ -906,6 +987,17 @@ export const Film: React.FC = () => {
               ry={26 * st.s}
               alt={(ex.altitude ?? 0) + subjHopLift}
               opacity={0.22}
+            />
+          )}
+          {showSubjDust && (
+            <DustPuff
+              x={st.x - st.dir * 60 * st.s}
+              y={st.y}
+              t={t}
+              dir={st.dir as 1 | -1}
+              seed={i + 1.7}
+              scale={st.s * 0.85}
+              intensity={0.55}
             />
           )}
           {straddlers.map(({actor: rider}) => (
@@ -953,6 +1045,15 @@ export const Film: React.FC = () => {
 
   const flash = shot.tr === 'flash' ? 1 - clamp(ts / 0.18) : 0;
   const wipe = shot.tr === 'wipe' ? clamp(ts / 0.3) : 1;
+  const isWhip = (shot.tr === 'whipL' || shot.tr === 'whipR') && ts < 0.22;
+  const whipU = isWhip ? clamp(ts / 0.22) : 1;
+  const whipDir = shot.tr === 'whipL' ? 1 : -1;
+  const whipDx = isWhip ? (1 - whipU) * (1 - whipU) * 360 * whipDir : 0;
+  const isIris = shot.tr === 'iris' && ts < 0.38;
+  const irisU = isIris ? clamp(ts / 0.38) : 1;
+  const irisR = Math.hypot(FRAME_W, FRAME_H) * 0.55 * easeOut(irisU);
+  const clipRef = wipe < 1 ? 'url(#wipe)' : isIris ? 'url(#iris)' : undefined;
+  const worldTr = isWhip ? `translate(${whipDx.toFixed(1)} 0)` : undefined;
   const fadeIn = 1 - clamp(t / 0.3);
   const fadeOut = clamp((t - (DURATION - 0.8)) / 0.7);
   const grainSeed = 0; // hạt tĩnh: hạt nhấp nháy mỗi 2 khung làm mỏi mắt
@@ -962,9 +1063,33 @@ export const Film: React.FC = () => {
       <Audio src={staticFile('mix.wav')} />
       <svg viewBox={`0 0 ${FRAME_W} ${FRAME_H}`} width={FRAME_W} height={FRAME_H} style={{display: 'block'}}>
         <Defs seed={grainSeed + 1} />
+        {(wipe < 1 || isIris || isWhip) && <rect width={FRAME_W} height={FRAME_H} fill={PAL.navy} />}
         <clipPath id="wipe"><rect x={0} y={0} width={FRAME_W * wipe} height={FRAME_H} /></clipPath>
-        <g clipPath={wipe < 1 ? 'url(#wipe)' : undefined}>{world}</g>
+        {isIris && <clipPath id="iris"><circle cx={FRAME_W / 2} cy={FRAME_H / 2} r={irisR.toFixed(1)} /></clipPath>}
+        <g clipPath={clipRef} transform={worldTr}>{world}</g>
         {wipe < 1 && <rect x={FRAME_W * wipe - 40} y={0} width={40} height={FRAME_H} fill={PAL.yellow} />}
+        {isIris && <circle cx={FRAME_W / 2} cy={FRAME_H / 2} r={Math.max(0, irisR).toFixed(1)} fill="none" stroke={PAL.gold} strokeWidth={12} />}
+        {isWhip && [0, 1, 2, 3, 4, 5].map((i) => {
+          const rem = 1 - whipU;
+          const yy = FRAME_H * (0.14 + i * 0.145);
+          const len = FRAME_W * (0.38 + ((i * 3) % 4) * 0.12) * (0.45 + 0.55 * rem);
+          const xPos = whipDir > 0
+            ? rem * FRAME_W * (0.28 + (i % 3) * 0.14)
+            : FRAME_W - len - rem * FRAME_W * (0.28 + (i % 3) * 0.14);
+          const hBar = i % 2 === 0 ? 14 : 8;
+          return (
+            <rect
+              key={`whip-${i}`}
+              x={xPos.toFixed(1)}
+              y={(yy - hBar * 0.5).toFixed(1)}
+              width={len.toFixed(1)}
+              height={hBar}
+              rx={hBar * 0.5}
+              fill={i % 2 === 0 ? PAL.white : PAL.yellow}
+              opacity={(rem * 0.75).toFixed(3)}
+            />
+          );
+        })}
         {night > 0 && <rect width={FRAME_W} height={FRAME_H} fill={PAL.navy} opacity={0.55 * night} style={{mixBlendMode: 'multiply'}} />}
         {night > 0 && <circle cx={FRAME_W / 2} cy={FRAME_H / 2} r={700} fill="url(#glowY)" opacity={0.45 * night} style={{mixBlendMode: 'screen'}} />}
         {mood === 'morning' && <rect width={FRAME_W} height={FRAME_H} fill="url(#moodMorning)" opacity={0.22} />}

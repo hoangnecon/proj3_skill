@@ -2,7 +2,7 @@
 // Gốc toạ độ = điểm giữa hai bàn chân. Trục y âm là đi lên. Chuẩn quay phải-trước (+x), lật mượt bằng scale(face, 1).
 import React from 'react';
 import {E, L, PAL, R, Rr, S, Sh, col, LINE, Smoke} from './kit';
-import {TaperLimb, curvedTorsoPath, hairWindOffset, livingIdle, talkGesture} from './anim';
+import {CartoonHand, HandKind, TaperLimb, curvedTorsoPath, hairWindOffset, livingIdle, talkGesture} from './anim';
 import type {Arm, Expr, Look, Pose} from './chars';
 
 const rad = (d: number) => (d * Math.PI) / 180;
@@ -17,6 +17,9 @@ export type ThreeQProps = {
   t: number;
   face?: 1 | -1; // 1 = quay phải-trước, -1 = quay trái-trước
   gaze?: number; // -1..1 hướng nhìn bổ sung
+  gazeY?: number; // -1..1 hướng nhìn dọc (-1 = lên, +1 = xuống)
+  handL?: HandKind;
+  handR?: HandKind;
   blinkPh?: number;
   wind?: number; // luồng gió thổi ngược hướng mặt (mặc định 0)
   velX?: number; // vận tốc ngang thế giới px/s (mặc định 0)
@@ -33,6 +36,9 @@ export const Person3Q: React.FC<ThreeQProps> = ({
   t,
   face = 1,
   gaze = 0,
+  gazeY = 0,
+  handL = 'open',
+  handR = 'open',
   blinkPh = 0,
   wind = 0,
   velX = 0,
@@ -190,12 +196,28 @@ export const Person3Q: React.FC<ThreeQProps> = ({
       />
     </g>
   );
-  const drawHand = (p: [number, number], k: string, dim = false) => (
-    <g key={k}>
-      <S d={E(p[0], p[1], 17, 17)} f={skin} />
-      {dim && <ellipse cx={p[0]} cy={p[1]} rx={17} ry={17} fill={PAL.ink} opacity={0.14} />}
-    </g>
-  );
+  const drawHand = (p: [number, number][], sg: -1 | 1, kind: HandKind, k: string, dim = false) => {
+    const fdx = p[2][0] - p[1][0];
+    const fdy = p[2][1] - p[1][1];
+    const fl = Math.hypot(fdx, fdy);
+    const dx = fl > 0.5 ? fdx / fl : 0;
+    const dy = fl > 0.5 ? fdy / fl : 1;
+    const thumbSide: -1 | 1 = sg < 0 && dx > 0.35 ? 1 : sg;
+    return (
+      <CartoonHand
+        key={k}
+        x={p[2][0]}
+        y={p[2][1]}
+        ux={dx}
+        uy={dy}
+        skin={g ? 'ghost' : skin}
+        kind={kind}
+        side={thumbSide}
+        r={16}
+        dim={dim ? 0.14 : 0}
+      />
+    );
+  };
 
   // --- chân & giày khớp gối 2 khúc [hip, knee, ankle] góc 3/4 ---
   const legX = 34 * W + belly * 10;
@@ -434,7 +456,7 @@ export const Person3Q: React.FC<ThreeQProps> = ({
 
   const head = (
     <g transform={`translate(${shShift.toFixed(1)} 0) rotate(${headLag.toFixed(2)} 0 ${(sY - 22).toFixed(1)})`}>
-      <Head3Q look={look} hy={hyy} R={HR} expr={expr} talk={talk} t={t} gaze={gaze} blinkPh={blinkPh} hw={hw} browBob={tg.browBob} pupilDx={idle.pupilDx} />
+      <Head3Q look={look} hy={hyy} R={HR} expr={expr} talk={talk} t={t} gaze={gaze} gazeY={gazeY} blinkPh={blinkPh} hw={hw} browBob={tg.browBob} pupilDx={idle.pupilDx} />
     </g>
   );
 
@@ -448,7 +470,7 @@ export const Person3Q: React.FC<ThreeQProps> = ({
         {showNear && motionLines}
         {showFar && propBack?.(hands)}
         {showFar && !farArmInFront && drawArm(rp, 'ra', true)}
-        {showFar && !farArmInFront && drawHand(hands.r, 'hr', true)}
+        {showFar && !farArmInFront && drawHand(rp, 1, handR, 'hr', true)}
         {showFar && farLegNode}
         {showNear && nearLegNode}
         {showNear && tail}
@@ -469,8 +491,8 @@ export const Person3Q: React.FC<ThreeQProps> = ({
             {farArmInFront && drawArm(rp, 'ra')}
             {drawArm(lp, 'la')}
             {prop?.(hands)}
-            {farArmInFront && drawHand(hands.r, 'hr')}
-            {drawHand(hands.l, 'hl')}
+            {farArmInFront && drawHand(rp, 1, handR, 'hr')}
+            {drawHand(lp, -1, handL, 'hl')}
           </>
         )}
       </g>
@@ -486,11 +508,12 @@ const Head3Q: React.FC<{
   talk: number;
   t: number;
   gaze: number;
+  gazeY?: number;
   blinkPh: number;
   hw?: {dx: number; dy: number; rot: number};
   browBob?: number;
   pupilDx?: number;
-}> = ({look, hy, R: r, expr, talk, t, gaze, blinkPh, hw = {dx: 0, dy: 0, rot: 0}, browBob = 0, pupilDx = 0}) => {
+}> = ({look, hy, R: r, expr, talk, t, gaze, gazeY = 0, blinkPh, hw = {dx: 0, dy: 0, rot: 0}, browBob = 0, pupilDx = 0}) => {
   const g = look.ghost;
   const skin = g ? 'ghost' : look.skin ?? 'skin';
   const hairC = look.hairC ?? 'hair';
@@ -553,9 +576,11 @@ const Head3Q: React.FC<{
   const er = r * 0.12;
   const browC = look.brows ?? (g ? 'white' : 'hair');
   const pxOff = pupilDx + (expr === 'shock' ? Math.sin(t * 32) * 1.4 : 0);
+  const pyOff = Math.max(-1, Math.min(1, gazeY)) * 4.2 * (r / 100);
+  const gazeClamped = Math.max(-1, Math.min(1, gaze));
 
   const brow = (dl: number, dr: number, lift = 0) => {
-    const by = ey - r * 0.32 - lift + browBob;
+    const by = ey - r * 0.32 - lift + browBob + pyOff * 0.35;
     els.push(<L key="bl" d={`M${exN - r * 0.13} ${by + dl}Q${exN} ${by - r * 0.05} ${exN + r * 0.12} ${by - dl}`} w={7} c={browC} />);
     els.push(<L key="br" d={`M${exF + r * 0.1} ${by + dr}Q${exF} ${by - r * 0.05} ${exF - r * 0.1} ${by - dr}`} w={6.5} c={browC} />);
   };
@@ -572,13 +597,13 @@ const Head3Q: React.FC<{
     if (blink) {
       for (const [ex, sx, tag] of eyeSpecs) {
         const w = er * sx;
-        els.push(<L key={'e' + tag} d={`M${ex - w} ${ey}q${w} ${er * 0.6} ${2 * w} 0`} w={5.5} />);
+        els.push(<L key={'e' + tag} d={`M${ex - w} ${ey + pyOff * 0.5}q${w} ${er * 0.6} ${2 * w} 0`} w={5.5} />);
       }
     } else {
       for (const [ex, sx, tag] of eyeSpecs) {
-        const dx = pxOff * sx;
-        els.push(<ellipse key={'e' + tag} cx={ex + dx} cy={ey} rx={er * sx * k} ry={er * 1.18 * k} fill={PAL.ink} />);
-        shine(ex + dx, ey, 'eh' + tag, sx, k);
+        const dx = (pxOff + gazeClamped * 2.5 * (r / 100)) * sx;
+        els.push(<ellipse key={'e' + tag} cx={ex + dx} cy={ey + pyOff} rx={er * sx * k} ry={er * 1.18 * k} fill={PAL.ink} />);
+        shine(ex + dx, ey + pyOff, 'eh' + tag, sx, k);
       }
     }
   };
@@ -586,23 +611,25 @@ const Head3Q: React.FC<{
     const s = up ? -1 : 1;
     for (const [ex, sx, tag] of eyeSpecs) {
       const w = er * 1.1 * sx;
-      els.push(<L key={'e' + tag} d={`M${ex - w} ${ey + 3}q${w} ${s * er * 1.2} ${2 * w} 0`} w={6} />);
+      els.push(<L key={'e' + tag} d={`M${ex - w} ${ey + 3 + pyOff * 0.5}q${w} ${s * er * 1.2} ${2 * w} 0`} w={6} />);
     }
   };
   const eyesWide = () => {
+    const wPy = Math.max(-er * 0.7, Math.min(er * 0.7, 2 + pyOff));
     for (const [ex, sx, tag] of eyeSpecs) {
-      const dx = pxOff * sx;
+      const maxX = er * 0.56 * sx;
+      const wPx = Math.max(-maxX, Math.min(maxX, (er * 0.15 + pxOff + gazeClamped * 5 * (r / 100)) * sx));
       els.push(<S key={'ew' + tag} d={E(ex, ey, er * 1.42 * sx, er * 1.58)} f="white" sw={4} />);
-      els.push(<circle key={'ep' + tag} cx={ex + er * 0.15 + dx} cy={ey + 2} r={er * 0.68 * Math.min(1, sx + 0.12)} fill={PAL.ink} />);
-      shine(ex + er * 0.15 + dx, ey + 2, 'ws' + tag, sx, 0.6);
+      els.push(<circle key={'ep' + tag} cx={ex + wPx} cy={ey + wPy} r={er * 0.68 * Math.min(1, sx + 0.12)} fill={PAL.ink} />);
+      shine(ex + wPx, ey + wPy, 'ws' + tag, sx, 0.6);
     }
   };
   const eyesNarrow = () => {
     for (const [ex, sx, tag] of eyeSpecs) {
-      const dx = pxOff * sx;
-      els.push(<ellipse key={'e' + tag} cx={ex + dx} cy={ey + er * 0.25} rx={er * sx} ry={er * 0.8} fill={PAL.ink} />);
-      els.push(<L key={'lid' + tag} d={`M${ex - er * 1.25 * sx} ${ey - er * 0.2}h${er * 2.5 * sx}`} w={6} />);
-      els.push(<circle key={'s' + tag} cx={ex + dx + er * 0.3 * sx} cy={ey + er * 0.25} r={er * 0.21} fill={PAL.white} />);
+      const dx = (pxOff + gazeClamped * 2.5 * (r / 100)) * sx;
+      els.push(<ellipse key={'e' + tag} cx={ex + dx} cy={ey + er * 0.25 + pyOff * 0.65} rx={er * sx} ry={er * 0.8} fill={PAL.ink} />);
+      els.push(<L key={'lid' + tag} d={`M${ex - er * 1.25 * sx} ${ey - er * 0.2 + pyOff * 0.4}h${er * 2.5 * sx}`} w={6} />);
+      els.push(<circle key={'s' + tag} cx={ex + dx + er * 0.3 * sx} cy={ey + er * 0.25 + pyOff * 0.65} r={er * 0.21} fill={PAL.white} />);
     }
   };
 
@@ -639,7 +666,7 @@ const Head3Q: React.FC<{
 
   switch (expr) {
     case 'neutral': brow(0, 0); eyesDot(); mouth('flat'); break;
-    case 'deadpan': brow(0, 0, -5); eyesDot(0.9); for (const [ex, sx, tag] of eyeSpecs) els.push(<L key={'lid' + tag} d={`M${ex - er * 1.2 * sx} ${ey - er * 0.3}h${er * 2.4 * sx}`} w={6} />); mouth('flat'); break;
+    case 'deadpan': brow(0, 0, -5); eyesDot(0.9); for (const [ex, sx, tag] of eyeSpecs) els.push(<L key={'lid' + tag} d={`M${ex - er * 1.2 * sx} ${ey - er * 0.3 + pyOff * 0.5}h${er * 2.4 * sx}`} w={6} />); mouth('flat'); break;
     case 'stern': brow(6, 6, -2); eyesDot(0.9); mouth('frown'); break;
     case 'angry': brow(10, 10, -3); eyesNarrow(); mouth(talk > 0.05 ? 'flat' : 'frown'); break;
     case 'smug': brow(-3, 5); eyesArc(false); mouth('smirk'); break;

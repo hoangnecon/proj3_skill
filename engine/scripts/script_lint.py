@@ -91,7 +91,12 @@ if _len in ("long", "long_16x9"):
         PA["episode"] = PA["episode_long_16x9"] if _len == "long_16x9" else PA["episode_long"]
 VS_FULL = json.loads((ROOT / "standards/voice_standard.json").read_text())
 VS = VS_FULL["text"]
-RH = VS_FULL["rhythm"]
+RH = dict(VS_FULL["rhythm"])
+_ep_long_cfg = PA.get("episode_long_16x9", {}) if _len == "long_16x9" else {}
+if _len == "long_16x9" and _ep_long_cfg:
+    for _rk in ("target_ups", "phonation_ups", "blend_raw", "inside_pause_threshold_s", "inside_pause_target_s", "sentence_gap_s"):
+        if _rk in _ep_long_cfg:
+            RH[_rk] = _ep_long_cfg[_rk]
 allowed_tags = {x.lower() for x in VS.get("allowed_tags", [])}
 
 def seg_spoken_string(s: dict) -> str:
@@ -102,24 +107,26 @@ def seg_spoken_string(s: dict) -> str:
     return apply_bilingual(s.get("tts_text", s["text"]), eng)
 
 words = [w for s in segs for w in strip_markup(seg_spoken_string(s)).split()]
-dflt = script.get("pause_after", PA["voice"]["default_pause_after_s"])
+dflt = script.get("pause_after", _ep_long_cfg.get("default_pause_after_s", PA["voice"]["default_pause_after_s"]))
 pause = sum(float(s.get("pause_after", dflt)) for s in segs[:-1])
+script_wps = script.get("wps")
 
-# Estimate episode voice seconds using the v2.0 per-sentence rhythm budget
+# Estimate episode voice seconds using the v2.0 per-sentence rhythm budget (5.25 ups Short / 5.65 ups long_16x9)
 est_speak = 0.0
 for s in segs:
     eng = list(global_english) + list(s.get("english", []))
+    seg_default_wps = s.get("wps", script_wps)
     if s.get("sentences"):
         raw_sents = s["sentences"]
         for j, st in enumerate(raw_sents):
             st_txt = apply_bilingual(st if isinstance(st, str) else st.get("tts_text", st.get("text", "")), eng)
-            st_wps = (st.get("wps", s.get("wps")) if isinstance(st, dict) else s.get("wps")) or RH["target_ups"]
+            st_wps = (st.get("wps", seg_default_wps) if isinstance(st, dict) else seg_default_wps) or RH["target_ups"]
             n_emo = sum(1 for tg in TAG_RE.findall(st_txt) if tg.strip().lower() in allowed_tags)
             gap_j = (float(st.get("pause_after", RH["sentence_gap_s"])) if isinstance(st, dict) else float(RH["sentence_gap_s"])) if j + 1 < len(raw_sents) else 0.0
             est_speak += syllable_units(st_txt) / float(st_wps) + n_emo * float(RH["emotion_cue_s"]) + gap_j
     else:
         sp_txt = seg_spoken_string(s)
-        sp_wps = float(s.get("wps", RH["target_ups"]))
+        sp_wps = float(seg_default_wps if seg_default_wps is not None else RH["target_ups"])
         s_parts = [x for x in SENT_SPLIT_RE.split(re.sub(r"\.{3,}", "…", sp_txt.strip())) if x.strip()]
         n_emo = sum(1 for tg in TAG_RE.findall(sp_txt) if tg.strip().lower() in allowed_tags)
         est_speak += syllable_units(sp_txt) / sp_wps + n_emo * float(RH["emotion_cue_s"]) + max(0, len(s_parts) - 1) * float(RH["sentence_gap_s"])
@@ -271,8 +278,8 @@ if segs and not has_early_protag:
 
 # SC-23: brief.md Archetype declaration + urgency cues in 35%-85% for trap archetypes
 brief_path = ROOT / "brief.md"
+brief = brief_path.read_text() if brief_path.exists() else ""
 if brief_path.exists():
-    brief = brief_path.read_text()
     arch_m = re.search(r"^##\s+Archetype\b(.*?)(?=^##\s+|\Z)", brief, re.M | re.S)
     arch_sec = arch_m.group(1) if arch_m else ""
     valid_archs = ("Personal Rule-Trap", "Systemic Satire", "Hybrid VN Trap")
@@ -285,6 +292,144 @@ if brief_path.exists():
         u_txt = " ".join(strip_markup(s["text"]) for s in segs[u_lo:u_hi])
         if not URGENCY_RE.search(u_txt):
             warn("SC-23", f"archetype '{chosen_arch}' has no visible ticking-clock/urgency cue in 35%-85% of segments")
+
+# ---- 10-year-old kid-storytelling, linear worldbuilding, emotional triad & anti-drone guards (v5.5.0: SC-32..35) ----
+REWIND_RE = re.compile(
+    r"\b(mọi chuyện bắt đầu|quay lại lúc|quay ngược lại|trước đó ba phút|trước đó năm phút|trước đó mười phút|ba phút trước|năm phút trước đó|mười phút trước đó)\b",
+    re.I,
+)
+for s in segs[:15]:
+    if m := REWIND_RE.search(strip_markup(s["text"])):
+        _rw_msg = (
+            f"{s['id']}: disorienting flashback-rewind in opening ('{m.group(0)}') — "
+            "establish the everyday school/home world & character clearly first, then trigger the inciting incident linearly so a 10-year-old follows every beat"
+        )
+        if _len == "long_16x9":
+            err("SC-32", _rw_msg)
+        else:
+            warn("SC-32", _rw_msg)
+if _len == "long_16x9" and brief_path.exists():
+    if not re.search(r"^##\s+(?:World|Thiết lập thế giới)\b", brief, re.M | re.I):
+        warn(
+            "SC-32",
+            "long_16x9 brief.md should include '## World & Tone' / '## Thiết lập thế giới' defining normal state, 1-sentence 10yo rule, and Cute/Spooky/Curious tone",
+        )
+
+STIFF_PROSE_RE = re.compile(
+    r"\b(bất khả xâm phạm|gạt bỏ hết hiềm khích|nặng nề áp bức|thế kẹt hai chiều|bản năng săn mồi lập tức|hệ quả tất yếu|cục diện thay đổi|vô hình trung|tối hậu thư|triết lý nhân sinh)\b",
+    re.I,
+)
+stiff_hits = []
+for s in segs:
+    for m in STIFF_PROSE_RE.finditer(strip_markup(s["text"])):
+        stiff_hits.append((s["id"], m.group(0)))
+if _len == "long_16x9" and len(stiff_hits) >= 2:
+    sample_stiff = ", ".join(f"{sid}: '{ph}'" for sid, ph in stiff_hits[:5])
+    err("SC-33", f"{len(stiff_hits)} stiff adult/textbook clichés ({sample_stiff}) — rewrite in crisp, concrete 10-year-old wording")
+elif len(stiff_hits) == 1 or (_len != "long_16x9" and len(stiff_hits) >= 1):
+    sample_stiff = ", ".join(f"{sid}: '{ph}'" for sid, ph in stiff_hits[:5])
+    warn("SC-33", f"stiff adult/textbook phrase ({sample_stiff}) — prefer concrete kid-friendly wording")
+
+if _len == "long_16x9":
+    for s in segs:
+        n = len(strip_markup(s["text"]).split())
+        if n > 30:
+            err("SC-33", f"{s['id']}: {n} words (> 30 max for brisk 10yo long_16x9) — split into shorter 1-2 sentence beats")
+        elif n > 26:
+            warn("SC-33", f"{s['id']}: {n} words (> 26 target for brisk 10yo long_16x9) — tighten or split beat")
+    for x in sentences:
+        if len(x.split()) > 21:
+            err("SC-33", f"sentence of {len(x.split())} words (> 21 max for 10yo clarity): \"{x[:60]}...\"")
+    if lens and mean > 11.2:
+        warn("SC-33", f"mean sentence length {mean:.1f} words (> 11.2) — keep sentences crisp and concrete for 10-year-olds")
+
+LIVE_EXCL_RE = re.compile(r"[!?]|\b(?:ê|này|suỵt|á|ơ|khoan)\b", re.I)
+INDIRECT_RE = re.compile(
+    r"\b(?:(?:cậu ta|cô ấy|nó)\s+(?:cười khẩy\s+)?(?:bảo|phán)(?:\s+rằng)?\b|"
+    r"giải thích nhanh\s*:|"
+    r"(?:phán|thừa nhận)\s+rằng\b|"
+    r"thừa nhận\s+đi\b|"
+    r"(?:lẩm bẩm|thì thầm)\s+(?:bảo|xin lỗi)\b)",
+    re.I,
+)
+CUTE_RE = re.compile(
+    r"\b(cười|tủm tỉm|dễ thương|đáng yêu|tròn xoe|ấm áp|bánh quy|kẹo|nhột|bụng sôi|gãi đầu|ngơ ngác|vẫy đuôi|cụng râu|má phúng phính)\b",
+    re.I,
+)
+SPOOKY_RE = re.compile(
+    r"\b(rợn|lạnh toát|lạnh gáy|bóng đen|thình thịch|im phắc|nín thở|rùng mình|tối om|phát sáng|kẽo kẹt|suỵt|thì thầm|gai ốc)\b",
+    re.I,
+)
+CURIOUS_RE = re.compile(
+    r"\b(tò mò|kỳ lạ|bí mật|hóa ra|phát hiện|lấp lánh|óng ánh|khổng lồ|tí hon|tại sao|làm sao|chuyện gì)\b",
+    re.I,
+)
+if _len == "long_16x9" and segs:
+    quoted_n = sum(1 for s in segs if any(q in s["text"] for q in ("“", "”", '"')))
+    conversational_n = sum(
+        1 for s in segs if any(q in s["text"] for q in ("“", "”", '"')) or LIVE_EXCL_RE.search(strip_markup(s["text"]))
+    )
+    if quoted_n < max(8, int(len(segs) * 0.16)):
+        err(
+            "SC-34",
+            f"only {quoted_n}/{len(segs)} segments contain direct quoted dialogue (“...”) — write vivid kid dialogue instead of dry third-person summary (need >= 16%, conversational={conversational_n}/{len(segs)})",
+        )
+    full_txt = " ".join(strip_markup(s["text"]) for s in segs)
+    indirect_hits = len(INDIRECT_RE.findall(full_txt))
+    if indirect_hits >= 4:
+        warn("SC-34", f"{indirect_hits} indirect reporting phrases ('cậu ta bảo...', 'giải thích nhanh:...') — turn summary into live spoken lines")
+    triad_counts = {
+        "Cute/Funny": len(CUTE_RE.findall(full_txt)),
+        "Spooky-Fun": len(SPOOKY_RE.findall(full_txt)),
+        "Curious": len(CURIOUS_RE.findall(full_txt)),
+    }
+    thin_regs = [f"{reg}={cnt} (<3)" for reg, cnt in triad_counts.items() if cnt < 3]
+    if thin_regs:
+        warn(
+            "SC-34",
+            f"Emotional Triad thin/missing register(s): {', '.join(thin_regs)} — weave >= 3 beats in each of Cute/Funny, Spooky-Fun, and Curious",
+        )
+
+    fast_wps = 0
+    slow_wps = 0
+    total_dyn = 0
+    for s in segs:
+        seg_wps_vals = []
+        if s.get("wps") is not None:
+            seg_wps_vals.append(float(s["wps"]))
+        for st in s.get("sentences", []):
+            if isinstance(st, dict) and st.get("wps") is not None:
+                seg_wps_vals.append(float(st["wps"]))
+        if seg_wps_vals:
+            total_dyn += 1
+            if any(v >= 5.8 for v in seg_wps_vals):
+                fast_wps += 1
+            if any(v <= 5.05 for v in seg_wps_vals):
+                slow_wps += 1
+    if total_dyn == 0:
+        err(
+            "SC-35",
+            "0 segments set dynamic 'wps' — flat monotone drone! Modulate wps across >= 12% of segments (5.9-6.2 ups for action/banter, 4.7-5.0 ups for spooky hush/turns)",
+        )
+    elif total_dyn < max(8, int(len(segs) * 0.12)) or fast_wps < 3 or slow_wps < 3:
+        warn(
+            "SC-35",
+            f"weak tempo contrast (dynamic={total_dyn}/{len(segs)}, fast>=5.8:{fast_wps}, hush<=5.05:{slow_wps}) — vary wps on >= 12% of segments with >= 3 fast bursts and >= 3 hushed beats",
+        )
+
+    pa_list = [float(s.get("pause_after", dflt)) for s in segs]
+    mean_pa = sum(pa_list) / max(1, len(pa_list))
+    most_common_pa_share = Counter(round(x, 2) for x in pa_list).most_common(1)[0][1] / max(1, len(pa_list))
+    if mean_pa > 0.20:
+        err(
+            "SC-35",
+            f"mean pause_after is {mean_pa:.2f}s (> 0.20s) — narration drags! Keep default pauses brisk (0.10-0.15s) and reserve 0.26-0.38s only for real turns",
+        )
+    elif most_common_pa_share > 0.70:
+        warn(
+            "SC-35",
+            f"{most_common_pa_share:.0%} of segments use identical pause_after — vary pauses (0.10s rapid exchange, 0.14s normal, 0.28s suspense beat)",
+        )
 
 # ---- beats map ----
 beats = (ROOT / "beats.md").read_text() if (ROOT / "beats.md").exists() else ""

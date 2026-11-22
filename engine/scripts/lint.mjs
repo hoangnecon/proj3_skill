@@ -46,11 +46,84 @@ const VALID_ANGLES = new Set(['wide', 'low', 'high', 'ots', 'reverse', 'closeup'
 const VALID_CAMERA_DIRS = new Set(['front', 'reverse', 'left', 'right', 'top', 'low', 'detail']);
 const VALID_SHOT_SCALES = new Set(['establishing', 'medium', 'closeup', 'insert']);
 const VALID_MOODS = new Set(['default', 'morning', 'golden', 'danger', 'lab', 'flashback', 'dramatic']);
+const VALID_TRS = new Set(['cut', 'flash', 'wipe', 'whipL', 'whipR', 'iris']);
 const EXPRS = new Set(['neutral', 'smug', 'angry', 'shock', 'sad', 'cry', 'joy', 'stern', 'sly', 'deadpan', 'eager', 'shh']);
 const SIDE_ARMS = new Set(['swing', 'down', 'hold', 'phone', 'cane', 'carry', 'ride', 'shh', 'raise', 'pocket', 'run', 'crouch', 'jump', 'fall', 'push', 'climb', 'cheer']);
 const VALID_FX = new Set(['dust', 'sweat', 'speed', 'impact', 'stars']);
 const OVER = new Set(['tag', 'bubble', 'label', 'stamp', 'score', 'pin', 'title', 'card', 'arrow']);
 const TH = {shapes: 60, colours: 8, texts: 2, halftone: 2, glow: 1, insertShapes: 15}; // exemplar median = 60 shapes
+
+const SKIP_SVG_TAGS = new Set(['defs', 'clipPath', 'mask', 'pattern', 'radialGradient', 'linearGradient', 'filter']);
+const ROUNDED_RECT_D = /^M[-\d.]+\s+[-\d.]+h[-\d.]+a[-\d.]+\s+[-\d.]+\s+0\s+0\s+1\b/i;
+const ELLIPSE_D = /^M[-\d.]+\s+[-\d.]+a[-\d.]+\s+[-\d.]+\s+0\s+1\s+0\s+[-\d.]+\s+0a/i;
+const mulSvgMat = (m1, m2) => [
+  m1[0] * m2[0] + m1[2] * m2[1],
+  m1[1] * m2[0] + m1[3] * m2[1],
+  m1[0] * m2[2] + m1[2] * m2[3],
+  m1[1] * m2[2] + m1[3] * m2[3],
+  m1[0] * m2[4] + m1[2] * m2[5] + m1[4],
+  m1[1] * m2[4] + m1[3] * m2[5] + m1[5],
+];
+const parseSvgTransform = (s) => {
+  let m = [1, 0, 0, 1, 0, 0];
+  if (!s) return m;
+  for (const hit of s.matchAll(/(translate|scale|rotate|matrix|skewX|skewY)\s*\(([^)]*)\)/g)) {
+    const fn = hit[1];
+    const v = hit[2].trim().split(/[\s,]+/).filter(Boolean).map(Number);
+    if (fn === 'translate') m = mulSvgMat(m, [1, 0, 0, 1, v[0] || 0, v[1] || 0]);
+    else if (fn === 'scale') m = mulSvgMat(m, [v[0] ?? 1, 0, 0, v[1] ?? v[0] ?? 1, 0, 0]);
+    else if (fn === 'rotate') {
+      const a = ((v[0] || 0) * Math.PI) / 180, c = Math.cos(a), sn = Math.sin(a);
+      const cx = v[1] || 0, cy = v[2] || 0;
+      const rot = [c, sn, -sn, c, 0, 0];
+      m = cx || cy ? mulSvgMat(m, mulSvgMat([1, 0, 0, 1, cx, cy], mulSvgMat(rot, [1, 0, 0, 1, -cx, -cy]))) : mulSvgMat(m, rot);
+    } else if (fn === 'matrix' && v.length >= 6) m = mulSvgMat(m, v.slice(0, 6));
+    else if (fn === 'skewX') m = mulSvgMat(m, [1, 0, Math.tan(((v[0] || 0) * Math.PI) / 180), 1, 0, 0]);
+    else if (fn === 'skewY') m = mulSvgMat(m, [1, Math.tan(((v[0] || 0) * Math.PI) / 180), 0, 1, 0, 0]);
+  }
+  return m;
+};
+const countCloneStampedPaths = (svg) => {
+  const stack = [[1, 0, 0, 1, 0, 0]];
+  let skipDepth = 0;
+  const exactWorldSeen = new Set();
+  const counts = new Map();
+  let maxCount = 0;
+  for (const hit of svg.matchAll(/<(\/?)([a-zA-Z0-9:_-]+)([^>]*?)(\/?)>/g)) {
+    const [, close, tag, rawAttrs, selfClose] = hit;
+    if (SKIP_SVG_TAGS.has(tag)) {
+      if (!selfClose) skipDepth = Math.max(0, skipDepth + (close ? -1 : 1));
+      continue;
+    }
+    if (skipDepth > 0) continue;
+    if (close) {
+      if (tag === 'g' && stack.length > 1) stack.pop();
+      continue;
+    }
+    const top = stack[stack.length - 1];
+    const trMatch = /\btransform="([^"]*)"/.exec(rawAttrs);
+    const m = trMatch ? mulSvgMat(top, parseSvgTransform(trMatch[1])) : top;
+    if (tag === 'g') {
+      if (!selfClose) stack.push(m);
+      continue;
+    }
+    if (tag !== 'path') continue;
+    const fillMatch = /\bfill="([^"]*)"/.exec(rawAttrs);
+    if (fillMatch && fillMatch[1].startsWith('url(#')) continue;
+    const dMatch = /\bd="([^"]{65,})"/.exec(rawAttrs);
+    if (!dMatch) continue;
+    const ds = dMatch[1];
+    if (!/[CcQqSsTtAa]/.test(ds) || ROUNDED_RECT_D.test(ds) || ELLIPSE_D.test(ds)) continue;
+    const worldKey = `${ds}|${m.map((v) => v.toFixed(2)).join(',')}`;
+    if (exactWorldSeen.has(worldKey)) continue;
+    exactWorldSeen.add(worldKey);
+    const linKey = `${ds}|${m[0].toFixed(3)},${m[1].toFixed(3)},${m[2].toFixed(3)},${m[3].toFixed(3)}`;
+    const c = (counts.get(linKey) ?? 0) + 1;
+    counts.set(linKey, c);
+    if (c > maxCount) maxCount = c;
+  }
+  return maxCount;
+};
 const scriptMeta = (() => {
   try { return JSON.parse(fs.readFileSync('script.json', 'utf8')); } catch { return {}; }
 })();
@@ -160,6 +233,17 @@ if (phase !== 'shots') {
             if (cw > 0.12 || ch > 0.12) err('SE-14', `${id}: plateCam [${cam.join(', ')}] clips sign '${tx.text}' by ${Math.round(mc * 100)}% (> 12%) — adjust plateCam`);
             else warn('SE-14', `${id}: plateCam [${cam.join(', ')}] clips sign '${tx.text}' by ${Math.round(mc * 100)}%`);
           }
+        }
+      }
+      // SE-19: Anti-Clone-Stamp Botanical & Prop Variety Guard
+      if (!lineWaived(setsSrc, 'SE-19', id)) {
+        const L = d.render({t: 1, ...(d.plateOpts ?? {})});
+        const setSvg = renderToStaticMarkup(
+          React.createElement('svg', null, L.far, L.back, ...(L.mid ?? []).map((m) => React.createElement('g', {key: m.key}, m.node)), L.fg),
+        );
+        const maxCount = countCloneStampedPaths(setSvg);
+        if (maxCount >= 9) {
+          warn('SE-19', `${id}: complex organic/prop silhouette repeats ${maxCount}× verbatim without shape/scale variation — vary species, silhouette, height, and rotation instead of clone-stamping`);
         }
       }
     }
@@ -374,6 +458,27 @@ if (phase !== 'shots') {
         }
       }
     }
+    // PR-08: Living Creature Locomotion & Idle Animation Guard
+    const renderMarkup = (node) => renderToStaticMarkup(React.createElement('svg', null, node));
+    for (const [id, def] of Object.entries(P.SUBJECTS ?? {})) {
+      if (def?.kind !== 'creature' || lineWaived(subjectsSrc, 'PR-08', id)) continue;
+      const poses = Array.isArray(def.poses) ? def.poses : [];
+      if (!poses.length) continue;
+      let animatedCount = 0;
+      for (const p of poses) {
+        try {
+          const altitude = p === 'fly' || p === 'hover' ? 180 : 0;
+          const svgA = renderMarkup(def.render(p, {t: 0.0, expr: def.exprs?.[0], phase: 0.0, speed: 1.0, moving: true, altitude}));
+          const svgB = renderMarkup(def.render(p, {t: 0.23, expr: def.exprs?.[0], phase: 0.37, speed: 1.0, moving: true, altitude}));
+          if (svgA !== svgB) animatedCount++;
+        } catch {}
+      }
+      if (poses.length > 0 && animatedCount === 0) {
+        err('PR-08', `subject '${id}' (creature) is 100% frozen across time/phase (0/${poses.length} poses animate with opts.t/opts.phase) — animate breathing, tail, wings, or leg stride`);
+      } else if (poses.length >= 2 && animatedCount < Math.ceil(poses.length * 0.5)) {
+        warn('PR-08', `subject '${id}' (creature) animates in only ${animatedCount}/${poses.length} poses — add t/phase motion (stride, wing-beat, breathing) across active poses`);
+      }
+    }
   }
   // token discipline in episode code
   for (const f of ['src/episode/sets.tsx', 'src/episode/cast.ts', 'src/episode/geo.ts', 'src/episode/shotlist.ts']) {
@@ -451,6 +556,9 @@ if (phase !== 'design') {
     if (s.set.startsWith('ex-')) err('SH-06', `${tag}: exemplar set ${s.set} used in an episode shot`);
     if (s.mood !== undefined && !VALID_MOODS.has(s.mood)) {
       err('SH-19', `${tag}: unknown mood '${s.mood}' (expected ${[...VALID_MOODS].join('|')})`);
+    }
+    if (s.tr !== undefined && !VALID_TRS.has(s.tr)) {
+      err('SH-13', `${tag}: unknown transition '${s.tr}' (expected ${[...VALID_TRS].join('|')})`);
     }
     if (s.mood === 'danger' && s.night && s.night > 0.7 && !waived('SH-19', s.name)) {
       warn('SH-19', `${tag}: mood 'danger' combined with night=${s.night} (> 0.7) stacks double dark overlays and may crush visibility — lower night <= 0.7 or use mood 'dramatic'`);
@@ -1287,6 +1395,44 @@ if (phase !== 'design') {
     }
     flushWideStreak(rows.length - 1);
   }
+  // SH-21: Multi-Location Cut & Spatial Pack Progression Guard
+  if (isLong16x9 && rows.length >= 12) {
+    const definedLocs = new Set(
+      Object.values(P.EPISODE_SETS ?? {})
+        .filter((d) => d && !d.insert && typeof d.location === 'string' && d.location.trim().length > 0)
+        .map((d) => d.location.trim()),
+    );
+    if (definedLocs.size >= 2) {
+      const sh21FileWaived = /lint-ok:\s*SH-21\b/.test(shotSrc);
+      let runLoc = null, runStart = 0, streak = 0;
+      const flushLocStreak = (endIdx) => {
+        if (!runLoc) return;
+        if (streak > 11) {
+          const start = rows[runStart].i;
+          const end = rows[endIdx].i;
+          const streakWaived = sh21FileWaived || rows.slice(runStart, endIdx + 1).some((q) => waived('SH-21', q.name));
+          if (!streakWaived) {
+            const msg = `location '${runLoc}' runs unbroken for ${streak} consecutive shots (#${start}..#${end}) — cut to a parallel threat, cutaway, or next Location Pack to prevent single-room claustrophobia`;
+            if (streak > 16) err('SH-21', msg);
+            else warn('SH-21', msg);
+          }
+        }
+      };
+      for (let i = 0; i < rows.length; i++) {
+        const rawLoc = P.SETS[rows[i].set]?.location;
+        const loc = typeof rawLoc === 'string' && rawLoc.trim() ? rawLoc.trim() : null;
+        if (loc && loc === runLoc) {
+          streak++;
+        } else {
+          flushLocStreak(i - 1);
+          runLoc = loc;
+          runStart = i;
+          streak = loc ? 1 : 0;
+        }
+      }
+      flushLocStreak(rows.length - 1);
+    }
+  }
   // ---- screen geometry (GE-*, LA-*): measured from the shot table, no render. Each hit makes the shot HOT:
   // its review must open the measurement crops (node scripts/qa.mjs crops <i>) — see sv-22 "review cards".
   const looks = {...(P.EX_LOOKS ?? {}), ...P.CAST};
@@ -1311,6 +1457,10 @@ if (phase !== 'design') {
     const shotScaleSeen = new Set();
     const shotCutoffIssues = [];
     const shotCutoffSeen = new Set();
+    const shotDef = shots[r.i] ?? {};
+    const rawExtras = shotDef.extras ?? [];
+    const isInsertSet = Boolean(P.SETS[r.set]?.insert);
+    const setSignOccByKey = new Map();
     for (const u of [0.15, 0.5, 0.85]) {
       const t = r.t0 + (r.t1 - r.t0) * u;
       const g = shotGeometry(r, t, P, rows);
@@ -1369,12 +1519,58 @@ if (phase !== 'design') {
           const clipPct = Math.round(Math.max(sg.clippedW, sg.clippedH) * 100);
           flag(r, 'GE-10', `${sg.source !== 'set' ? `[${sg.source}] ` : ''}sign '${sg.text}' clipped ${clipPct}% by frame edge at ${t.toFixed(2)} s — ${sg.camHint}`, `sign:${sg.source}:${sg.text}`);
         }
-        for (const occ of sg.occludedBy) {
-          flag(r, 'GE-11', `${occ.kind} ${occ.id} covers ${Math.round(occ.frac * 100)}% of sign '${sg.text}'${sg.source !== 'set' ? ` (${sg.source})` : ''} at ${t.toFixed(2)} s`, `occ:${sg.source}:${sg.text}:${occ.id}`, occ.kind !== 'prop');
+        if (sg.occludedBy.length > 0) {
+          if (sg.source !== 'set' || isInsertSet) {
+            for (const occ of sg.occludedBy) {
+              flag(r, 'GE-11', `${occ.kind} ${occ.id} covers ${Math.round(occ.frac * 100)}% of sign '${sg.text}'${sg.source !== 'set' ? ` (${sg.source})` : ''} at ${t.toFixed(2)} s`, `occ:${sg.source}:${sg.text}:${occ.id}`, occ.kind !== 'prop');
+            }
+          } else {
+            let entry = setSignOccByKey.get(sg.text);
+            if (!entry) {
+              entry = {samples: new Set(), hits: []};
+              setSignOccByKey.set(sg.text, entry);
+            }
+            entry.samples.add(u);
+            for (const occ of sg.occludedBy) {
+              let isStationary = true;
+              if (occ.kind === 'actor') {
+                const da = (shotDef.actors ?? []).find((q) => q.id === occ.id);
+                const ra = (r.actors ?? []).find((q) => q.id === occ.id);
+                const hasMotion = Boolean(
+                  (Array.isArray(da?.path) && da.path.length >= 2)
+                  || (Array.isArray(ra?.path) && ra.path.length >= 2)
+                  || da?.mount
+                  || ra?.mount
+                  || da?.ride
+                  || ra?.ride,
+                );
+                isStationary = !hasMotion;
+              } else if (occ.kind === 'prop') {
+                const sArea = sg.screenBox ? Math.max(1, area(sg.screenBox)) : 1;
+                let matchedAny = false;
+                let allMoving = true;
+                for (let pi = 0; pi < g.props.length; pi++) {
+                  const pr = g.props[pi];
+                  if (pr.k !== occ.id) continue;
+                  if (sg.screenBox && inter(pr.screenBox, sg.screenBox) / sArea <= 0.25) continue;
+                  matchedAny = true;
+                  const rawEx = rawExtras[pi];
+                  if (!(Array.isArray(rawEx?.path) && rawEx.path.length >= 2)) {
+                    allMoving = false;
+                    break;
+                  }
+                }
+                if (!matchedAny) {
+                  const rawEx = rawExtras.find((e) => e.k === occ.id);
+                  allMoving = Boolean(Array.isArray(rawEx?.path) && rawEx.path.length >= 2);
+                }
+                isStationary = !allMoving;
+              }
+              entry.hits.push({occ, sgText: sg.text, sgSource: sg.source, t, isStationary});
+            }
+          }
         }
       }
-      const shotDef = shots[r.i] ?? {};
-      const rawExtras = shotDef.extras ?? [];
       const effPropDepth = (prop, idx) => {
         const rawEx = (rawExtras[idx] && rawExtras[idx].k === prop.k && (rawExtras[idx].id ?? null) === (prop.id ?? null))
           ? rawExtras[idx]
@@ -1504,6 +1700,14 @@ if (phase !== 'design') {
           }
         }
         prevAxis = {i: r.i, set: r.set, loc: curLoc, neutral: isNeutralAxisAngle(curSetDef), actors: curAxisActors};
+      }
+    }
+    for (const {samples, hits} of setSignOccByKey.values()) {
+      const persistent = samples.size >= 2;
+      for (const h of hits) {
+        if (persistent || h.isStationary) {
+          flag(r, 'GE-11', `${h.occ.kind} ${h.occ.id} covers ${Math.round(h.occ.frac * 100)}% of sign '${h.sgText}' at ${h.t.toFixed(2)} s`, `occ:${h.sgSource}:${h.sgText}:${h.occ.id}`, h.occ.kind !== 'prop');
+        }
       }
     }
     layoutReport.push({

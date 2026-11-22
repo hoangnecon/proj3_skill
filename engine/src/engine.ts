@@ -49,6 +49,7 @@ export type Actor = {
   e?: Keys<Expr>; // expression keys
   talk?: [string, string][]; // [startAnchor, endAnchor] mouth flaps
   gaze?: number; // front view: -1..1 pupils
+  lookAt?: [number, number] | [number, number, TT][]; // world (x, y) focal target (or keyed [x, y, at][]) that eyes/pupils track
   prop?: string; // hand prop: front -> HAND_PROPS, side -> SIDE_PROPS (props.tsx)
   op?: number;
   enter?: TT; // fade in over 0.3 s from this moment
@@ -140,7 +141,7 @@ export type ShotDef = {
   night?: number; // 0..1 night grade
   mood?: Mood; // studio atmospheric lighting grade (strictly PAL tokens, lightweight GPU-friendly gradient overlay)
   dof?: boolean; // subtle atmospheric depth separation haze between d=0.5 far layer and d=1 midground
-  tr?: 'cut' | 'flash' | 'wipe';
+  tr?: 'cut' | 'flash' | 'wipe' | 'whipL' | 'whipR' | 'iris';
   bg?: string; // background token for the 'solid' set
 };
 

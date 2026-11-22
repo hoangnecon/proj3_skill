@@ -2,7 +2,7 @@
 // Gốc toạ độ = điểm giữa hai bàn chân. Trục y âm là đi lên.
 import React from 'react';
 import {E, L, PAL, R, Rr, S, Sh, col, LINE, Smoke} from './kit';
-import {TaperLimb, curvedTorsoPath, hairWindOffset, livingIdle, talkGesture} from './anim';
+import {CartoonHand, HandKind, TaperLimb, curvedTorsoPath, hairWindOffset, livingIdle, talkGesture} from './anim';
 
 export type Hair = 'bald' | 'side' | 'bun' | 'curly' | 'short' | 'neat' | 'thin' | 'kid' | 'long';
 export type Hat = 'none' | 'khanxep' | 'cap' | 'chef' | 'helmet' | 'band';
@@ -116,6 +116,9 @@ export type PersonProps = {
   talk?: number; // 0..1 độ mở miệng khi nói
   t: number;
   gaze?: number; // -1..1 hướng nhìn
+  gazeY?: number; // -1..1 hướng nhìn dọc (-1 = lên, +1 = xuống)
+  handL?: HandKind;
+  handR?: HandKind;
   blinkPh?: number;
   wind?: number;
   velX?: number;
@@ -124,7 +127,7 @@ export type PersonProps = {
   propBack?: (h: Hands) => React.ReactNode; // vật vẽ sau thân
 };
 
-export const Person: React.FC<PersonProps> = ({look, pose, expr = 'neutral', talk = 0, t, gaze = 0, blinkPh = 0, wind = 0, velX = 0, layer = 'all', prop, propBack}) => {
+export const Person: React.FC<PersonProps> = ({look, pose, expr = 'neutral', talk = 0, t, gaze = 0, gazeY = 0, handL = 'open', handR = 'open', blinkPh = 0, wind = 0, velX = 0, layer = 'all', prop, propBack}) => {
   const g = look.ghost;
   const skin = g ? 'ghost' : look.skin ?? 'skin';
   const W = look.w ?? 1;
@@ -243,7 +246,26 @@ export const Person: React.FC<PersonProps> = ({look, pose, expr = 'neutral', tal
       />
     </g>
   );
-  const drawHand = (p: [number, number], k: string) => <S key={k} d={E(p[0], p[1], 17, 17)} f={skin} />;
+  const drawHand = (p: [number, number][], sg: -1 | 1, kind: HandKind, k: string) => {
+    const fdx = p[2][0] - p[1][0];
+    const fdy = p[2][1] - p[1][1];
+    const fl = Math.hypot(fdx, fdy);
+    const dx = fl > 0.5 ? fdx / fl : 0;
+    const dy = fl > 0.5 ? fdy / fl : 1;
+    return (
+      <CartoonHand
+        key={k}
+        x={p[2][0]}
+        y={p[2][1]}
+        ux={dx}
+        uy={dy}
+        skin={g ? 'ghost' : skin}
+        kind={kind}
+        side={sg}
+        r={16.5}
+      />
+    );
+  };
 
   // --- chân khớp gối 2 khúc [hip, knee, ankle] ---
   const legX = 34 * W + belly * 10;
@@ -448,7 +470,7 @@ export const Person: React.FC<PersonProps> = ({look, pose, expr = 'neutral', tal
   const headRot = baseHeadRot + idle.headTilt + tg.headTilt;
 
   // --- đầu ---
-  const head = <Head look={look} hy={hyy} R={HR} expr={expr} talk={talk} t={t} gaze={gaze} blinkPh={blinkPh} hw={hw} headRot={headRot} topShift={topShift} browBob={tg.browBob} pupilDx={idle.pupilDx} />;
+  const head = <Head look={look} hy={hyy} R={HR} expr={expr} talk={talk} t={t} gaze={gaze} gazeY={gazeY} blinkPh={blinkPh} hw={hw} headRot={headRot} topShift={topShift} browBob={tg.browBob} pupilDx={idle.pupilDx} />;
 
   // ma: đuôi khói thay cho chân, cơ thể trôi bồng bềnh; người thường: nhịp bước + nhún nhảy + thở nhẹ
   const modeBob =
@@ -493,8 +515,8 @@ export const Person: React.FC<PersonProps> = ({look, pose, expr = 'neutral', tal
           {drawArm(lp, 'la')}
           {drawArm(rp, 'ra')}
           {prop?.(hands)}
-          {drawHand(hands.l, 'hl')}
-          {drawHand(hands.r, 'hr')}
+          {drawHand(lp, -1, handL, 'hl')}
+          {drawHand(rp, 1, handR, 'hr')}
         </>
       )}
     </g>
@@ -503,7 +525,7 @@ export const Person: React.FC<PersonProps> = ({look, pose, expr = 'neutral', tal
 
 type HairWind = {dx: number; dy: number; rot: number};
 
-const Head: React.FC<{look: Look; hy: number; R: number; expr: Expr; talk: number; t: number; gaze: number; blinkPh: number; hw: HairWind; headRot: number; topShift: number; browBob?: number; pupilDx?: number}> = ({look, hy, R: r, expr, talk, t, gaze, blinkPh, hw, headRot, topShift, browBob = 0, pupilDx = 0}) => {
+const Head: React.FC<{look: Look; hy: number; R: number; expr: Expr; talk: number; t: number; gaze: number; gazeY?: number; blinkPh: number; hw: HairWind; headRot: number; topShift: number; browBob?: number; pupilDx?: number}> = ({look, hy, R: r, expr, talk, t, gaze, gazeY = 0, blinkPh, hw, headRot, topShift, browBob = 0, pupilDx = 0}) => {
   const g = look.ghost;
   const skin = g ? 'ghost' : look.skin ?? 'skin';
   const hairC = look.hairC ?? 'hair';
@@ -632,8 +654,9 @@ const Head: React.FC<{look: Look; hy: number; R: number; expr: Expr; talk: numbe
   const er = r * 0.12;
   const browC = look.brows ?? (g ? 'white' : 'hair');
   const pxOff = pupilDx + (expr === 'shock' ? Math.sin(t * 32) * 1.4 : 0);
+  const pyOff = Math.max(-1, Math.min(1, gazeY)) * 4.5 * (r / 100);
   const brow = (dl: number, dr: number, lift = 0) => {
-    const by = ey - r * 0.32 - lift + browBob;
+    const by = ey - r * 0.32 - lift + browBob + pyOff * 0.35;
     els.push(<L key="bl" d={`M${-ex - r * 0.12 + gx} ${by + dl}Q${-ex + gx} ${by - r * 0.05} ${-ex + r * 0.12 + gx} ${by - dl}`} w={7} c={browC} />);
     els.push(<L key="br" d={`M${ex + r * 0.12 + gx} ${by + dr}Q${ex + gx} ${by - r * 0.05} ${ex - r * 0.12 + gx} ${by - dr}`} w={7} c={browC} />);
   };
@@ -642,29 +665,33 @@ const Head: React.FC<{look: Look; hy: number; R: number; expr: Expr; talk: numbe
     <circle key={k + 'b'} cx={x - er * 0.36} cy={y + er * 0.4} r={er * 0.15 * s} fill={PAL.white} />);
   const eyesDot = (k = 1) => {
     if (blink) {
-      els.push(<L key="e1" d={`M${-ex - er + gx} ${ey}q${er} ${er * 0.6} ${2 * er} 0`} w={5.5} />, <L key="e2" d={`M${ex - er + gx} ${ey}q${er} ${er * 0.6} ${2 * er} 0`} w={5.5} />);
+      els.push(<L key="e1" d={`M${-ex - er + gx} ${ey + pyOff * 0.5}q${er} ${er * 0.6} ${2 * er} 0`} w={5.5} />, <L key="e2" d={`M${ex - er + gx} ${ey + pyOff * 0.5}q${er} ${er * 0.6} ${2 * er} 0`} w={5.5} />);
     } else for (const sg of [-1, 1]) {
-      els.push(<ellipse key={'e' + sg} cx={sg * ex + gx + pxOff} cy={ey} rx={er * k} ry={er * 1.18 * k} fill={PAL.ink} />);
-      shine(sg * ex + gx + pxOff, ey, 'eh' + sg, k);
+      const dotPx = pxOff + Math.max(-1, Math.min(1, gaze)) * 2.5 * (r / 100);
+      els.push(<ellipse key={'e' + sg} cx={sg * ex + gx + dotPx} cy={ey + pyOff} rx={er * k} ry={er * 1.18 * k} fill={PAL.ink} />);
+      shine(sg * ex + gx + dotPx, ey + pyOff, 'eh' + sg, k);
     }
   };
   const eyesArc = (up = true) => {
     const s = up ? -1 : 1;
-    for (const sg of [-1, 1]) els.push(<L key={'e' + sg} d={`M${sg * ex - er * 1.1 + gx} ${ey + 3}q${er * 1.1} ${s * er * 1.2} ${er * 2.2} 0`} w={6} />);
+    for (const sg of [-1, 1]) els.push(<L key={'e' + sg} d={`M${sg * ex - er * 1.1 + gx} ${ey + 3 + pyOff * 0.5}q${er * 1.1} ${s * er * 1.2} ${er * 2.2} 0`} w={6} />);
   };
   const eyesWide = () => {
+    const wPx = Math.max(-er * 0.6, Math.min(er * 0.6, gaze * 7 * (r / 100) + pxOff));
+    const wPy = Math.max(-er * 0.72, Math.min(er * 0.72, 2 + pyOff));
     for (const sg of [-1, 1]) {
       els.push(<S key={'ew' + sg} d={E(sg * ex + gx, ey, er * 1.45, er * 1.6)} f="white" sw={4} />);
-      els.push(<circle key={'ep' + sg} cx={sg * ex + gx + pxOff} cy={ey + 2} r={er * 0.7} fill={PAL.ink} />);
-      shine(sg * ex + gx + pxOff, ey + 2, 'ws' + sg, 0.6);
+      els.push(<circle key={'ep' + sg} cx={sg * ex + gx + wPx} cy={ey + wPy} r={er * 0.7} fill={PAL.ink} />);
+      shine(sg * ex + gx + wPx, ey + wPy, 'ws' + sg, 0.6);
     }
   };
   const eyesNarrow = () => {
     // mí trên phẳng che nửa mắt
+    const nPx = pxOff + Math.max(-1, Math.min(1, gaze)) * 2.5 * (r / 100);
     for (const sg of [-1, 1]) {
-      els.push(<ellipse key={'e' + sg} cx={sg * ex + gx + pxOff} cy={ey + er * 0.25} rx={er} ry={er * 0.8} fill={PAL.ink} />);
-      els.push(<L key={'lid' + sg} d={`M${sg * ex - er * 1.3 + gx} ${ey - er * 0.2}h${er * 2.6}`} w={6} />);
-      els.push(<circle key={'s' + sg} cx={sg * ex + gx + pxOff + er * 0.35} cy={ey + er * 0.25} r={er * 0.22} fill={PAL.white} />);
+      els.push(<ellipse key={'e' + sg} cx={sg * ex + gx + nPx} cy={ey + er * 0.25 + pyOff * 0.65} rx={er} ry={er * 0.8} fill={PAL.ink} />);
+      els.push(<L key={'lid' + sg} d={`M${sg * ex - er * 1.3 + gx} ${ey - er * 0.2 + pyOff * 0.4}h${er * 2.6}`} w={6} />);
+      els.push(<circle key={'s' + sg} cx={sg * ex + gx + nPx + er * 0.35} cy={ey + er * 0.25 + pyOff * 0.65} r={er * 0.22} fill={PAL.white} />);
     }
   };
 
@@ -697,7 +724,7 @@ const Head: React.FC<{look: Look; hy: number; R: number; expr: Expr; talk: numbe
 
   switch (expr) {
     case 'neutral': brow(0, 0); eyesDot(); mouth('flat'); break;
-    case 'deadpan': brow(0, 0, -5); eyesDot(0.9); for (const sg of [-1, 1]) els.push(<L key={'lid' + sg} d={`M${sg * ex - er * 1.2 + gx} ${ey - er * 0.3}h${er * 2.4}`} w={6} />); mouth('flat'); break;
+    case 'deadpan': brow(0, 0, -5); eyesDot(0.9); for (const sg of [-1, 1]) els.push(<L key={'lid' + sg} d={`M${sg * ex - er * 1.2 + gx} ${ey - er * 0.3 + pyOff * 0.5}h${er * 2.4}`} w={6} />); mouth('flat'); break;
     case 'stern': brow(6, 6, -2); eyesDot(0.9); mouth('frown'); break;
     case 'angry': brow(10, 10, -3); eyesNarrow(); mouth(talk > 0.05 ? 'flat' : 'frown'); break;
     case 'smug': brow(-3, 5); eyesArc(false); mouth('smirk'); break;

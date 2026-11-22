@@ -53,7 +53,41 @@ def _load_std() -> dict:
     raise FileNotFoundError(f"standards/voice_standard.json not found from {ROOT}")
 
 
+def _load_pacing() -> dict:
+    for cand in (
+        ROOT / "standards/pacing.json",
+        _SCRIPT_ROOT / "standards/pacing.json",
+        _SCRIPT_ROOT.parent / "standards/pacing.json",
+    ):
+        if cand.exists():
+            return json.loads(cand.read_text())
+    raise FileNotFoundError(f"standards/pacing.json not found from {ROOT}")
+
+
 STD = _load_std()
+_RHYTHM_OVERRIDE_KEYS = (
+    "target_ups",
+    "phonation_ups",
+    "blend_raw",
+    "inside_pause_threshold_s",
+    "inside_pause_target_s",
+    "sentence_gap_s",
+)
+
+
+def _effective_rhythm(script: dict | None = None, pa: dict | None = None) -> dict:
+    r = dict(STD["rhythm"])
+    if isinstance(script, dict) and script.get("length") == "long_16x9":
+        if pa is None:
+            try:
+                pa = _load_pacing()
+            except FileNotFoundError:
+                pa = {}
+        ep_cfg = (pa or {}).get("episode_long_16x9") or {}
+        for k in _RHYTHM_OVERRIDE_KEYS:
+            if k in ep_cfg:
+                r[k] = ep_cfg[k]
+    return r
 EN_SPAN_RE = re.compile(r"<en>(.*?)</en>", re.I | re.S)
 TAG_RE = re.compile(r"\[([^\]]+)\]")
 SENT_SPLIT_RE = re.compile(r"(?<=[.!?…])\s+(?=[^\s])")
@@ -199,9 +233,15 @@ def _atempo_chain(factor: float) -> str:
     return ",".join(parts)
 
 
-def style_sentence(raw_wav: np.ndarray, sent_tts: str, wps_override: float | None = None, pitch_override: float | None = None):
-    """Áp nhịp nhanh theo từng câu (offline 5.25 ups + pitch 1.02 qua FFmpeg WSOLA)."""
-    R = STD["rhythm"]
+def style_sentence(
+    raw_wav: np.ndarray,
+    sent_tts: str,
+    wps_override: float | None = None,
+    pitch_override: float | None = None,
+    rhythm: dict | None = None,
+):
+    """Áp nhịp nhanh theo từng câu (offline 5.25 ups / 5.65 ups long_16x9 + pitch 1.02 qua FFmpeg WSOLA)."""
+    R = rhythm or STD["rhythm"]
     tr = rhythm_trim(raw_wav, R["inside_pause_threshold_s"], R["inside_pause_target_s"])
     raw_dur = max(len(tr) / SR, 0.08)
     u = syllable_units(sent_tts)
@@ -356,9 +396,10 @@ def holes(w, thr_db=-38, min_s=0.08):
     return out
 
 
-def measure(w, text, aw):
+def measure(w, text, aw, rhythm: dict | None = None):
     """Đặc trưng âm học một đoạn/câu: tốc độ (đơn vị âm tiết/giây trừ thời lượng cue biểu cảm), f0, centroid, hole, ASR."""
     import librosa
+    R = rhythm or STD["rhythm"]
     y = resample_poly(w, 1, 3)
     f0, vf, _ = librosa.pyin(y, fmin=65, fmax=400, sr=16000, frame_length=1024, hop_length=160)
     v = f0[vf & ~np.isnan(f0)]
@@ -366,7 +407,7 @@ def measure(w, text, aw):
     hs = holes(w)
     u = syllable_units(text)
     n_emo = count_emotions(text)
-    eff_dur = max(0.15, (len(w) / SR) - n_emo * float(STD["rhythm"]["emotion_cue_s"]))
+    eff_dur = max(0.15, (len(w) / SR) - n_emo * float(R["emotion_cue_s"]))
     return {
         "rate_wps": round(u / eff_dur, 3),
         "f0_hz": round(float(np.median(v)) if len(v) else 0.0, 1),
@@ -376,10 +417,11 @@ def measure(w, text, aw):
     }
 
 
-def line_checks(m, target_wps: float | None = None):
-    """So một đoạn với hồ sơ giọng (hoặc wps đích riêng của đoạn nếu có override)."""
+def line_checks(m, target_wps: float | None = None, default_target_wps: float | None = None):
+    """So một đoạn với hồ sơ giọng (hoặc wps đích riêng của đoạn / nhịp hiệu dụng của tập)."""
     P, L = STD["profile"], STD["line_checks"]
-    ref_rate = float(target_wps) if target_wps is not None else float(P["rate_wps"])
+    base_rate = float(default_target_wps) if default_target_wps is not None else float(P["rate_wps"])
+    ref_rate = float(target_wps) if target_wps is not None else base_rate
     vals = {
         "asr_similarity": m["asr_similarity"],
         "rate_vs_profile": m["rate_wps"] / max(ref_rate, 0.1) - 1,
@@ -390,11 +432,16 @@ def line_checks(m, target_wps: float | None = None):
     return {k: (round(float(v), 3), L[k], bool(L[k][0] <= v <= L[k][1])) for k, (v, ) in ((k, (vals[k],)) for k in vals)}
 
 
-def resolve_segment_sentences(seg: dict, global_english: list[str]) -> list[dict]:
+def resolve_segment_sentences(
+    seg: dict,
+    global_english: list[str],
+    rhythm: dict | None = None,
+    script_wps: float | None = None,
+) -> list[dict]:
     """Chuẩn hoá danh sách câu trong một segment (hỗ trợ cả tách tự động lẫn mảng seg['sentences'] tinh chỉnh từng câu)."""
-    R = STD["rhythm"]
+    R = rhythm or STD["rhythm"]
     eng = list(global_english) + list(seg.get("english", []))
-    seg_wps = seg.get("wps")
+    seg_wps = seg.get("wps", script_wps)
     seg_pitch = seg.get("pitch")
     if seg.get("sentences"):
         out = []
@@ -501,8 +548,13 @@ def parse_only_spec(spec: str | None) -> dict[str, set[int] | None] | None:
     return targets
 
 
-def seg_sha(seg: dict, global_english: list[str]) -> str:
-    sents = resolve_segment_sentences(seg, global_english)
+def seg_sha(
+    seg: dict,
+    global_english: list[str],
+    rhythm: dict | None = None,
+    script_wps: float | None = None,
+) -> str:
+    sents = resolve_segment_sentences(seg, global_english, rhythm=rhythm, script_wps=script_wps)
     payload = json.dumps(sents, ensure_ascii=False, sort_keys=True)
     return hashlib.sha1(payload.encode()).hexdigest()[:12]
 
@@ -571,6 +623,8 @@ def run_preflight(script: dict, voice: str, allow_voice: bool = False, as_json: 
     allowed_tags = {x.lower() for x in text_rules.get("allowed_tags", [])}
     max_words_seg = int(text_rules.get("max_words_per_call", 45))
     global_english = list(script.get("english", []))
+    eff_rhythm = _effective_rhythm(script)
+    script_wps = script.get("wps")
     segments = script.get("segments", [])
 
     errors: list[dict] = []
@@ -622,7 +676,7 @@ def run_preflight(script: dict, voice: str, allow_voice: bool = False, as_json: 
                     "message": f"raw digits {raw_text_digits} in 'text' outside <en> (voice.py validates both text & tts_text — spell in Vietnamese words)",
                 })
 
-        sent_specs = resolve_segment_sentences(seg, global_english)
+        sent_specs = resolve_segment_sentences(seg, global_english, rhythm=eff_rhythm, script_wps=script_wps)
         if not sent_specs:
             errors.append({"seg": sid, "code": "no_sentences", "message": "resolved 0 spoken sentences"})
             continue
@@ -747,12 +801,15 @@ def main():
         raise SystemExit("voice.py synthesis requires VieNeu venv (numpy/soundfile/scipy) — run with /Users/Shared/Tools/VieNeu-TTS/.venv/bin/python")
     if voice != "Hải Đăng" and not args.allow_voice:
         raise SystemExit(f"giọng '{voice}' không phải Hải Đăng — luật nhà. Dùng --allow-voice chỉ khi người dùng yêu cầu.")
-    PA = json.loads((ROOT / "standards/pacing.json").read_text())
+    PA = _load_pacing()
     if script.get("length") == "long":  # opt-in band, approved in brief.md (script_lint SC-27)
         PA["episode"] = PA["episode_long"]
     elif script.get("length") == "long_16x9":  # 10-min 16:9 band (sv-02-long-form)
         PA["episode"] = PA["episode_long_16x9"]
-    default_pause = script.get("pause_after", PA["voice"]["default_pause_after_s"])
+    ep_cfg = PA["episode"]
+    eff_rhythm = _effective_rhythm(script, PA)
+    script_wps = script.get("wps")
+    default_pause = script.get("pause_after", ep_cfg.get("default_pause_after_s", PA["voice"]["default_pause_after_s"]))
     global_english = script.get("english", [])
     sents_dir = ROOT / "audio" / "_sents"
     for d in (ROOT / "audio", sents_dir, ROOT / "public", ROOT / "qa", ROOT / "src/data"):
@@ -803,7 +860,7 @@ def main():
 
     for seg in script["segments"]:
         sid = seg["id"]
-        sent_specs = resolve_segment_sentences(seg, global_english)
+        sent_specs = resolve_segment_sentences(seg, global_english, rhythm=eff_rhythm, script_wps=script_wps)
         need_seg = True
         if only_map is not None and sid not in only_map:
             need_seg = False
@@ -823,7 +880,8 @@ def main():
             j = sp["idx"]
             raw_path = sents_dir / f"{sid}_{j:02d}_raw.wav"
             styled_path = sents_dir / f"{sid}_{j:02d}.wav"
-            sp_hash = hashlib.sha1(json.dumps(sp, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:10]
+            hash_obj = sp if eff_rhythm == STD["rhythm"] else {**sp, "_rhythm_ups": eff_rhythm["target_ups"], "_blend": eff_rhythm.get("blend_raw")}
+            sp_hash = hashlib.sha1(json.dumps(hash_obj, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:10]
             prev_s = prev_sents.get(j, {})
             prev_tries = prev_s.get("tries", []) if isinstance(prev_s, dict) else []
             prev_passed = bool(prev_tries) and not prev_tries[-1].get("fails")
@@ -868,10 +926,10 @@ def main():
                         ),
                         dtype=np.float32,
                     )
-                    styled_w, s_meta = style_sentence(raw_w, sp["tts"], sp["wps"], sp["pitch"])
+                    styled_w, s_meta = style_sentence(raw_w, sp["tts"], sp["wps"], sp["pitch"], rhythm=eff_rhythm)
                     aw_s = asr(wm, styled_w)
-                    m_s = measure(styled_w, sp["tts"], aw_s)
-                    ch_s = line_checks(m_s, target_wps=sp["wps"])
+                    m_s = measure(styled_w, sp["tts"], aw_s, rhythm=eff_rhythm)
+                    ch_s = line_checks(m_s, target_wps=sp["wps"], default_target_wps=eff_rhythm["target_ups"])
                     # ở mức câu lẻ ngắn (<= 4 âm tiết), chỉ bắt ASR & hole để tránh nhiễu f0 trên câu 2 từ
                     if syllable_units(sp["tts"]) <= 4:
                         fails_s = [k for k, (_, _, ok) in ch_s.items() if not ok and k in ("asr_similarity", "max_hole_s")]
@@ -897,7 +955,7 @@ def main():
                 cur_styled = best_styled
             elif raw_path.exists() and (args.reuse or not styled_path.exists() or prev_sents.get(j, {}).get("sp_hash") != sp_hash):
                 raw_w, _ = sf.read(raw_path, dtype="float32")
-                cur_styled, style_meta = style_sentence(raw_w, sp["tts"], sp["wps"], sp["pitch"])
+                cur_styled, style_meta = style_sentence(raw_w, sp["tts"], sp["wps"], sp["pitch"], rhythm=eff_rhythm)
                 sf.write(styled_path, cur_styled, SR)
             elif styled_path.exists():
                 cur_styled, _ = sf.read(styled_path, dtype="float32")
@@ -913,7 +971,7 @@ def main():
         sf.write(ROOT / "audio" / f"{sid}.wav", seg_wav, SR)
         max_tries = max((len(x["tries"]) for x in sent_logs), default=1)
         attempts_log[sid] = {
-            "text_sha": seg_sha(seg, global_english),
+            "text_sha": seg_sha(seg, global_english, rhythm=eff_rhythm, script_wps=script_wps),
             "tries": [{"attempt": k} for k in range(max(1, max_tries))],
             "sentences": sent_logs,
         }
@@ -932,33 +990,33 @@ def main():
         seg_words = [{**m, "seg": sid} for m in mapped]
         words += seg_words
 
-        sent_specs = resolve_segment_sentences(seg, global_english)
+        sent_specs = resolve_segment_sentences(seg, global_english, rhythm=eff_rhythm, script_wps=script_wps)
         spoken_joined = " ".join(sp["tts"] for sp in sent_specs)
-        # trừ các khoảng gap_after nội đoạn khi đo tốc độ nói của đoạn để so với profile 5.25 ups
+        # trừ các khoảng gap_after nội đoạn khi đo tốc độ nói của đoạn để so với nhịp mục tiêu (5.25 ups hoặc 5.65 ups long_16x9)
         intra_gaps = sum(sp["gap_after"] for sp in sent_specs)
-        m = measure(w, spoken_joined, aw)
+        m = measure(w, spoken_joined, aw, rhythm=eff_rhythm)
         if intra_gaps > 0:
             u_tot = syllable_units(spoken_joined)
             n_emo_tot = count_emotions(spoken_joined)
-            eff_speak_s = max(0.15, dur - intra_gaps - n_emo_tot * float(STD["rhythm"]["emotion_cue_s"]))
+            eff_speak_s = max(0.15, dur - intra_gaps - n_emo_tot * float(eff_rhythm["emotion_cue_s"]))
             m["rate_wps"] = round(u_tot / eff_speak_s, 3)
 
         # nếu đoạn hoặc các câu trong đoạn đặt wps riêng thì so rate với trung bình có trọng số của đoạn đó
         if any(sp["wps"] is not None for sp in sent_specs):
             u_weights = [syllable_units(sp["tts"]) for sp in sent_specs]
-            sp_rates = [float(sp["wps"] or STD["rhythm"]["target_ups"]) for sp in sent_specs]
+            sp_rates = [float(sp["wps"] or eff_rhythm["target_ups"]) for sp in sent_specs]
             seg_target_wps = sum(uw * rw for uw, rw in zip(u_weights, sp_rates)) / max(1.0, sum(u_weights))
         else:
             seg_target_wps = None
 
-        ch = line_checks(m, target_wps=seg_target_wps)
+        ch = line_checks(m, target_wps=seg_target_wps, default_target_wps=eff_rhythm["target_ups"])
         # nếu có khoảng nghỉ câu nội đoạn có chủ đích (>0.4s) thì không báo lỗi max_hole_s do chính gap_after đó
         max_custom_gap = max([sp["gap_after"] for sp in sent_specs] or [0.0])
         if max_custom_gap > STD["line_checks"]["max_hole_s"][1] and not ch["max_hole_s"][2]:
             if m["max_hole_s"] <= max_custom_gap + 0.08:
                 ch["max_hole_s"] = (ch["max_hole_s"][0], ch["max_hole_s"][1], True)
 
-        cur_sha = seg_sha(seg, global_english)
+        cur_sha = seg_sha(seg, global_english, rhythm=eff_rhythm, script_wps=script_wps)
         logged_sha = attempts_log.get(sid, {}).get("text_sha")
         sent_logs = attempts_log.get(sid, {}).get("sentences", [])
         n_attempts = max([len(x.get("tries", [])) for x in sent_logs] or [len(attempts_log.get(sid, {}).get("tries", []))] or [1])
@@ -1054,7 +1112,7 @@ def main():
     voice_end = timeline[-1]["end"] if timeline else 0.0
     pauses_s = sum(float(s.get("pause_after", default_pause)) for s in script["segments"][:-1])
     total_units = sum(syllable_units(x["spoken"]) for x in timeline)
-    emo_total_s = sum(count_emotions(x["spoken"]) * float(STD["rhythm"]["emotion_cue_s"]) for x in timeline)
+    emo_total_s = sum(count_emotions(x["spoken"]) * float(eff_rhythm["emotion_cue_s"]) for x in timeline)
     pace_vals = {
         "voice_s": voice_end,
         "overall_wps": total_units / max(voice_end - emo_total_s, 0.1),
@@ -1062,10 +1120,10 @@ def main():
         "segments": len(timeline),
     }
     pace_rng = {
-        "voice_s": PA["episode"]["voice_s"],
-        "overall_wps": PA["voice"]["overall_wps"],
-        "pause_share": PA["voice"]["pause_share"],
-        "segments": PA["episode"]["segments"],
+        "voice_s": ep_cfg["voice_s"],
+        "overall_wps": ep_cfg.get("overall_wps", PA["voice"]["overall_wps"]),
+        "pause_share": ep_cfg.get("pause_share", PA["voice"]["pause_share"]),
+        "segments": ep_cfg["segments"],
     }
     episode_checks = [{"group": "voice", "check": k, "value": round(v, 3), "range": EC[k], "ok": EC[k][0] <= v <= EC[k][1]} for k, v in ep_vals.items()]
     episode_checks += [{"group": "pacing", "check": k, "value": round(v, 3), "range": pace_rng[k], "ok": pace_rng[k][0] <= v <= pace_rng[k][1]} for k, v in pace_vals.items()]
@@ -1076,6 +1134,7 @@ def main():
         "pacing": PA["version"],
         "engine": E,
         "rhythm": STD["rhythm"],
+        "effective_rhythm": eff_rhythm,
         "total": round(t, 3),
         "words": len(words),
         "units": round(total_units, 1),

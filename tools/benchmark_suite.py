@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unified Dual-Format Quality & Speed Benchmark CLI (RSI v5.4.0).
+"""Unified Dual-Format Quality & Speed Benchmark CLI (RSI v5.5.0).
 
 Runs a clean, read-only regression & speed benchmark across the suite and
 representative 9:16 Short + 16:9 Long-Form projects inside isolated temporary
@@ -1063,10 +1063,10 @@ def main() -> int:
     env = make_env()
     py_exe = resolve_python()
     plugin_json = SUITE_ROOT / ".claude-plugin" / "plugin.json"
-    suite_version = "unknown"
+    suite_version = "5.5.0"
     if plugin_json.is_file():
         try:
-            suite_version = json.loads(plugin_json.read_text(encoding="utf-8")).get("version", "unknown")
+            suite_version = json.loads(plugin_json.read_text(encoding="utf-8")).get("version", "5.5.0")
         except Exception:
             pass
 

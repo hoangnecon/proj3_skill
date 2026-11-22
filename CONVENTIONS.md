@@ -1,4 +1,4 @@
-# Conventions (`v5.4.0`)
+# Conventions (`v5.5.0`)
 
 Enforced by `tools/validate_skills.py`.
 
@@ -28,15 +28,15 @@ pin `standards/` by hash.
 - English prose for instructions. Vietnamese is used where it is the content: narration, on-screen text,
   quoted user feedback, northern/southern word lists, gate review templates.
 
-## Rules and lint IDs
+## Rules and lint IDs (`150` lint rules)
 | Prefix | Area | Where |
 |---|---|---|
-| SC-01..27, SC-29..31 | script, words budget, voice text rules, 5-Knot spine, Long-Form 5-Chapter/3+ Plants/Anti-Padding (`SC-27`, `SC-29..31`) | `scripts/script_lint.py` |
+| SC-01..27, SC-29..35 | script, words budget, voice text rules, 5-Knot spine, Long-Form 5-Chapter/3+ Plants/Anti-Padding (`SC-27`, `SC-29..31`), 10-Year-Old Linear Worldbuilding (`SC-32`), Readability & Anti-Bloated-Prose (`SC-33`), Cute/Spooky-Fun/Curious Emotional Triad & Direct Dialogue (`SC-34`), and Brisk `5.65 ups` Anti-Drone Dynamic Tempo (`SC-35`) | `scripts/script_lint.py` |
 | CH-01..10 | characters (format-aware cast richness `CH-09`, no hand-drawn characters outside `<Person>` `CH-10`) | `scripts/lint.mjs design` |
 | TK-01..03 | tokens (no raw colours, one font) | `lint.mjs design` |
-| SE-01..18 | sets: density, text, halftone, glow, bounds, life, plate emptiness, plate sign clipping, Long-Form Spatial Location Packs (target 24–30 drawn sets, ≥15 floor, ≥3 locations with ≥3 redrawn angles `SE-15`), perceptual plate clutter/contrast/balance gate (`SE-16`), Spatial Location-Pack Continuity Guard (`SE-17`: `cameraDir` enum, `landmarks` format/sharing, no duplicate `(angle, shotScale, cameraDir)`), Perspective-Horizon Consistency Guard (`SE-18`: warns against pairing `cameraDir: 'top'` flat 90° floorplans with horizon-rig `side`/`front` actors; use 3/4 elevated `angle: 'high'`, `cameraDir: 'front'|'left'|'right'`) | `lint.mjs design` & `shots` |
-| PR-01..06 | props & Hero Subjects: human-scale proportions & origin, internal text collision, no disembodied `*Head`, grip distance, giant partial-body continuity (`PR-05`), multi-pose Hero Subjects (`PR-06`) | `lint.mjs design` |
-| SH-01..20 | shot table, long-hold warning (`SH-15`: warn `> 8.0 s` on `long_16x9`), Long-Form set-fatigue streak/share (`SH-16`), cinematic view/prop diversity (`SH-17`), multi-pose Hero Creature enforcement (`SH-18`), atmospheric `ShotDef.mood` enum & over-dark `danger` + `night > 0.7` guard (`SH-19`), Shot-Scale Alternation & Anti-Dollhouse-Wide Streak Guard (`SH-20`: flags `>= 3` WARN / `>= 4` ERROR consecutive full-stage wide/medium shots `zoom <= 1.16` with zero close-up/POV/OTS breaks) | `lint.mjs shots` |
+| SE-01..19 | sets: density, text, halftone, glow, bounds, life, plate emptiness, plate sign clipping, Long-Form Spatial Location Packs (target 24–30 drawn sets, ≥15 floor, ≥3 locations with ≥3 redrawn angles `SE-15`), perceptual plate clutter/contrast/balance gate (`SE-16`), Spatial Location-Pack Continuity Guard (`SE-17`: `cameraDir` enum, `landmarks` format/sharing, no duplicate `(angle, shotScale, cameraDir)`), Perspective-Horizon Consistency Guard (`SE-18`: warns against pairing `cameraDir: 'top'` flat 90° floorplans with horizon-rig `side`/`front` actors; use 3/4 elevated `angle: 'high'`, `cameraDir: 'front'|'left'|'right'`), Anti-Clone-Stamp Botanical & Prop Silhouette Variety Guard (`SE-19`: bans `>= 9` verbatim identical curved SVG `<path>` silhouettes across a set; vary plant species — clover, daisy, curved grass blades, ferns, pebbles — scale, and angle) | `lint.mjs design` & `shots` |
+| PR-01..06, PR-08 | props & Hero Subjects: human-scale proportions & origin, internal text collision, no disembodied `*Head`, grip distance, giant partial-body continuity (`PR-05`), multi-pose Hero Subjects (`PR-06`), Living Creature Locomotion & Idle Animation Guard (`PR-08`: `kind: 'creature'` subjects MUST animate legs/wings/tail/breathing across `opts.t` / `opts.phase` in `SubjectRenderOpts` — `0` animated poses = ERROR, `< 50%` = WARN) | `lint.mjs design` |
+| SH-01..21 | shot table & transitions (`ShotDef.tr`: `cut|flash|wipe|whipL|whipR|iris`), long-hold warning (`SH-15`: warn `> 8.0 s` on `long_16x9`), Long-Form set-fatigue streak/share (`SH-16`), cinematic view/prop diversity (`SH-17`), multi-pose Hero Creature enforcement (`SH-18`), atmospheric `ShotDef.mood` enum & over-dark `danger` + `night > 0.7` guard (`SH-19`), Shot-Scale Alternation & Anti-Dollhouse-Wide Streak Guard (`SH-20`: flags `>= 3` WARN / `>= 4` ERROR consecutive full-stage wide/medium shots `zoom <= 1.16` with zero close-up/POV/OTS breaks), Multi-Location Cut & Spatial Pack Progression Guard (`SH-21`: warns `> 11` / errors `> 16` unbroken shots in a single `location` when multiple Location Packs exist) | `lint.mjs shots` |
 | LA-01..04 | layout & scale CI: set `actorScale`/`shotScale`/`location` & `relToActor` ratios (`LA-01`), 3×3 spatial grid & union occupancy clutter budget (`LA-02`), ban fake close-up camera zoom on establishing/wide sets (`LA-03`), z-aware occlusion & awkward hero creature frame-edge cut-off (`LA-04`) | `lint.mjs design` & `shots` |
 | AN-01..02 | anchors | `lint.mjs shots` |
 | OV-01..04 | overlays | `lint.mjs shots` |
@@ -46,7 +46,7 @@ pin `standards/` by hash.
 | KY-01 | animated set keys | `lint.mjs shots` |
 | CO-01..03 | coverage | `lint.mjs shots` |
 | PC-01..03 | dual shot pacing (`standards/pacing.json`: `shots` for 9:16 Shorts; `shots_long_16x9` for 16:9 Long-Form) | `lint.mjs shots` |
-| GE-01, GE-04, GE-07, GE-10, GE-11, GE-15..20 | screen geometry: overlap, head/caption, size jump, sign clip/occlusion, prop clip, overlay/prop head cover, cast continuity, severed mid-frame giant limb (`GE-19`), Hero Subject / flying creature airspace occlusion (`GE-20`: `> 45%` ERROR, `> 25%` WARN + HOT, auto-queues 8-frame subject strip) | `lint.mjs shots` |
+| GE-01, GE-04, GE-07, GE-10, GE-11, GE-15..20 | screen geometry: overlap, head/caption, size jump, sign clip & parallax-aware sign occlusion (`GE-11`: transient 1-sample pass-through by moving/flying subjects allowed; persistent `>= 2/3` occlusion warns), prop clip, overlay/prop head cover, cast continuity, severed mid-frame giant limb (`GE-19`), Hero Subject / flying creature airspace occlusion (`GE-20`: `> 45%` ERROR, `> 25%` WARN + HOT, auto-queues 8-frame subject strip) | `lint.mjs shots` |
 
 A rule documented in a skill must name its lint ID when one exists. A waiver is
 `// lint-ok: <ID> <reason>` on the shot's line, and it must be justified in the G5 review.

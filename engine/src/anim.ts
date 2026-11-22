@@ -2,7 +2,7 @@
 // Pure TypeScript + React SVG (React.createElement, no JSX syntax so strict .ts compiles cleanly).
 // Strictly PAL color tokens from ./kit — zero raw hex colors.
 import React from 'react';
-import {E, LINE, PAL, col} from './kit';
+import {E, L, LINE, PAL, Rr, S, col} from './kit';
 import {clamp, smooth} from './math';
 
 const h = React.createElement;
@@ -141,6 +141,49 @@ export function talkGesture(
   const handBob = Math.sin(t * 7.8 + ph * 0.9) * 9.0 * amp;
   const chestPulse = Math.abs(Math.sin(t * 9.5 + ph)) * 0.018 * amp;
   return {headNod, headTilt, browBob, handBob, chestPulse};
+}
+
+/**
+ * Unified Hero Subject / creature kinematics solver (RSI v5.5.0):
+ * Combines pose-switch squash/hop impulse, continuous breathing, aerial hover/flight
+ * bob & bank (`altitude > 20 || pose === 'fly' || pose === 'hover'`), and grounded
+ * quadruped stride bob & rock (`speed > 0.05`). Shared by `Film` and `ActorView`
+ * so mounted riders and IK grips stay 100% sub-pixel locked.
+ */
+export function computeSubjectKinematics(opts: {
+  poseU: number;
+  pose: string;
+  speed: number;
+  phase: number;
+  altitude: number;
+  s: number;
+  tilt: number;
+  flip: boolean;
+  t: number;
+  idx: number;
+}): {sx: number; sy: number; dy: number; rot: number; hopLift: number} {
+  const fSign = opts.flip ? -1 : 1;
+  const cImp = opts.poseU < 1 ? poseImpulse(opts.poseU, 1.35) : {squash: 1, dy: 0, leanKick: 0};
+  const cBreathe = 1 + Math.sin(opts.t * 3.1 + opts.idx) * 0.012;
+  const dyImp = cImp.dy - (opts.poseU < 1 ? Math.sin(opts.poseU * Math.PI) * 12 : 0);
+
+  const isAerial = opts.altitude > 20 || opts.pose === 'fly' || opts.pose === 'hover';
+  let locoDy = 0;
+  let locoPitch = 0;
+  if (isAerial) {
+    locoDy = Math.sin(opts.t * 5.2 + opts.idx * 1.7) * 8.5;
+    locoPitch = Math.cos(opts.t * 5.2 + opts.idx * 1.7) * 2.2;
+  } else if (opts.altitude <= 20 && opts.speed > 0.05 && opts.pose !== 'fly' && opts.pose !== 'hover') {
+    const sp = Math.min(1.25, opts.speed);
+    locoDy = -Math.abs(Math.sin(opts.phase * Math.PI * 2)) * 6.5 * sp;
+    locoPitch = Math.sin(opts.phase * Math.PI * 2) * 2.2 * sp;
+  }
+
+  const sx = (opts.s / Math.sqrt(cImp.squash)) * fSign;
+  const sy = opts.s * cImp.squash * cBreathe;
+  const dy = dyImp + locoDy;
+  const rot = opts.tilt + (cImp.leanKick + locoPitch) * fSign;
+  return {sx, sy, dy, rot, hopLift: Math.max(0, -dy)};
 }
 
 // ============================================================================
@@ -722,15 +765,17 @@ export type DustPuffProps = {
   dir?: number;
   seed?: number;
   scale?: number;
+  intensity?: number;
 };
 
 /**
  * Animated 3-puff riso-ink dust cloud (`PAL.paper` / `PAL.trim` with soft `PAL.ink` stroke)
  * expanding and drifting behind footstrikes or bursting outward on jump/fall landings.
  */
-export const DustPuff: React.FC<DustPuffProps> = ({x, y, t, dir = 1, seed = 1, scale = 1}) => {
+export const DustPuff: React.FC<DustPuffProps> = ({x, y, t, dir = 1, seed = 1, scale = 1, intensity = 1}) => {
   const dSign = dir >= 0 ? 1 : -1;
   const safeScale = Math.max(0.15, scale);
+  const safeInt = clamp(intensity, 0, 1.5);
   const puffs = [0, 1, 2].map((i) => {
     const u = (((t * 1.85 + seed * 0.37 + i * 0.29) % 1) + 1) % 1;
     const env = Math.sin(Math.PI * u);
@@ -738,7 +783,7 @@ export const DustPuff: React.FC<DustPuffProps> = ({x, y, t, dir = 1, seed = 1, s
     const py = -4 - u * (18 + i * 6) - (i === 1 ? 6 : 0);
     const r = (12 + i * 3.5) * (0.42 + 0.78 * env);
     const fill = i % 2 === 0 ? PAL.paper : PAL.trim;
-    const op = env * 0.88;
+    const op = env * 0.88 * safeInt;
 
     return h(
       'g',
@@ -1042,3 +1087,153 @@ export const DizzyStars: React.FC<DizzyStarsProps> = ({x, y, t, r = 46}) => {
     ),
   );
 };
+
+// ============================================================================
+// 7. Articulated Close-Up Cartoon Hands (RSI v5.5.0)
+// ============================================================================
+
+export type HandKind = 'open' | 'point' | 'fist' | 'cup';
+
+export type CartoonHandProps = {
+  x: number;
+  y: number;
+  ux?: number;
+  uy?: number;
+  skin: string;
+  kind?: HandKind;
+  side?: -1 | 1;
+  r?: number;
+  dim?: number;
+};
+
+/**
+ * Expressive articulated cartoon hand centered at `(x, y)` oriented along forearm
+ * unit vector `(ux, uy)` (default `(0, 1)` -> `deg = atan2(uy, ux) * 180 / PI - 90`),
+ * using strictly `S`, `L`, `E`, `Rr` and `PAL` tokens (`sw = 3.5`).
+ */
+export const CartoonHand: React.FC<CartoonHandProps> = ({
+  x,
+  y,
+  ux = 0,
+  uy = 1,
+  skin,
+  kind = 'open',
+  side = 1,
+  r = 16.5,
+  dim = 0,
+}) => {
+  const safeR = Math.max(4, Number.isFinite(r) ? r : 16.5);
+  const sg = side < 0 ? -1 : 1;
+  const rawUx = Number.isFinite(ux) ? ux : 0;
+  const rawUy = Number.isFinite(uy) ? uy : 1;
+  const uLen = Math.hypot(rawUx, rawUy);
+  const dx = uLen > 1e-3 ? rawUx / uLen : 0;
+  const dy = uLen > 1e-3 ? rawUy / uLen : 1;
+  const deg = (Math.atan2(dy, dx) * 180) / Math.PI - 90;
+  const dimOp = clamp(dim, 0, 0.72);
+  const children: React.ReactNode[] = [];
+
+  if (kind === 'point') {
+    const thumbD = E(sg * safeR * 0.68, safeR * 0.05, safeR * 0.42, safeR * 0.34);
+    const fingerD = Rr(-safeR * 0.26, -safeR * 0.1, safeR * 0.52, safeR * 1.48, safeR * 0.24);
+    const palmD = E(0, 0, safeR * 0.92, safeR * 0.88);
+    const bridgeD = Rr(-safeR * 0.2, -safeR * 0.06, safeR * 0.4, safeR * 0.96, safeR * 0.18);
+    const knD = `M${n1(-sg * safeR * 0.12)} ${n1(safeR * 0.48)}Q${n1(-sg * safeR * 0.44)} ${n1(safeR * 0.62)} ${n1(-sg * safeR * 0.66)} ${n1(safeR * 0.38)}`;
+    children.push(
+      h(S, {key: 'th', d: thumbD, f: skin, sw: 3.5}),
+      h(S, {key: 'fg', d: fingerD, f: skin, sw: 3.5}),
+      h(S, {key: 'pm', d: palmD, f: skin, sw: 3.5}),
+      h(S, {key: 'br', d: bridgeD, f: skin, nl: true}),
+      h(L, {key: 'kn', d: knD, w: 2.8, o: 0.75}),
+    );
+    if (dimOp > 0.001) {
+      children.push(h(S, {key: 'dm', d: palmD, f: 'ink', nl: true, o: dimOp}));
+    }
+  } else if (kind === 'fist') {
+    const fistD = Rr(-safeR * 0.95, -safeR * 0.78, safeR * 1.9, safeR * 1.56, safeR * 0.55);
+    const c1D = `M${n1(-safeR * 0.3)} ${n1(safeR * 0.22)}L${n1(-safeR * 0.28)} ${n1(safeR * 0.62)}`;
+    const c2D = `M${n1(safeR * 0.3)} ${n1(safeR * 0.22)}L${n1(safeR * 0.28)} ${n1(safeR * 0.62)}`;
+    children.push(
+      h(S, {key: 'fs', d: fistD, f: skin, sw: 3.5}),
+      h(L, {key: 'k1', d: c1D, w: 2.8, o: 0.76}),
+      h(L, {key: 'k2', d: c2D, w: 2.8, o: 0.76}),
+    );
+    if (dimOp > 0.001) {
+      children.push(h(S, {key: 'dm', d: fistD, f: 'ink', nl: true, o: dimOp}));
+    }
+  } else if (kind === 'cup') {
+    const thumbD = E(sg * safeR * 0.72, -safeR * 0.04, safeR * 0.38, safeR * 0.3);
+    const cupD = E(0, 0, safeR * 0.98, safeR * 0.82);
+    const bridgeD = E(sg * safeR * 0.44, -safeR * 0.02, safeR * 0.34, safeR * 0.22);
+    const creaseD = `M${n1(-safeR * 0.46)} ${n1(safeR * 0.26)}Q0 ${n1(safeR * 0.48)} ${n1(safeR * 0.46)} ${n1(safeR * 0.26)}`;
+    children.push(
+      h(S, {key: 'th', d: thumbD, f: skin, sw: 3.5}),
+      h(S, {key: 'cp', d: cupD, f: skin, sw: 3.5}),
+      h(S, {key: 'br', d: bridgeD, f: skin, nl: true}),
+      h(L, {key: 'cr', d: creaseD, w: 2.6, o: 0.6}),
+    );
+    if (dimOp > 0.001) {
+      children.push(h(S, {key: 'dm', d: cupD, f: 'ink', nl: true, o: dimOp}));
+    }
+  } else {
+    const thumbD = E(sg * safeR * 0.78, safeR * 0.08, safeR * 0.44, safeR * 0.32);
+    const f1D = E(-safeR * 0.42, safeR * 0.74, safeR * 0.25, safeR * 0.42);
+    const f2D = E(0, safeR * 0.8, safeR * 0.26, safeR * 0.45);
+    const f3D = E(safeR * 0.42, safeR * 0.74, safeR * 0.25, safeR * 0.42);
+    const palmD = E(0, 0, safeR * 0.92, safeR * 0.86);
+    const unionPalmD = E(0, safeR * 0.16, safeR * 0.74, safeR * 0.68);
+    const unionThumbD = E(sg * safeR * 0.46, safeR * 0.06, safeR * 0.38, safeR * 0.23);
+    children.push(
+      h(S, {key: 'th', d: thumbD, f: skin, sw: 3.5}),
+      h(S, {key: 'f1', d: f1D, f: skin, sw: 3.5}),
+      h(S, {key: 'f2', d: f2D, f: skin, sw: 3.5}),
+      h(S, {key: 'f3', d: f3D, f: skin, sw: 3.5}),
+      h(S, {key: 'pm', d: palmD, f: skin, sw: 3.5}),
+      h(S, {key: 'up', d: unionPalmD, f: skin, nl: true}),
+      h(S, {key: 'ut', d: unionThumbD, f: skin, nl: true}),
+    );
+    if (dimOp > 0.001) {
+      children.push(h(S, {key: 'dm', d: palmD, f: 'ink', nl: true, o: dimOp}));
+    }
+  }
+
+  return h('g', {transform: `translate(${n1(x)} ${n1(y)}) rotate(${n1(deg)})`}, ...children);
+};
+
+/**
+ * Maps active pose name + arm side (`'l'` | `'r'`) to articulated `HandKind`.
+ */
+export function inferHandKind(poseName: string, side: 'l' | 'r'): HandKind {
+  switch (poseName) {
+    case 'pointL':
+      return side === 'l' ? 'point' : 'fist';
+    case 'pointR':
+    case 'pointUp':
+    case 'sitRaise':
+      return side === 'r' ? 'point' : 'fist';
+    case 'point':
+      return 'point';
+    case 'wave':
+    case 'cheer':
+    case 'shrug':
+    case 'raise':
+    case 'rideCheer':
+      return 'open';
+    case 'hands':
+    case 'sitHands':
+    case 'shock':
+    case 'cover':
+      return 'cup';
+    case 'argue':
+    case 'argue2':
+    case 'hip':
+    case 'ride':
+    case 'push':
+    case 'brace':
+      return 'fist';
+    case 'hipR':
+      return side === 'r' ? 'fist' : 'open';
+    default:
+      return 'open';
+  }
+}

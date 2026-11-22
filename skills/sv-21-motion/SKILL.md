@@ -1,11 +1,11 @@
 ---
 name: sv-21-motion
-description: Animate characters in a story-video episode with studio 2D craft (v5.4) — living micro-acting (livingIdle, talkGesture, poseImpulse), 3D 3q stepped turnarounds, automatic creature pose spring-morph, 4-phase foot-roll walks/runs, tapered articulated limbs, curved spine silhouettes, grounded altitude shadows, 4-stage jumpPhase takeoff/apex/landing physics with bounded arcH windows and zero mid-air walking (MO-17), elevated airspace sorting preventing flying-creature occlusion (GE-20), 3-layer straddle mounts with IK grip anchors (MO-14), contact-locked pushing (pushTarget, MO-13), procedural riso action FX (MO-15), Long-Form multi-action choreography density (MO-16), and anti-freeze CI banning frozen mid-pounce creatures and static actor statues (MO-18). Use whenever writing or editing actors/extras in src/episode/shotlist.ts or src/episode/subjects.tsx, fixing pasted-sticker or frozen motion, and for gate G5.
+description: Animate characters and creatures in a story-video episode with studio 2D craft (v5.5) — living micro-acting (livingIdle, talkGesture, poseImpulse), CartoonHand articulated close-up hands (open, point, fist, cup via inferHandKind), Actor.lookAt 2D directional eye-line tracking, 3D 3q stepped turnarounds, computeSubjectKinematics aerial flight bob/bank and quadruped stride rock/bob plus paw DustPuff locked with straddle riders, creature pose spring-morph, 4-phase foot-roll walks/runs, 4-stage jumpPhase takeoff/apex/landing physics with zero mid-air walking (MO-17), elevated airspace sorting (GE-20), 3-layer straddle mounts with IK grip anchors (MO-14), contact-locked pushTarget (MO-13), riso action FX (MO-15), Long-Form choreography density (MO-16), and anti-freeze CI (MO-18). Use whenever writing or editing actors/extras in src/episode/shotlist.ts or src/episode/subjects.tsx, fixing pasted-sticker or frozen motion, and for gate G5.
 ---
 
-# sv-21 · Motion and Studio 2D Animation Craft (`v5.4`)
+# sv-21 · Motion and Studio 2D Animation Craft (`v5.5`)
 
-Motion is judged frame by frame against the **"Pasted-Sticker Test"**. The user rejected episodes where *"bước chân đi này kia vẫn chưa ổn, chưa rõ ràng và chi tiết"* or where characters felt *"ghép vào cho có"* (floating without contact shadows, mid-air walking on jump arcs, cardboard-pancake `sx=0.12` flips, frozen mid-pounce creature statues, dead >3.4 s actor holds, flying creatures clipping behind tabletop props, hands pushing empty air, riders pasted flat on top of a creature shell, or brick-stiff limbs with zero secondary life). Every character and creature on screen must carry **living micro-acting, weight, contact, 3D stepped turnarounds, creature spring-morph, curved spine energy, true 4-stage jump/airspace physics, and secondary motion** driven by `src/anim.ts`, `side.tsx`, `chars.tsx`, `threeq.tsx`, `back.tsx`, and `Film.tsx` and verified by 8-frame strips (`MO-01..MO-18`, `GE-20`).
+Motion is judged frame by frame against the **"Pasted-Sticker Test"**. The user rejected episodes where *"bước chân đi này kia vẫn chưa ổn, chưa rõ ràng và chi tiết"* or where characters felt *"ghép vào cho có"* (floating without contact shadows, mid-air walking on jump arcs, cardboard-pancake `sx=0.12` flips, frozen mid-pounce creature statues, rigid un-animated creature legs/wings, featureless mitten hands in close-ups, flat 1D eye-lines, dead >3.4 s actor holds, flying creatures clipping behind tabletop props, hands pushing empty air, riders pasted flat on top of a creature shell, or brick-stiff limbs with zero secondary life). Every character and creature on screen must carry **living micro-acting, articulated `CartoonHand` gestures, 2D `Actor.lookAt` eye-line tracking, weight, contact, 3D stepped turnarounds, `computeSubjectKinematics` flight/quadruped physics, creature spring-morph, curved spine energy, true 4-stage jump/airspace physics, and secondary motion** driven by `src/anim.ts`, `side.tsx`, `chars.tsx`, `threeq.tsx`, `back.tsx`, and `Film.tsx` and verified by 8-frame strips (`MO-01..MO-18`, `PR-08`, `GE-20`).
 
 ## Read first
 - `references/actor-api.md` — every Actor field and its exact behaviour (speeds, reach geometry, seat heights).
@@ -14,7 +14,7 @@ Motion is judged frame by frame against the **"Pasted-Sticker Test"**. The user 
 
 ## Workflow (inside the G5 loop of sv-22)
 1. Block each shot from `beats.md`: who is the subject, what physical action carries the line, which word
-   it lands on. Write the actor with anchors, coordinates from `src/episode/geo.ts`, and `v5.4` contact/physics fields (`arcH`, bounded `legs: 'jump'` windows, `pushTarget`, `wind`, `fx`, `altitude`, `SubjectSeat.straddle`/`grip`, lunge `path`/pose follow-through on creature attacks).
+   it lands on. Write the actor with anchors, coordinates from `src/episode/geo.ts`, and `v5.5` contact/physics fields (`arcH`, bounded `legs: 'jump'` windows, `lookAt`, `pushTarget`, `wind`, `fx`, `altitude`, `SubjectSeat.straddle`/`grip`, lunge `path`/pose follow-through on creature attacks).
 2. `node scripts/lint.mjs shots` — fix every `MO-01..MO-18`, `GE-20`, `SZ-01..02`, `SH-*` error and resolve HOT warnings (`MO-13`, `MO-14`, `MO-15`, `MO-16`, `MO-17`, `MO-18`, `GE-20`). It also writes `qa/strips_needed.json`: one 8-frame strip for every walk, reach, sit/stand, ride, jump takeoff/apex/land (`MO-17`), flying/moving Hero Subject (`GE-20`), and animated set key.
 3. `node scripts/qa.mjs strips` → `qa/strips/<name>.jpg` (8 full frames with timestamps, 2 rows, light JPEG; also run automatically with Tier-3 `qa/shots/<NN>.jpg` `Δ=%` filmstrips and `qa/motion_energy.json` inside `qa.mjs pass`).
 4. Look at EVERY strip with the checklist below. Fix, re-render that strip
@@ -23,7 +23,7 @@ Motion is judged frame by frame against the **"Pasted-Sticker Test"**. The user 
 
 ---
 
-## Studio 2D Animation Craft (`v5.4` · `src/anim.ts`, `side.tsx`, `chars.tsx`, `threeq.tsx`, `back.tsx`, `Film.tsx`)
+## Studio 2D Animation Craft (`v5.5` · `src/anim.ts`, `side.tsx`, `chars.tsx`, `threeq.tsx`, `back.tsx`, `Film.tsx`)
 
 Never treat a 2D character as a static cutout slid from `(x0, y0)` to `(x1, y1)`. Build every shot around seven physical pillars powered by `src/anim.ts`, `side.tsx`, `chars.tsx`, `threeq.tsx`, `back.tsx`, and `Film.tsx`:
 
@@ -50,7 +50,7 @@ Never treat a 2D character as a static cutout slid from `(x0, y0)` to `(x1, y1)`
   4. **Passing High Knee** (foot arcs cleanly forward — `walk` keeps 60% stance grounded; `run` drops to 38% stance for a true **double-airborne flight phase** with 62 px swing lift!).
 - **Sprint Polish:** Pair `legs: 'run', arms: 'run'` with `fx: ['dust']` (or `['dust', 'speed']` on panic sprints) and `wind: 0.6..1.0` so footstrikes kick up riso dust puffs and hair trails behind the sprint.
 
-### 3. True Straddle Mounting (`SubjectSeat.straddle`, `grip`, `SeatShadow`, `wind`, `MO-14`)
+### 3. True Straddle Mounting & `computeSubjectKinematics` (`SubjectSeat.straddle`, `grip`, `SeatShadow`, `wind`, `MO-14`, `PR-08`)
 - Never paste riders flat on one side of a creature or vehicle (`LA-02` clutter + pasted-sticker fail). Give the Hero Subject a stable `id` (e.g. `{id: 'ladybug', k: 'ladybug', pose: 'fly', altitude: 220, path: [...]}`) and attach each rider via `mount: {target: 'ladybug', slot: 0}`.
 - **Author `SubjectSeat` with 3-Layer Straddle Physics in `src/episode/subjects.tsx`:**
   ```ts
@@ -65,17 +65,25 @@ Never treat a 2D character as a static cutout slid from `(x0, y0)` to `(x1, y1)`
   1. Rider's `layer="far"` (far leg + far arm) **BEHIND** the creature's shell/body,
   2. The creature **PLUS** a curved `SeatShadow` painted directly onto the shell under each rider's hips,
   3. Rider's `layer="near"` (torso + near leg hugging the near flank + near arm IK-locked onto `grip: [gx, gy]` — collar, antenna base, or front rider's shoulders) **IN FRONT** with `hairWindOffset` trailing in the airstream (`wind`)!
+- **Automatic Creature Locomotion & Aerial Kinematics (`computeSubjectKinematics`, `SubjectRenderOpts`, `PR-08`):**
+  - `Film.tsx` evaluates **`computeSubjectKinematics`** (`src/anim.ts`) on every `SUBJECT` frame and passes `{ t, expr, flip, c, phase, speed, moving, altitude }` into `SubjectDef.render(pose, opts)` (`PR-08` enforces leg/wing/tail/breathing animation on `kind: 'creature'`).
+  - **Aerial flight bob & bank (`altitude > 20 || pose === 'fly' || pose === 'hover'`):** Automatically applies smooth sinusoidal hover/flight bobbing and velocity-proportional pitch/bank tilt along the flight vector.
+  - **Grounded quadruped stride rock/bob + paw `<DustPuff>` (`speed > 0.45`):** Automatically adds rhythmic stride rock/bobbing on moving ground creatures and spawns grounded paw `<DustPuff>` clouds when sprinting (`speed > 0.45`).
+  - **Sub-pixel rider lock:** Both the `SUBJECT` and its `Actor.mount` straddle sandwich (`layer="far"` + `SeatShadow` + `layer="near"`) inherit the exact same `computeSubjectKinematics` bob/bank transform to sub-pixel precision — zero rider float or shell separation!
 - **`MO-14` Enforcement:** Every `mount` must resolve to an existing `SubjectSeat` (ERROR if missing). On any `creature` with `>= 2` riders, all riders MUST face the same travel direction (ERROR on contradictory `face: -1` vs `face: 1`), and seats MUST define `straddle: true` or `grip` (WARN + HOT if neither is set).
 
 ### 4. Contact-Locked Physical Effort (`Actor.pushTarget`, `fx: ['sweat']`, `MO-13`)
 - **Zero Air-Pushing (`MO-13`):** Never place an actor in `p: 'push'` or `legs: 'push'` waving hands at empty space! Always supply `pushTarget: [tx, ty]` (the exact world coordinate of the lever, door edge, rock, or wall surface from `src/episode/geo.ts`, or a timed `reach`) so both hands IK-lock directly onto the physical surface.
 - Keep `pushTarget` within real arm reach (`<= 280 * H * s * 1.15`; `MO-13` emits WARN + HOT beyond comfortable reach and hard ERROR `> 380 * H * s`). Pair heavy pushes with forward `lean: 12..18`, `fx: ['sweat']`, and a set `keys` reaction so the object visibly yields or strains.
 
-### 5. Living Micro-Acting, 3D Stepped Turnarounds, Creature Spring-Morph & Impact FX (`livingIdle`, `talkGesture`, `poseImpulse`, `ActionFx`, `MO-15`)
+### 5. Living Micro-Acting, Articulated `CartoonHand`, 2D `Actor.lookAt`, 3D Turnarounds, Creature Spring-Morph & Impact FX (`livingIdle`, `talkGesture`, `poseImpulse`, `ActionFx`, `MO-15`)
 - **Living Micro-Acting & Conversational Gestures (`livingIdle`, `talkGesture`, `poseImpulse`):**
   - **`livingIdle`** runs continuously across `Person`, `Person3Q`, and `PersonBack` — driving subtle chest/shoulder breathing, gentle hip weight sway, organic head micro-tilt, and pupil micro-saccades so standing listeners never freeze into dead PNG statues.
   - **`talkGesture`** activates during active `talk` spans across `Person`, `Person3Q`, and `PersonBack` — adding conversational head nod/tilt, expressive brow emphasis, and gesturing hand bounce synced to dialogue cadence.
   - **`poseImpulse`** injects a whole-body hop-dip anticipation & spring settle impulse whenever keyed `p` or `e` transitions fire, while `curvedTorsoPath`, `TaperLimb`, and `hairWindOffset` keep silhouettes supple.
+- **Articulated Close-Up Hands (`CartoonHand` & `inferHandKind`) & 2D Eye-Line Tracking (`Actor.lookAt`):**
+  - **`CartoonHand` (`'open' | 'point' | 'fist' | 'cup'`):** Character rigs render articulated riso-ink hands auto-inferred from the active pose via **`inferHandKind`** — so `pointL` / `pointR` extend real index fingers in `1.5×–1.7×` Close-Ups instead of round mitten circles, `push`/`fist`/`angry` clench `'fist'`, `hold`/`carry` cup `'cup'`, and reaction/cheer poses splay `'open'`.
+  - **`Actor.lookAt` (`[x, y]` or keyed `[x, y, TT][]`):** Tracks world-space eye-line targets across **both horizontal and vertical pupil axes** (e.g. looking sharply UP at a towering giant / overhead fan, DOWN at miniature heroes on a desk, or tracking a moving creature with keyed `[x, y, TT][]` waypoints), superseding 1D horizontal-only `gaze` whenever vertical or moving eye contact matters.
 - **3D `'3q'` Stepped Turnarounds (Zero Cardboard-Pancake Squash):**
   - `Film.tsx` replaces the old `sx = 0.12` horizontal pancake squash on facing/direction flips with **3D `'3q'` stepped view-bridges (`|sx| >= 0.78`) + hop-dip `poseImpulse`**, keeping characters solid and volumetric as they turn! (Still keep `path` `dx` monotonic when `face` is explicitly locked per `MO-10` so actors never accidentally flip mid-walk.)
 - **Automatic Creature Spring-Morph (`extraStateOf` `poseU`):**
@@ -89,21 +97,22 @@ Never treat a 2D character as a static cutout slid from `(x0, y0)` to `(x1, y1)`
 - **Fall/Trip Weight (`MO-15`):** Any actor using `p: 'fall'`, `p: 'trip'`, or `legs: 'fall'` with zero `fx` and zero shot `shake` triggers `WARN [MO-15]` — add `fx: ['impact', 'stars']` or `fx: ['dust']` (and optional `shake: 6..12`) so hits feel physical!
 
 ### 6. Multi-Action Choreography Density (`MO-16`) & Anti-Freeze CI (`MO-18`)
-- Under `v5.4` Long-Form cinema pacing (`shots_long_16x9`: `2.8–6.2 s` mean, `max 9.5 s`, `~95–180` multi-scale shots per 10-minute episode, alternating `1.8–3.2 s` close-ups/inserts with `4.0–6.2 s` action/tracking takes per `SH-20`), longer takes MUST stay continuously choreographed (`MO-16`) and NO actor or creature may freeze mid-beat (`MO-18`)!
+- Under `v5.5` Long-Form cinema pacing (`shots_long_16x9`: `2.8–6.2 s` mean, `max 9.5 s`, `~95–180` multi-scale shots per 10-minute episode, alternating `1.8–3.2 s` close-ups/inserts with `4.0–6.2 s` action/tracking takes per `SH-20` and progressing across Location Packs per `SH-21`), longer takes MUST stay continuously choreographed (`MO-16`) and NO actor or creature may freeze mid-beat (`MO-18`)!
 - **`MO-16` Enforcement on `long_16x9`:**
   - Any shot **`> 5.0 s`** with **`0` choreography events** is a hard **ERROR** (dead static hold).
   - Any shot **`> 5.0 s`** with **`< 2` choreography events** triggers **WARN**.
   - Any shot **`> 8.5 s`** with **`< 3` choreography events** triggers **WARN**.
-  - Counted events: motivated `cam2`/`camKeys`, set `keys`, multi-waypoint `path`, `arcH`, `mount`, `pushTarget`, `reach`, keyed `p`/`e`/`view`/`face`/`legs`/`arms`, `fx`/`wind`, and animated `extras`.
+  - Counted events: motivated `cam2`/`camKeys`, set `keys`, multi-waypoint `path`, `arcH`, `mount`, `pushTarget`, `reach`, `lookAt`, keyed `p`/`e`/`view`/`face`/`legs`/`arms`, `fx`/`wind`, and animated `extras`.
 - **`MO-18` (Anti-Frozen-Statue & Frozen-Attack Guard):**
   - **Frozen Creature Attack = Hard ERROR:** Whenever a `SUBJECT` triggers an attack pose (`pounce | charge | dive | attack`), it **MUST** follow through with a lunge `path` or keyed recovery/chase pose within **`<= 1.8 s`** — freezing a cat mid-`pounce` or ant mid-`charge` in place `> 1.8 s` is a hard **ERROR**!
   - **Frozen Actor Statue = WARN + HOT:** Whenever an actor stands static **`> 3.4 s`** with zero acting beats (no `talk`, `path`, `reach`, `pushTarget`, `hop`, or keyed `p`/`e`/`view`/`legs`/`arms` transitions), `MO-18` emits **WARN** and marks the shot **HOT** for inspection (and `qa/motion_energy.json` measures active-canvas pixel `Δ=%` to flag `frozen_streak >= 2`).
 
 ### DO vs DON'T (`MO-13`, `MO-14`, `MO-15`, `MO-16`, `MO-17`, `MO-18`, `GE-20`)
-| Beat | DON'T (Pasted-Sticker / Freeze Fail) | DO (Studio 2D Craft `v5.4`) | Guard |
+| Beat | DON'T (Pasted-Sticker / Freeze Fail) | DO (Studio 2D Craft `v5.5`) | Guard |
 |---|---|---|---|
 | Pushing a door / crate / lever | `{p: 'push', x: 500, y: 840}` with hands pushing empty air | `{p: 'push', x: 500, y: 840, pushTarget: [640, 560], lean: 14, fx: ['sweat']}` + `keys` door reaction | `MO-13` |
-| Two riders on a flying creature | Flat `seats: {fly: [{dx: 20, dy: -70}, {dx: -40, dy: -70}]}` or opposing `face: 1` / `face: -1` | `straddle: true`, real `grip: [gx, gy]`, `wind: 1.4`, same `face` facing travel direction + `altitude: 220` on creature | `MO-14`, `MO-15` |
+| Two riders on a flying creature | Flat `seats: {fly: [{dx: 20, dy: -70}, {dx: -40, dy: -70}]}` or opposing `face: 1` / `face: -1` | `straddle: true`, real `grip: [gx, gy]`, `wind: 1.4`, same `face` facing travel direction + `altitude: 220` on creature (`computeSubjectKinematics` locks riders + flight bank/bob) | `MO-14`, `MO-15` |
+| Close-up pointing & vertical eye-line (`1.5×–1.7×`) | Stiff neutral pose with horizontal-only `gaze` staring past an overhead/floor target | Key `p: 'pointR'` (`CartoonHand` auto-extends index finger via `inferHandKind`) + `lookAt: [1280, 260]` (or keyed `[x, y, TT][]`) tracking horizontal & vertical pupil axes | `SZ-01`, `SH-20` |
 | Flying / hovering creature over props | `{k: 'ladybug', pose: 'fly', x: 900, y: 420}` with no `altitude` or clipped behind table/beaker props | `{k: 'ladybug', pose: 'fly', x: 900, y: 420, altitude: 240}` — ground shadow on floor, body sorted in `+1200` elevated airspace above `mid` props, verified on 8-frame strip | `MO-15`, `GE-20` |
 | Jump across a gap | `arcH: 150` stretched across a 4 s walk path (mid-air walking!) or static mid-air pose | Bounded jump window (`<= 2.2 s`): `legs: [['run', 0], ['jump', t0], ['run', t1]], arcH: 150` → 4-stage `jumpPhase` takeoff crouch → apex tuck → reach → grounded `<DustPuff>` squash | `MO-17` |
 | Creature attack (`pounce`/`charge`/`dive`/`attack`) | `{k: 'meoMuop', pose: 'pounce', x: 1200, y: 860}` frozen mid-air for 3.5 s | Key `pose: [['prowl', 0], ['pounce', 's18@vồ'], ['chase', 's18@trượt']]` + lunge `path: [[1320, 860, 's18@vồ'], [880, 880, 's18@trượt']]` (`<= 1.8 s` hold) with spring-morph + `fx`/`shake` | `MO-18` |
@@ -131,8 +140,8 @@ Never treat a 2D character as a static cutout slid from `(x0, y0)` to `(x1, y1)`
 - Reach geometry: arrive `>= 0.3 s` before reaching (`MO-06`), stand within arm range (`MO-05`), and stand 120–180 px beside the target at its `fy` floor line (`MO-09`). Piggyback `ride` target must be in the shot (`MO-07`).
 - Talkers are big enough to read (≥ 480 px tall on 9:16 Shorts, ≥ 270 px on 16:9 Long-Form, lint `SZ-01`); acting bodies stay inside the frame during reaches (`SZ-02`). Listeners react on the punch word (never stand static `> 3.4 s`, `MO-18`).
 - Every shot changes something (`MO-08` warns on frozen shots — recognizes `cam2`, `camKeys`, `keys`, `over`, `path`, `reach`, `talk`, `hop`, `shake`, `pant`, `ride`, `mount`, `arcH`, `pushTarget`, `fx`, `wind`, or keyed poses/expressions).
-- **Never reverse `path` `dx` when `face` is locked (`MO-10`)**: while `v5.4` `Film.tsx` bridges intentional turns with 3D `'3q'` stepped turnarounds (`|sx| >= 0.78` + `poseImpulse`) instead of cardboard-pancake `sx = 0.12` squashes, reversing `dx` against a locked `face` still causes unintended mid-walk direction flips (`MO-10`). Use monotonic `dx` or `dx = 0`, or key `face` explicitly on the turn beat.
-- **Articulated Action Physics:** Side, 3/4, front, and back rigs support full articulated joint bends (`legs` / `arms`: `run`, `crouch`, `jump`, `fall`, `push`, `climb`, `cheer`, `walk`, `sit`, `carried`, `ride`) plus continuous `livingIdle`, `talkGesture`, and `poseImpulse`. Match `legs` and `arms` to the physical beat.
+- **Never reverse `path` `dx` when `face` is locked (`MO-10`)**: while `v5.5` `Film.tsx` bridges intentional turns with 3D `'3q'` stepped turnarounds (`|sx| >= 0.78` + `poseImpulse`) instead of cardboard-pancake `sx = 0.12` squashes, reversing `dx` against a locked `face` still causes unintended mid-walk direction flips (`MO-10`). Use monotonic `dx` or `dx = 0`, or key `face` explicitly on the turn beat.
+- **Articulated Action Physics, `CartoonHand` & `Actor.lookAt`:** Side, 3/4, front, and back rigs support full articulated joint bends (`legs` / `arms`: `run`, `crouch`, `jump`, `fall`, `push`, `climb`, `cheer`, `walk`, `sit`, `carried`, `ride`), articulated `CartoonHand` shapes (`'open' | 'point' | 'fist' | 'cup'` via `inferHandKind`), 2D directional `Actor.lookAt` (`[x, y]` or `[x, y, TT][]`), plus continuous `livingIdle`, `talkGesture`, and `poseImpulse`. Match `legs`, `arms`, and `lookAt` to the physical beat.
 - **Z-Aware Depth Sorting & Elevated Airspace (`Actor.z`, `ExtraDef.z`, `ExtraDef.altitude`, `GE-20`):** Use explicit `z` nudges when an actor and prop share a floor plane (`depthY = y + z`); `GE-17` compares `depthY` rather than raw `y`, and `Actor.mount` riders group with their mount as one `LA-02` cluster. Flying `SUBJECTS` with `altitude > 20` automatically sort in elevated airspace (`+1200` depth) with a separate ground-plane `GroundShadow` (`GE-20`).
 - **First-pass motion pitfalls:**
   - `flip: true` mirrors `pointL` / `pointR` — verify pointing direction points TOWARD the subject, never off-screen.

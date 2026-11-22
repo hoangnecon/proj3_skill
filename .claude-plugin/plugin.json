@@ -1,7 +1,7 @@
 {
   "name": "story-video-skills",
-  "version": "5.4.0",
-  "description": "Gated production suite for 2-3 minute vertical Vietnamese 2D story videos (Remotion, riso-ink illustration, Hai Dang narration): series bible, script, voice, design system with exact tokens and detail budgets, motion, shots and camera, audio, QA and delivery, with lint rules, rendered evidence and gates G1-G7.",
+  "version": "5.5.0",
+  "description": "Gated production suite for 2-3 minute vertical Shorts and opt-in 8.5-11.5 minute 16:9 widescreen Long-Form Vietnamese 2D story videos (Remotion, riso-ink illustration, Hai Dang 5.25/5.65 ups narration): series bible, 10yo kid-storytelling script, dynamic voice, design system with Spatial Location Packs and living Hero Subjects, studio 2D motion, shots and camera, audio, QA and delivery, with 150 lint rules, 3-Tier rendered evidence and gates G1-G7.",
   "author": {
     "name": "PROJ3"
   },
