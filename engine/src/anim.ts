@@ -214,7 +214,8 @@ const swingToeAngle = (r: number, pushRot: number, midRot: number, strikeRot: nu
 /**
  * 4-phase articulated foot-roll gait sampler (Contact -> Mid-Stance -> Push-Off -> Swing).
  * - `walk`: stance = 0.60, heel strike (-14*speed), flat mid-stance (0), toe push-off (+20*speed), 32px swing arch (+10*speed).
- * - `run`: stance = 0.38 (true double-airborne flight phase!), heel strike (-16*speed), strong push-off (+28*speed), 62px swing lift.
+ * - `run`: stance = 0.38 (true double-airborne flight phase!), heel strike (-16*speed), strong push-off (+28*speed),
+ *   rear-peaked 42px heel recovery tapering cleanly into forward knee drive.
  */
 export function footCycle(
   phase: number,
@@ -279,9 +280,9 @@ export function footCycle(
         heelLift = 22 * Math.min(1, spd) * su;
       }
     } else {
-      const r = (q - stance) / (1 - stance);
-      x = -effStride * 0.5 + effStride * smooth(r);
-      lift = Math.sin(Math.PI * r) * (62 + 28 * Math.abs(slope)) * Math.min(1, spd * 1.4);
+      const r = clamp((q - stance) / (1 - stance), 0, 1);
+      x = -effStride * 0.5 + effStride * Math.pow(smooth(r), 0.85);
+      lift = Math.sin(Math.PI * Math.pow(r, 0.72)) * (42 + 22 * Math.abs(slope)) * Math.min(1, spd * 1.35);
       toeRot = swingToeAngle(r, 28 * spd, 12 * spd, -16 * spd);
       heelLift = lift * 0.4;
     }

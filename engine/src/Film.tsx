@@ -427,31 +427,29 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx; renderLayer?: 'all' | 'far' | 'ne
   };
 
   if (view === 'side') {
-    // nhịp bước: cadence cố định khi chậm hơn vNom (bước ngắn lại), bàn chân trụ đứng yên
-    const vNom = 230 * s * (a.tip ? 0.55 : 1);
-    const Hf = Math.min(1.15, H);
-    const cyc = SIDE_CYCLE * Hf * s;
-    let phase = (vNom * t) / cyc;
-    let speed = clamp(v / vNom);
-    if (v > vNom && hasPath) {
-      // phần dư: tích phân số
-      let ex = 0;
-      const segs = segsOf(a, shot);
-      const t0 = segs[0].t0;
-      for (let tt = t0; tt < t; tt += 1 / 60) ex += Math.max(0, motion(segs, tt).v - vNom) / 60;
-      phase += ex / cyc;
-    }
-    if (riderOf || mountSeat) speed = 0;
+    const poseSideLegs = POSES[pk.cur]?.legs;
     const defaultSideLegs: SideLegs = a.ride
       ? 'carried'
       : mountSeat
         ? (mountSeat.pose && SIDE_LEGS.has(mountSeat.pose as SideLegs) ? (mountSeat.pose as SideLegs) : 'ride')
-        : 'walk';
+        : poseSideLegs && SIDE_LEGS.has(poseSideLegs as SideLegs)
+          ? (poseSideLegs as SideLegs)
+          : 'walk';
     const lk = keyAt<SideLegs>(a.legs, defaultSideLegs, shot, t, 0.45);
     let legs: SideLegs = lk.cur;
     let seatH = a.seatH ?? 120;
     if (legs === 'sit' && lk.prev === 'walk' && lk.u < 1) seatH = lerp(200 * H, seatH, easeIO(lk.u));
     if (legs === 'walk' && lk.prev === 'sit' && lk.u < 1) { legs = 'sit'; seatH = lerp(seatH, 200 * H, easeIO(lk.u)); }
+
+    // Distance-locked gait phase along path (zero foot slip, freezes cleanly when v === 0)
+    const vNom = 230 * s * (a.tip ? 0.55 : 1);
+    const Hf = Math.min(1.15, H);
+    const cyc = SIDE_CYCLE * Hf * s;
+    const phase = hasPath && m ? m.dist / cyc : 0;
+    let speed = clamp(v / vNom, 0, legs === 'run' ? 1.3 : 1);
+    if (riderOf || mountSeat) speed = 0;
+    if (hasPath && speed <= 0.04 && (legs === 'walk' || legs === 'run')) speed = 0;
+
     jumpState = computeJumpState(legs);
     // Unbreakable mid-air physics lock: zero mid-air walking/running cycles
     if (jumpState.airborne && !a.mount && !a.ride && (legs === 'walk' || legs === 'run')) {
@@ -472,13 +470,15 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx; renderLayer?: 'all' | 'far' | 'ne
       sidePitch = sp.pitch;
     }
 
-    const ak = keyAt<string>(a.arms, a.ride ? 'ride' : (mountSeat ? 'ride' : 'swing'), shot, t);
+    const defaultSideArms = a.ride ? 'ride' : mountSeat ? 'ride' : pk.cur === 'run' ? 'run' : 'swing';
+    const ak = keyAt<string>(a.arms, defaultSideArms, shot, t);
     let arms: SideArms = SIDE_ARMS.has(ak.cur) ? (ak.cur as SideArms) : 'swing';
     if (a.ride && ak.cur === 'ride') arms = {near: {x: 110, y: -330 * H}, far: {x: 120, y: -350 * H}};
     if (ak.cur === 'shh') arms = {near: {x: 96, y: -470 * H}};
     if (ak.cur === 'raise') arms = {near: {x: 60, y: -700 * H}, far: {x: 40, y: -690 * H}};
     if (ak.cur === 'pocket') arms = {near: {x: -10, y: -190 * H}, far: {x: -14, y: -195 * H}};
 
+    const effRunSpd = hasPath ? Math.min(1.3, Math.max(0, speed)) : (speed > 0.05 ? Math.min(1.3, speed) : 1);
     const sideLean = (a.lean ?? 0) + (a.tip ? 8 : 0) + (ak.cur === 'carry' ? 12 : 0) + (a.ride ? 14 : 0) + pImp.leanKick;
     const sideHipX = legs === 'push' ? -10 : legs === 'ride' ? -8 : legs === 'crouch' ? -16 : legs === 'sit' ? -10 : 0;
     const sideHipY =
@@ -490,7 +490,7 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx; renderLayer?: 'all' | 'far' | 'ne
       legs === 'push' ? 26 :
       legs === 'ride' ? 18 :
       legs === 'crouch' ? 14 :
-      legs === 'run' ? 12 :
+      legs === 'run' ? 12 * Math.min(1.15, effRunSpd) :
       legs === 'jump' ? 6 :
       legs === 'climb' ? 8 :
       legs === 'walk' ? 3 * speed : 0;
@@ -544,6 +544,8 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx; renderLayer?: 'all' | 'far' | 'ne
             t={t}
             phase={phase}
             speed={speed}
+            hasPath={hasPath}
+            moving={hasPath ? speed > 0 : legs === 'run' || speed > 0.04}
             slope={a.slope ?? 0}
             legs={legs}
             jumpPhase={legs === 'jump' ? jumpState.jumpPhase : undefined}
@@ -574,8 +576,24 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx; renderLayer?: 'all' | 'far' | 'ne
     const spU = clamp(springSettle(pk.u, 0.12), -0.15, 1.15);
     let pose = pk.u < 1 ? poseMix(p0, p1, spU) : p1;
     poseLegs = pose.legs ?? (a.legs !== undefined ? keyAt<string>(a.legs, 'stand', shot, t).cur : 'stand');
-    if (bridgedFromSide && pose.legs === undefined && poseLegs && poseLegs !== 'carried') {
+    if (pose.legs === undefined && poseLegs && poseLegs !== 'carried' && (bridgedFromSide || poseLegs !== 'stand')) {
       pose = {...pose, legs: poseLegs as LegMode};
+    }
+    if ((view === '3q' || view === 'front') && hasPath && m && !a.mount && !a.ride) {
+      if (m.v > 28 * s && (pose.legs === undefined || pose.legs === 'stand')) {
+        const autoLegs: LegMode = m.v > 300 * s ? 'run' : 'walk';
+        pose = {...pose, legs: autoLegs};
+        poseLegs = autoLegs;
+      } else if (m.v <= 5 * s && (pose.legs === 'walk' || pose.legs === 'run')) {
+        pose = {
+          ...pose,
+          legs: 'stand',
+          hop: 0,
+          lean: 0,
+          ...(pk.cur === 'run' ? {la: POSES.idle.la, ra: POSES.idle.ra} : {}),
+        };
+        poseLegs = 'stand';
+      }
     }
     pose = {
       ...pose,
@@ -583,7 +601,15 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx; renderLayer?: 'all' | 'far' | 'ne
       lean: (pose.lean ?? 0) + pImp.leanKick,
     };
     jumpState = computeJumpState(poseLegs);
+    if (jumpState.airborne && !a.mount && !a.ride && (pose.legs === 'walk' || pose.legs === 'run')) {
+      pose = {...pose, legs: 'jump'};
+      poseLegs = 'jump';
+    }
     arcY = jumpState.arcY;
+    const vNom3Q = 230 * s * (a.tip ? 0.55 : 1);
+    const cyc3Q = SIDE_CYCLE * Math.min(1.15, H) * s;
+    const pathGaitPhase = hasPath && m && !a.mount && !a.ride ? m.dist / cyc3Q : undefined;
+    const pathGaitSpeed = hasPath && m && !a.mount && !a.ride ? (m.v <= 5 * s ? 0 : clamp(m.v / vNom3Q, 0.25, 1.25)) : undefined;
 
     const face3q: 1 | -1 = sx < 0 ? -1 : 1;
     const flipSign = view === '3q' ? face3q : (a.flip ? -1 : 1);
@@ -660,10 +686,10 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx; renderLayer?: 'all' | 'far' | 'ne
       body = <PersonBack look={look} pose={pose} t={t} gaze={effGazeX} blinkPh={ph} lean={a.lean} prop={propFor(a.prop, t)} wind={wind} velX={localVelX} layer={renderLayer} />;
     } else if (view === '3q') {
       sx = Math.abs(sx);
-      body = <Person3Q look={look} pose={pose} expr={ek.cur} talk={talk} t={t} face={face3q} gaze={effGazeX} gazeY={effGazeY} handL={handL} handR={handR} blinkPh={ph} prop={propFor(a.prop, t)} wind={wind} velX={vx} layer={renderLayer} />;
+      body = <Person3Q look={look} pose={pose} expr={ek.cur} talk={talk} t={t} phase={pathGaitPhase} speed={pathGaitSpeed} face={face3q} gaze={effGazeX} gazeY={effGazeY} handL={handL} handR={handR} blinkPh={ph} prop={propFor(a.prop, t)} wind={wind} velX={vx} layer={renderLayer} />;
     } else {
       sx = (a.flip ? -1 : 1) * Math.abs(sx);
-      body = <Person look={look} pose={pose} expr={ek.cur} talk={talk} t={t} gaze={effGazeX} gazeY={effGazeY} handL={handL} handR={handR} blinkPh={ph} prop={propFor(a.prop, t)} wind={wind} velX={localVelX} layer={renderLayer} />;
+      body = <Person look={look} pose={pose} expr={ek.cur} talk={talk} t={t} phase={pathGaitPhase} speed={pathGaitSpeed} gaze={effGazeX} gazeY={effGazeY} handL={handL} handR={handR} blinkPh={ph} prop={propFor(a.prop, t)} wind={wind} velX={localVelX} layer={renderLayer} />;
     }
   }
 

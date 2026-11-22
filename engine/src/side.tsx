@@ -4,6 +4,7 @@
 import React from 'react';
 import {E, L, PAL, R, Rr, S, Sh, col} from './kit';
 import {TaperLimb, curvedTorsoPath, footCycle, gaitHipBob, hairWindOffset} from './anim';
+import {clamp} from './math';
 import type {FootSample} from './anim';
 import type {Look, Expr} from './chars';
 
@@ -26,6 +27,8 @@ export type SideProps = {
   t: number;
   phase?: number; // số chu kỳ bước (liên tục)
   speed?: number; // 0 đứng .. 1 đi
+  hasPath?: boolean; // true khi đi/chạy theo path thế giới (dừng hẳn khi v=0 thay vì chạy tại chỗ)
+  moving?: boolean; // cờ đang di chuyển (tùy chọn)
   slope?: number; // độ dốc mặt đất dy/dx (âm = đi lên)
   legs?: SideLegs;
   jumpPhase?: number; // 0..1 4-stage jump phase (takeoff crouch -> rising apex -> descending reach -> landing squash)
@@ -58,7 +61,7 @@ const ik = (a: P, b: P, l1: number, l2: number, bend: number): P => {
   return bend > 0 ? (p1[0] > p2[0] ? p1 : p2) : p1[0] < p2[0] ? p1 : p2;
 };
 
-export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, slope = 0, legs = 'walk', jumpPhase, seatH = 120, arms = 'swing', expr = 'neutral', talk = 0, blinkPh = 0, lean = 0, look2 = 0, squash, pitch, wind = 0, velX = 0, layer = 'all', prop}) => {
+export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, hasPath = false, moving, slope = 0, legs = 'walk', jumpPhase, seatH = 120, arms = 'swing', expr = 'neutral', talk = 0, blinkPh = 0, lean = 0, look2 = 0, squash, pitch, wind = 0, velX = 0, layer = 'all', prop}) => {
   const W = look.w ?? 1;
   const H = look.h ?? 1;
   const belly = look.belly ?? 0;
@@ -70,8 +73,9 @@ export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, 
   const HR = 100 * (look.head ?? 1);
   const ground = (x: number) => x * slope;
 
-  const runPhase = phase !== 0 ? phase : t * 2.1;
-  const runSpd = speed > 0.05 ? Math.min(1.3, speed) : 1;
+  const freeRun = !hasPath && moving !== false;
+  const runPhase = freeRun ? (phase !== 0 ? phase : t * 2.1) : phase;
+  const runSpd = freeRun ? (speed > 0.05 ? Math.min(1.3, speed) : 1) : Math.min(1.3, Math.max(0, speed));
   const jp =
     jumpPhase !== undefined
       ? Math.max(0, Math.min(1, jumpPhase))
@@ -177,7 +181,7 @@ export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, 
     jp < 0.86 ? 4 * ((jp - 0.52) / 0.34) :
     18 * Math.sin(((jp - 0.86) / 0.14) * Math.PI);
   const bendX =
-    legs === 'run' ? 18 * runSpd + gaitTwist * 0.8 :
+    legs === 'run' ? (runSpd > 0.04 ? 18 * runSpd + gaitTwist * 0.8 : Math.sin(t * 2.5 + blinkPh) * 1.2) :
     legs === 'ride' ? 22 :
     legs === 'push' ? 28 :
     legs === 'crouch' ? 16 :
@@ -299,10 +303,13 @@ export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, 
 
   // ---- tay ----
   const shoulder: P = [hipX + 4 * W + topShift + gaitTwist, shY + 26];
+  const stoppedOnPath = !freeRun && speed <= 0.04 && (legs === 'walk' || legs === 'run');
   const resolvedArms =
-    arms === 'swing' && (legs === 'run' || legs === 'ride' || legs === 'crouch' || legs === 'jump' || legs === 'fall' || legs === 'push' || legs === 'climb')
-      ? legs
-      : arms;
+    stoppedOnPath && (arms === 'swing' || arms === 'run')
+      ? 'down'
+      : arms === 'swing' && (legs === 'run' || legs === 'ride' || legs === 'crouch' || legs === 'jump' || legs === 'fall' || legs === 'push' || legs === 'climb')
+        ? legs
+        : arms;
   const armPts = (near: boolean): P[] => {
     let tgt: Target | undefined;
     if (typeof resolvedArms === 'object') tgt = near ? resolvedArms.near : resolvedArms.far;
@@ -316,10 +323,11 @@ export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, 
       a = 4 + sw;
       e = 14 + Math.max(0, sw) * 0.9;
     } else if (resolvedArms === 'run') {
-      // pumping bent elbows (65°–95° flexion)
-      const sw = 48 * Math.cos(2 * Math.PI * runPhase) * (near ? -1 : 1);
+      // pumping bent elbows (65°–95° flexion), settling cleanly when decelerating
+      const armAmp = clamp(runSpd * 1.25, 0, 1);
+      const sw = 48 * armAmp * Math.cos(2 * Math.PI * runPhase) * (near ? -1 : 1);
       a = 6 + sw;
-      e = 75 + Math.max(0, sw) * 0.42;
+      e = 10 + (65 + Math.max(0, sw) * 0.42) * armAmp;
     } else if (resolvedArms === 'ride') {
       // hands gripping forward-down on reins/shell
       a = near ? 38 : 48;

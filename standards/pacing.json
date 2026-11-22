@@ -27,21 +27,12 @@
  },
  "episode_long": {"_doc": "OPT-IN length band for an adapted source story the USER asked to keep longer than 2-3 min. Needs script.json \"length\": \"long\" AND brief.md '## Length override' with user_quote (script_lint SC-27). Cutting pace (shots) is unchanged.", "voice_s_target": 200, "voice_s": [170, 240], "voice_s_hard": [160, 250], "words": [860, 1150], "segments": [34, 52]},
  "episode_long_16x9": {
-  "_doc": "8.5-11.5 minute 16:9 long-form kid-friendly adventure story (sv-02-long-form). Brisk 5.65 ups storytelling rhythm with dynamic fast/hush wps contrast. Needs script.json \"length\": \"long_16x9\" AND \"format\": \"16:9\" AND brief.md '## Length override' with user_quote.",
-  "voice_s_target": 570,
-  "voice_s": [480, 720],
-  "voice_s_hard": [420, 780],
-  "words": [2400, 3850],
-  "segments": [85, 175],
-  "target_ups": 5.65,
-  "phonation_ups": 6.02,
-  "blend_raw": 0.10,
-  "inside_pause_threshold_s": 0.25,
-  "inside_pause_target_s": 0.10,
-  "sentence_gap_s": 0.12,
-  "default_pause_after_s": 0.14,
-  "overall_wps": [5.0, 6.2],
-  "pause_share": [0.015, 0.075]
+  "_doc": "9.5-16.0 minute 16:9 long-form kid-friendly adventure story (sv-02-long-form), built and validated Unit-by-Unit across 5-8 standalone episodic chapters at the pure 5.25 ups Hải Đăng voice standard (zero artificial wps speedups). Needs script.json \"length\": \"long_16x9\" AND \"format\": \"16:9\" AND \"units\": [...] AND brief.md '## Length override' with user_quote.",
+  "voice_s_target": 720,
+  "voice_s": [540, 960],
+  "voice_s_hard": [480, 1020],
+  "words": [2600, 4900],
+  "segments": [95, 225]
  },
  "shots": {
   "mean_s": [2.0, 3.0],

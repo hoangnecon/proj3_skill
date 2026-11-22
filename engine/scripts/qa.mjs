@@ -3,14 +3,14 @@
 //   node scripts/qa.mjs where <i> [t] [--free WxH] -> terminal layout table of frame boxes + 3x3 grid + scale/cutoff (no render)
 //   node scripts/qa.mjs layout [i] [t]             -> 3x3 grid + scale + creature-cutoff summary for 1 shot or all shots (no render)
 //   node scripts/qa.mjs place <setId> [--actors N] [--subject key[:pose]] [--ots] [--cam cx,cy,k] -> zero-browser auto-layout solver
-//   node scripts/qa.mjs pass [changed|all]         -> ONE bundle/browser: Đại đoạn + Trung đoạn + Tiểu đoạn + strips + cards + HOT crops + carry.py
+//   node scripts/qa.mjs pass [changed|all] [--unit U1] -> ONE bundle/browser: Đại đoạn (or qa/units/U1_contact.jpg) + Tiểu đoạn + strips + cards + HOT crops + carry.py + blind_pack
 //   node scripts/qa.mjs review --batch <file.jsonl> -> validate & atomically write batch qa/review/NN.json (no render)
-//   node scripts/qa.mjs contact [--all]            -> qa/contact_p<N>.jpg : Đại đoạn (4 frames if > 4.0s, else 2 frames)
+//   node scripts/qa.mjs contact [--all] [--unit U1] -> qa/contact_p<N>.jpg (or qa/units/U1_contact.jpg, 4 frames/shot)
 //   node scripts/qa.mjs segments [--all]           -> qa/contact_segments/seg_NN_<loc>.jpg : Trung đoạn grouped by location (4 frames/shot)
-//   node scripts/qa.mjs shotstrips [all|0,1] [--all] -> qa/shots/NN.jpg : Tiểu đoạn 8-frame strips for long/motion/HOT shots
-//   node scripts/qa.mjs strips [names] [--all]     -> qa/strips/<name>.jpg : motion strips from qa/strips_needed.json
+//   node scripts/qa.mjs shotstrips [all|0,1] [--unit U1] [--all] -> qa/shots/NN.jpg : Tiểu đoạn 8-frame strips for long/motion/HOT shots
+//   node scripts/qa.mjs strips [names] [--unit U1] [--all] -> qa/strips/<name>.jpg : motion strips from qa/strips_needed.json
 //   node scripts/qa.mjs frames 12.5,13.0           -> qa/frames/t<sec>.jpg : single full-size frames at absolute seconds
-//   node scripts/qa.mjs cards [changed|hot|all|3,7] -> qa/cards/NN.jpg : review card per shot (3 frames + beat words + flags)
+//   node scripts/qa.mjs cards [changed|hot|all|3,7] [--unit U1] -> qa/cards/NN.jpg : review card per shot (3 frames + beat words + flags)
 //   node scripts/qa.mjs crops 7                    -> qa/crops/07.jpg : measurement crops (head/hands/feet/overlap, 1:1+)
 //   node scripts/qa.mjs status                     -> qa/qa_status.json : shots/strips whose evidence is stale (no render)
 //   node scripts/qa.mjs adopt                      -> once, episode reviewed under v3.6: snapshot reviewed card frames
@@ -31,15 +31,17 @@ import {makeShotHash} from './deps.mjs';
 
 const {actorBoxes, inter, area} = geom;
 
-// ---- CLI parsing (preserves positional args while supporting --batch <f>, --free <WxH>, --all, --actors, --subject, --ots, --cam)
+// ---- CLI parsing (preserves positional args while supporting --unit <id>, --batch <f>, --free <WxH>, --all, --actors, --subject, --ots, --cam)
 const rawArgs = process.argv.slice(2);
-let ALL = false, batchFile = null, freeBox = null;
+let ALL = false, batchFile = null, freeBox = null, unitId = null;
 let placeActors = null, placeSubject = null, placeOts = false, placeCam = null;
 const posArgs = [];
 for (let i = 0; i < rawArgs.length; i++) {
   const a = rawArgs[i];
   if (a === '--all') { ALL = true; }
   else if (a === '--ots') { placeOts = true; }
+  else if (a === '--unit') { unitId = (rawArgs[++i] ?? '').trim() || null; }
+  else if (a.startsWith('--unit=')) { unitId = a.slice(7).trim() || null; }
   else if (a === '--batch') { batchFile = rawArgs[++i] ?? ''; }
   else if (a.startsWith('--batch=')) { batchFile = a.slice(8); }
   else if (a === '--free') { freeBox = rawArgs[++i] ?? ''; }
@@ -59,9 +61,120 @@ const PYTHON = process.env.SV_PYTHON || (fs.existsSync('/Users/Shared/Tools/VieN
 
 fs.mkdirSync('qa/_f', {recursive: true});
 
+const readJson = (p, fallback) => (fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : fallback);
+const scriptJson = readJson('script.json', {});
 const P = await loadProject();
 const rows = P.shotTable();
+
+const normSegId = (v) => {
+  if (typeof v === 'number' && Number.isFinite(v)) return `s${Math.trunc(v)}`;
+  if (typeof v === 'string') {
+    const s = v.trim().toLowerCase();
+    if (/^\d+[a-z]?$/.test(s)) return `s${s}`;
+    const m = /^(s\d+[a-z]?)/i.exec(s);
+    if (m) return m[1].toLowerCase();
+  }
+  return null;
+};
+const segNumOf = (sid) => {
+  const m = /^s(\d+)/i.exec(String(sid ?? ''));
+  return m ? Number(m[1]) : null;
+};
+const shotSegOf = (r) =>
+  normSegId(r?.seg) ??
+  normSegId(P.SHOTS?.[r?.i]?.seg) ??
+  normSegId(r?.at) ??
+  normSegId(P.SHOTS?.[r?.i]?.at);
+const scriptSegIds = Array.isArray(scriptJson?.segments)
+  ? scriptJson.segments.map((s) => normSegId(s?.id)).filter(Boolean)
+  : [];
+const segIdxMap = new Map(scriptSegIds.map((sid, idx) => [sid, idx]));
+const segInUnitRange = (sid, startSid, endSid) => {
+  if (!sid || !startSid || !endSid) return false;
+  if (segIdxMap.has(startSid) && segIdxMap.has(endSid) && segIdxMap.has(sid)) {
+    const idx = segIdxMap.get(sid);
+    return idx >= segIdxMap.get(startSid) && idx <= segIdxMap.get(endSid);
+  }
+  const n = segNumOf(sid), n0 = segNumOf(startSid), n1 = segNumOf(endSid);
+  return n !== null && n0 !== null && n1 !== null && n >= n0 && n <= n1;
+};
+
+// Progressive SHOTS authoring support: when SHOTS currently ends at the boundary of a non-final
+// episodic unit U<k> (before U<k+1> is authored), clamp the trailing shot's t1 to the next unit's
+// segment start (- LEAD 0.06s) instead of stretching across the remaining 10-min audio tail.
+if (Array.isArray(scriptJson?.units) && scriptJson.units.length > 0 && rows.length > 0) {
+  const lastR = rows[rows.length - 1];
+  const lastSeg = shotSegOf(lastR);
+  const uIdx = scriptJson.units.findIndex((u) =>
+    u && segInUnitRange(lastSeg, normSegId(u.seg_start), normSegId(u.seg_end))
+  );
+  if (uIdx >= 0 && uIdx < scriptJson.units.length - 1) {
+    const endIdx = segIdxMap.get(normSegId(scriptJson.units[uIdx]?.seg_end));
+    const nextSeg = normSegId(scriptJson.units[uIdx + 1]?.seg_start) ??
+      (endIdx !== undefined && endIdx + 1 < scriptSegIds.length ? scriptSegIds[endIdx + 1] : null);
+    const nextStart = nextSeg ? P.C?.seg_starts?.[nextSeg] : undefined;
+    if (typeof nextStart === 'number' && Number.isFinite(nextStart)) {
+      const clampedT1 = +(nextStart - 0.06).toFixed(3);
+      if (clampedT1 > lastR.t0 + 0.2 && lastR.t1 > clampedT1 + 0.5) {
+        lastR.t1 = clampedT1;
+      }
+    }
+  }
+}
+
+for (const r of rows) {
+  if (!r.seg) {
+    const sg = shotSegOf(r);
+    if (sg) r.seg = sg;
+  }
+}
 writeTables(fs, rows);
+
+/** Reads script.json "units", finds unit with id === targetUnitId, and returns Set of shot indices i in [seg_start..seg_end]. */
+function unitShotRange(targetUnitId) {
+  const units = scriptJson?.units;
+  if (!Array.isArray(units) || !units.length) {
+    throw new Error(`script.json has no "units" array (cannot resolve --unit ${targetUnitId})`);
+  }
+  const unit = units.find((u) => u && String(u.id) === String(targetUnitId)) ??
+    units.find((u) => u && String(u.id ?? '').toLowerCase() === String(targetUnitId).toLowerCase());
+  if (!unit) {
+    throw new Error(`unknown unit '${targetUnitId}' in script.json (available: ${units.map((u) => u?.id).filter(Boolean).join(', ')})`);
+  }
+  const startSid = normSegId(unit.seg_start);
+  const endSid = normSegId(unit.seg_end);
+  if (!startSid || !endSid) {
+    throw new Error(`unit '${unit.id}' in script.json has invalid seg_start/seg_end (${JSON.stringify(unit.seg_start)}..${JSON.stringify(unit.seg_end)})`);
+  }
+  const shotSet = new Set();
+  for (const r of rows) {
+    const sg = shotSegOf(r);
+    if (segInUnitRange(sg, startSid, endSid)) shotSet.add(r.i);
+  }
+  return shotSet;
+}
+
+const resolveUnitMeta = (targetUnitId) => {
+  const shotSet = unitShotRange(targetUnitId);
+  const units = scriptJson.units;
+  const unit = units.find((u) => u && String(u.id) === String(targetUnitId)) ??
+    units.find((u) => u && String(u.id ?? '').toLowerCase() === String(targetUnitId).toLowerCase());
+  const unitRows = rows.filter((r) => shotSet.has(r.i));
+  if (!unitRows.length) {
+    throw new Error(`unit '${unit.id}' (${unit.seg_start}..${unit.seg_end}) has 0 authored shots in src/episode/shotlist.ts`);
+  }
+  return {
+    id: String(unit.id),
+    title: typeof unit.title === 'string' ? unit.title.trim() : '',
+    seg_start: normSegId(unit.seg_start),
+    seg_end: normSegId(unit.seg_end),
+    scale_mode: unit.scale_mode ?? null,
+    shotSet,
+    unitRows,
+    t0: Math.min(...unitRows.map((r) => r.t0)),
+    t1: Math.max(...unitRows.map((r) => r.t1)),
+  };
+};
 
 // ---- per-shot hash
 const pad = (i) => String(i).padStart(2, '0');
@@ -74,7 +187,16 @@ const saveCache = () => fs.writeFileSync(CACHE, JSON.stringify(cache, null, 1));
 const hashes = Object.fromEntries(rows.map((r) => [r.i, shotHash(r)]));
 const shotOf = (s) => rows.find((r) => s.t0 >= r.t0 - 0.01 && s.t0 < r.t1) ?? rows[0];
 const stripKey = (s) => sha(hashes[shotOf(s).i] + JSON.stringify(s));
-const readJson = (p, fallback) => (fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : fallback);
+
+let activeUnit = null;
+if (unitId !== null) {
+  try {
+    activeUnit = resolveUnitMeta(unitId);
+  } catch (e) {
+    console.error(`ERROR qa.mjs --unit ${unitId}: ${e.message}`);
+    process.exit(1);
+  }
+}
 
 const computeStatus = () => {
   const need = readJson('qa/strips_needed.json', []);
@@ -205,7 +327,7 @@ if (mode === 'review') {
           errs.push(`${tag}: blind_sha ${JSON.stringify(item.blind_sha)} != manifest blind_sha ${JSON.stringify(mShot?.blind_sha ?? null)}`);
         }
       } else if (mShot) {
-        errs.push(`${tag}: missing blind_sha from qa/blind_review/slice_*.json — reviewer must use blind review pack`);
+        errs.push(`${tag}: missing blind_sha from qa/blind_review/unit_*.json or slice_*.json — reviewer must use blind review pack`);
       }
     }
     const rev = typeof item.reviewer === 'string' ? item.reviewer.trim() : '';
@@ -243,8 +365,8 @@ if (mode === 'review') {
       errs.push(`${tag}: note must have >= 6 words (got ${words.length})`);
     }
     const looked = Array.isArray(item.looked) ? item.looked : null;
-    if (!looked || (!looked.includes('card') && !looked.includes('contact') && !looked.includes('contact_page'))) {
-      errs.push(`${tag}: looked must be an array including 'contact' or 'card'`);
+    if (!looked || (!looked.includes('card') && !looked.includes('contact') && !looked.includes('contact_page') && !looked.includes('unit_contact'))) {
+      errs.push(`${tag}: looked must be an array including 'contact', 'unit_contact', or 'card'`);
     }
     if (blindManifest) {
       const mShot = blindByShot.get(i);
@@ -459,7 +581,8 @@ if (mode === 'layout') {
   console.log('#i  | set                      | shotScale    | maxCell | occ% | scaleErr | cutoffErr');
   console.log('----+--------------------------+--------------+---------+------+----------+----------');
   let totScale = 0, totCutoff = 0, totOver = 0;
-  for (const r of rows) {
+  const layoutRows = activeUnit ? activeUnit.unitRows : rows;
+  for (const r of layoutRows) {
     let maxCell = 0, maxOcc = 0;
     const scaleSet = new Set(), cutoffSet = new Set();
     for (const u of [0.15, 0.5, 0.85]) {
@@ -481,7 +604,7 @@ if (mode === 'layout') {
       `${String('#' + r.i).padEnd(3)} | ${r.set.slice(0, 24).padEnd(24)} | ${String(sc).padEnd(12)} | ${String(maxCell).padStart(7)} | ${String(occPct + '%').padStart(4)} | ${String(scaleSet.size).padStart(8)} | ${String(cutoffSet.size).padStart(9)}`
     );
   }
-  console.log(`layout: ${rows.length} shots · overcrowded=${totOver} · scaleErr=${totScale} · cutoffErr=${totCutoff}`);
+  console.log(`layout${activeUnit ? ` (${activeUnit.id})` : ''}: ${layoutRows.length} shots · overcrowded=${totOver} · scaleErr=${totScale} · cutoffErr=${totCutoff}`);
   process.exit(0);
 }
 
@@ -1148,16 +1271,76 @@ const measureShotStripsMotion = (targetRows) => {
   return motionEnergy;
 };
 
-const runShotStrips = async (forceAll, which = null) => {
+// Unit-scoped contact sheet: qa/units/<unitId>_contact.jpg (4 frames/shot across all shots in unit)
+const runUnitContact = async (uMeta, forceAll) => {
+  fs.mkdirSync('qa/units', {recursive: true});
+  cache.unit_contact ??= {};
+  cache.unit_sheets ??= {};
+  cache.segments ??= {};
+  const uRows = uMeta.unitRows;
+  const jobs = uRows.flatMap((r) => SEG_FRACS.map((u, idx) => ({
+    r, u, idx, t: r.t0 + (r.t1 - r.t0) * u, out: `qa/_f/c${r.i}_${u}.jpg`,
+  })));
+  const st = await renderAll(jobs, (j) => {
+    if (forceAll) return false;
+    if (cache.unit_contact[j.r.i] === hashes[j.r.i]) return true;
+    if (cache.segments[j.r.i] === hashes[j.r.i]) return true;
+    return (j.r.t1 - j.r.t0) > 4.0 && cache.contact?.[j.r.i] === hashes[j.r.i];
+  });
+  const unreviewed = new Set(uRows.filter((r) => {
+    try {
+      const v = JSON.parse(fs.readFileSync(`qa/review/${pad(r.i)}.json`, 'utf8'));
+      return v.verdict !== 'ok' || v.hash !== hashes[r.i];
+    } catch {
+      return true;
+    }
+  }).map((r) => r.i));
+  const outPath = `qa/units/${uMeta.id}_contact.jpg`;
+  const unitSig = uRows.map((r) => `${r.i}:${hashes[r.i]}:${unreviewed.has(r.i) ? 1 : 0}`).join(',');
+  const unitCols = uRows.length <= 7 ? 4 : 8;
+  const unitW = is16x9 ? 380 : 300;
+  if (forceAll || !fs.existsSync(outPath) || cache.unit_sheets[uMeta.id] !== unitSig) {
+    const cells = uRows.flatMap((r) => SEG_FRACS.map((u, idx) => ({
+      img: `qa/_f/c${r.i}_${u}.jpg`,
+      label: `#${r.i} ${CONTACT_LABELS[idx]} · ${fmt(r.t0 + (r.t1 - r.t0) * u)}${unreviewed.has(r.i) ? ' ●' : ''}`,
+      sub: idx === 0 ? r.name : (idx === 1 ? `${r.set} · ${fmt(r.t1 - r.t0)}` : ''),
+    })));
+    const first = uRows[0].i;
+    const last = uRows[uRows.length - 1].i;
+    tile({
+      out: outPath,
+      cols: unitCols,
+      w: unitW,
+      title: `UNIT ${uMeta.id}${uMeta.title ? ' · ' + uMeta.title : ''} (${uMeta.seg_start}..${uMeta.seg_end}) · shots #${first}–#${last} (${uRows.length}) · ${fmt(uMeta.t0)}–${fmt(uMeta.t1)}`,
+      cells,
+    });
+    cache.unit_sheets[uMeta.id] = unitSig;
+  }
+  for (const r of uRows) {
+    cache.unit_contact[r.i] = hashes[r.i];
+    cache.segments[r.i] = hashes[r.i];
+  }
+  const unitIdxPath = 'qa/units/index.json';
+  const unitIdx = readJson(unitIdxPath, {units: {}, shots: {}});
+  unitIdx.units ??= {};
+  unitIdx.shots ??= {};
+  unitIdx.units[uMeta.id] = outPath;
+  for (const r of uRows) unitIdx.shots[r.i] = outPath;
+  fs.writeFileSync(unitIdxPath, JSON.stringify(unitIdx, null, 1) + '\n');
+  console.log(`unit-contact (${uMeta.id}): ${outPath} · ${uRows.length} shot(s) (4 frames/shot) · ${st.rendered} rendered, ${st.reused} reused · ${((Date.now() - t00) / 1000).toFixed(0)} s`);
+};
+
+const runShotStrips = async (forceAll, which = null, unitFilterSet = null) => {
   const hot = readJson('qa/hot.json', {});
   fs.mkdirSync('qa/shots', {recursive: true});
   cache.shot_strips ??= {};
   const existingEnergy = readJson('qa/motion_energy.json', {});
+  const pool = unitFilterSet ? rows.filter((r) => unitFilterSet.has(r.i)) : rows;
   const sel = which === 'all'
-    ? rows
+    ? pool
     : which
-      ? rows.filter((r) => which.split(',').map(Number).includes(r.i))
-      : rows.filter((r) => shotNeedsStrip(r, hot));
+      ? pool.filter((r) => which.split(',').map(Number).includes(r.i))
+      : pool.filter((r) => shotNeedsStrip(r, hot));
   const todo = sel.filter((r) =>
     forceAll ||
     cache.shot_strips[r.i] !== hashes[r.i] ||
@@ -1195,12 +1378,27 @@ const runShotStrips = async (forceAll, which = null) => {
   console.log(`shotstrips: ${todo.length}/${sel.length} sheet(s) · ${st.rendered} rendered, ${st.reused} reused · ${((Date.now() - t00) / 1000).toFixed(0)} s`);
 };
 
-const runStrips = async (onlyNames, forceAll, staleOnly = false) => {
+const stripOverlapsUnit = (s, uMeta) => {
+  if (!uMeta) return true;
+  const m = /^s(\d+)_/.exec(String(s?.name ?? ''));
+  if (m && uMeta.shotSet.has(Number(m[1]))) return true;
+  if (typeof s?.t0 === 'number') {
+    const st1 = typeof s?.t1 === 'number' ? s.t1 : s.t0;
+    return s.t0 < uMeta.t1 - 0.01 && st1 > uMeta.t0 - 0.01;
+  }
+  return false;
+};
+
+const runStrips = async (onlyNames, forceAll, staleOnly = false, unitMetaFilter = null) => {
   const need = readJson('qa/strips_needed.json', []);
   fs.mkdirSync('qa/strips', {recursive: true});
   cache.strips ??= {};
   const isFresh = (s) => cache.strips[s.name] === stripKey(s) && fs.existsSync(`qa/strips/${s.name}.jpg`);
-  const sel = need.filter((s) => (!onlyNames || onlyNames.includes(s.name)) && (!staleOnly || forceAll || !isFresh(s)));
+  const sel = need.filter((s) =>
+    stripOverlapsUnit(s, unitMetaFilter) &&
+    (!onlyNames || onlyNames.includes(s.name)) &&
+    (!staleOnly || forceAll || !isFresh(s))
+  );
   const jobs = sel.flatMap((s) => Array.from({length: s.n}, (_, i) => ({s, i, t: s.t0 + ((s.t1 - s.t0) * i) / (s.n - 1), out: `qa/_f/${s.name}_${i}.jpg`})));
   const st = await renderAll(jobs, (j) => !forceAll && isFresh(j.s));
   for (const s of sel) {
@@ -1214,18 +1412,21 @@ const runStrips = async (onlyNames, forceAll, staleOnly = false) => {
   console.log(`strips: ${sel.length} · ${st.rendered} frames rendered, ${st.reused} reused · ${((Date.now() - t00) / 1000).toFixed(0)} s`);
 };
 
-const runCards = async (which, forceAll, includeStaleInChanged = false) => {
+const runCards = async (which, forceAll, includeStaleInChanged = false, unitFilterSet = null) => {
   const hot = readJson('qa/hot.json', {});
-  const ch = fs.existsSync('qa/changed.json') ? JSON.parse(fs.readFileSync('qa/changed.json', 'utf8')).shots : rows.map((x) => x.i);
-  const sel = !which || which === 'all' ? rows
-    : which === 'changed' ? rows.filter((x) => ch.includes(x.i) || (includeStaleInChanged && (cache.cards?.[x.i] !== hashes[x.i] || !fs.existsSync(`qa/cards/${pad(x.i)}.jpg`))))
-    : which === 'hot' ? rows.filter((x) => hot[x.i])
-    : rows.filter((x) => which.split(',').map(Number).includes(x.i));
+  const pool = unitFilterSet ? rows.filter((x) => unitFilterSet.has(x.i)) : rows;
+  const ch = (!unitFilterSet && fs.existsSync('qa/changed.json'))
+    ? JSON.parse(fs.readFileSync('qa/changed.json', 'utf8')).shots
+    : pool.filter((x) => cache.cards?.[x.i] !== hashes[x.i] || !fs.existsSync(`qa/cards/${pad(x.i)}.jpg`) || !fs.existsSync(`qa/snap/${hashes[x.i]}.json`)).map((x) => x.i);
+  const sel = !which || which === 'all' ? pool
+    : which === 'changed' ? pool.filter((x) => ch.includes(x.i) || (includeStaleInChanged && (cache.cards?.[x.i] !== hashes[x.i] || !fs.existsSync(`qa/cards/${pad(x.i)}.jpg`) || !fs.existsSync(`qa/snap/${hashes[x.i]}.json`))))
+    : which === 'hot' ? pool.filter((x) => hot[x.i])
+    : pool.filter((x) => which.split(',').map(Number).includes(x.i));
   fs.mkdirSync('qa/cards', {recursive: true});
   const jobs = sel.flatMap((x) => [0.15, 0.5, 0.85].map((u, n) => ({x, n, t: x.t0 + (x.t1 - x.t0) * u, out: `qa/_f/k${x.i}_${n}.jpg`})));
   cache.cards ??= {};
   await renderAll(jobs, (j) => !forceAll && cache.cards[j.x.i] === hashes[j.x.i]);
-  const isLongHeavy = is16x9 && rows.length >= 80;
+  const isLongHeavy = is16x9 && (rows.length >= 80 || Boolean(unitFilterSet));
   const probes = sel.flatMap((x) => {
     const dur = x.t1 - x.t0;
     const n = isLongHeavy
@@ -1285,27 +1486,50 @@ try {
     if (arg && arg !== 'changed' && arg !== 'all') {
       throw new Error(`unknown pass scope '${arg}' (expected changed | all)`);
     }
-    await runContact(passAll);
-    await runSegmentContacts(passAll);
-    await runShotStrips(passAll);
-    await runStrips(null, false, true);
-    await runCards(passAll ? 'all' : 'changed', passAll, true);
-    const hot = readJson('qa/hot.json', {});
-    const hotTodo = Object.keys(hot).map(Number).filter((i) => hot[i]?.length && (cache.crops?.[i] !== hashes[i] || !fs.existsSync(`qa/crops/${pad(i)}.jpg`))).sort((a, b) => a - b);
-    for (const i of hotTodo) await runCrops(i);
-    console.log(`pass (${passAll ? 'all' : 'changed'}): ${hotTodo.length} HOT crop(s) rendered · render total ${((Date.now() - t00) / 1000).toFixed(0)} s`);
+    if (activeUnit) {
+      await runUnitContact(activeUnit, passAll);
+      await runShotStrips(passAll, null, activeUnit.shotSet);
+      await runStrips(null, passAll, true, activeUnit);
+      await runCards(passAll ? 'all' : 'changed', passAll, true, activeUnit.shotSet);
+      const hot = readJson('qa/hot.json', {});
+      const hotTodo = Object.keys(hot)
+        .map(Number)
+        .filter((i) => activeUnit.shotSet.has(i) && hot[i]?.length && (passAll || cache.crops?.[i] !== hashes[i] || !fs.existsSync(`qa/crops/${pad(i)}.jpg`)))
+        .sort((a, b) => a - b);
+      for (const i of hotTodo) await runCrops(i);
+      console.log(`pass --unit ${activeUnit.id} (${passAll ? 'all' : 'changed'}): ${hotTodo.length} HOT crop(s) rendered · render total ${((Date.now() - t00) / 1000).toFixed(0)} s`);
+    } else {
+      await runContact(passAll);
+      await runSegmentContacts(passAll);
+      await runShotStrips(passAll);
+      await runStrips(null, false, true);
+      await runCards(passAll ? 'all' : 'changed', passAll, true);
+      const hot = readJson('qa/hot.json', {});
+      const hotTodo = Object.keys(hot).map(Number).filter((i) => hot[i]?.length && (cache.crops?.[i] !== hashes[i] || !fs.existsSync(`qa/crops/${pad(i)}.jpg`))).sort((a, b) => a - b);
+      for (const i of hotTodo) await runCrops(i);
+      console.log(`pass (${passAll ? 'all' : 'changed'}): ${hotTodo.length} HOT crop(s) rendered · render total ${((Date.now() - t00) / 1000).toFixed(0)} s`);
+    }
   } else if (mode === 'contact') {
-    await runContact(ALL);
+    if (activeUnit) await runUnitContact(activeUnit, ALL);
+    else await runContact(ALL);
   } else if (mode === 'segments') {
     await runSegmentContacts(ALL);
   } else if (mode === 'shotstrips') {
-    await runShotStrips(ALL, arg ?? null);
+    await runShotStrips(ALL, arg ?? null, activeUnit?.shotSet ?? null);
   } else if (mode === 'strips') {
-    await runStrips(arg ? arg.split(',') : null, ALL, false);
+    await runStrips(arg ? arg.split(',') : null, ALL, false, activeUnit);
   } else if (mode === 'cards') {
-    await runCards(arg, ALL, false);
+    await runCards(arg, ALL, false, activeUnit?.shotSet ?? null);
   } else if (mode === 'crops') {
-    await runCrops(+arg);
+    if (arg !== undefined) {
+      await runCrops(+arg);
+    } else if (activeUnit) {
+      const hot = readJson('qa/hot.json', {});
+      const hotTodo = Object.keys(hot).map(Number).filter((i) => activeUnit.shotSet.has(i) && hot[i]?.length).sort((a, b) => a - b);
+      for (const i of hotTodo) await runCrops(i);
+    } else {
+      throw new Error('usage: node scripts/qa.mjs crops <i> (or crops --unit <unitId>)');
+    }
   } else if (mode === 'frames') {
     fs.mkdirSync('qa/frames', {recursive: true});
     for (const t of arg.split(',').map(Number)) { await still(t, `qa/frames/t${t.toFixed(2)}.jpg`, 1, 88); console.log('ok', t); }
@@ -1336,7 +1560,7 @@ try {
     cache.shot_strips[r.i] = hashes[r.i];
     console.log('ok', r.i, `${((Date.now() - t00) / 1000).toFixed(0)} s`);
   } else {
-    console.log('modes: pass [changed|all] | where <i> [t] [--free WxH] | layout [i] [t] | place <setId> [--actors N] [--subject key[:pose]] [--ots] [--cam cx,cy,k] | review --batch <file.jsonl> | contact [--all] | segments [--all] | shotstrips [all|0,1] [--all] | strips [names] [--all] | cards [changed|hot|all|i,j] | crops <i> | frames t1,t2 | shot <i> | status');
+    console.log('modes: pass [changed|all] [--unit U1] | where <i> [t] [--free WxH] | layout [i] [t] [--unit U1] | place <setId> [--actors N] [--subject key[:pose]] [--ots] [--cam cx,cy,k] | review --batch <file.jsonl> | contact [--all] [--unit U1] | segments [--all] | shotstrips [all|0,1] [--unit U1] [--all] | strips [names] [--unit U1] [--all] | cards [changed|hot|all|i,j] [--unit U1] | crops <i> | frames t1,t2 | shot <i> | status');
     process.exitCode = 1;
   }
 } finally {
@@ -1348,9 +1572,12 @@ try {
 if (mode === 'pass') {
   execFileSync(PYTHON, [path.resolve('scripts/carry.py')], {stdio: 'inherit'});
   const carry = readJson('qa/carry.json', {carried: [], review: [], unchanged: 0});
-  const revShots = (carry.review ?? []).map((x) => x.shot);
-  console.log(`pass review list (${revShots.length}): ${JSON.stringify(revShots)}`);
-  for (const x of carry.review ?? []) console.log(`  #${x.shot}: ${x.why}`);
+  const revList = activeUnit
+    ? (carry.review ?? []).filter((x) => activeUnit.shotSet.has(x.shot))
+    : (carry.review ?? []);
+  const revShots = revList.map((x) => x.shot);
+  console.log(`pass${activeUnit ? ` --unit ${activeUnit.id}` : ''} review list (${revShots.length}): ${JSON.stringify(revShots)}`);
+  for (const x of revList) console.log(`  #${x.shot}: ${x.why}`);
   fs.writeFileSync('qa/qa_status.json', JSON.stringify(computeStatus(), null, 1));
-  execFileSync(process.execPath, ['scripts/blind_pack.mjs'], {stdio: 'inherit'});
+  execFileSync(process.execPath, ['scripts/blind_pack.mjs', ...(activeUnit ? ['--unit', activeUnit.id] : [])], {stdio: 'inherit'});
 }

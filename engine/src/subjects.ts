@@ -34,6 +34,11 @@ export type SubjectDef = {
   poses: string[];              // >= 4 distinct poses (e.g. ['idle', 'stalk', 'pounce', 'lookup', 'startled', 'back'])
   exprs?: string[];             // optional facial expressions (e.g. ['calm', 'alert', 'fierce', 'curious'])
   seats?: Record<string, SubjectSeat[]>; // optional mount slots per pose (or 'default')
+  firstSeg?: string;            // earliest segment ID e.g. 's64' where this subject may appear
+  appearSegs?: [string, string][]; // allowed [startSeg, endSeg] inclusive story windows where this subject may appear
+  poseSegs?: Record<string, [string, string][]>; // allowed [startSeg, endSeg] windows for stateful poses like 'trapped' with sticky tape
+  scaleWithTinyActor?: [number, number]; // strict allowed [minRatio, maxRatio] of rendered subject px height / tiny-actor px height in the same shot
+  partialOf?: string;           // parent creature key (e.g. 'giantCat') for close-up partial anatomy subjects like giantCatPaw / giantCatHead
   render: (pose: string, opts: SubjectRenderOpts) => React.ReactNode;
 };
 

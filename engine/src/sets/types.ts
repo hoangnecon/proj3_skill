@@ -30,4 +30,6 @@ export type SetDef = {
   shotScale?: 'establishing' | 'medium' | 'closeup' | 'insert'; // true drawn scale of this plate (never fake close-up by over-zooming an establishing plate)
   actorScale?: [number, number]; // valid actor scale [minS, maxS] on the set's main floor plane (validated by LA-01 & drawn as silhouettes on _grid plate)
   zones?: {bgY?: number; mgY?: [number, number]; fgY?: number}; // explicit depth-lane Y coordinates for BG / MG / FG layout validation
+  scaleMode?: 'normal' | 'tiny'; // declares whether this plate depicts normal human world scale or shrunken miniature world scale
+  stateless?: boolean; // optional marker confirming zero transient plot props/shadows are baked into the background
 };

@@ -3,6 +3,7 @@
 import React from 'react';
 import {E, L, PAL, R, Rr, S, Sh, col, LINE, Smoke} from './kit';
 import {CartoonHand, HandKind, TaperLimb, curvedTorsoPath, hairWindOffset, livingIdle, talkGesture} from './anim';
+import {clamp} from './math';
 
 export type Hair = 'bald' | 'side' | 'bun' | 'curly' | 'short' | 'neat' | 'thin' | 'kid' | 'long';
 export type Hat = 'none' | 'khanxep' | 'cap' | 'chef' | 'helmet' | 'band';
@@ -115,6 +116,8 @@ export type PersonProps = {
   expr?: Expr;
   talk?: number; // 0..1 độ mở miệng khi nói
   t: number;
+  phase?: number; // pha bước theo quãng đường (tùy chọn)
+  speed?: number; // biên độ vận tốc bước 0..1.25 (tùy chọn)
   gaze?: number; // -1..1 hướng nhìn
   gazeY?: number; // -1..1 hướng nhìn dọc (-1 = lên, +1 = xuống)
   handL?: HandKind;
@@ -127,7 +130,7 @@ export type PersonProps = {
   propBack?: (h: Hands) => React.ReactNode; // vật vẽ sau thân
 };
 
-export const Person: React.FC<PersonProps> = ({look, pose, expr = 'neutral', talk = 0, t, gaze = 0, gazeY = 0, handL = 'open', handR = 'open', blinkPh = 0, wind = 0, velX = 0, layer = 'all', prop, propBack}) => {
+export const Person: React.FC<PersonProps> = ({look, pose, expr = 'neutral', talk = 0, t, phase, speed, gaze = 0, gazeY = 0, handL = 'open', handR = 'open', blinkPh = 0, wind = 0, velX = 0, layer = 'all', prop, propBack}) => {
   const g = look.ghost;
   const skin = g ? 'ghost' : look.skin ?? 'skin';
   const W = look.w ?? 1;
@@ -140,6 +143,9 @@ export const Person: React.FC<PersonProps> = ({look, pose, expr = 'neutral', tal
   const HR = 100 * (look.head ?? 1); // bán kính đầu — đầu ≈ 1/2.6 chiều cao
   const hy = shY - 8 - HR * 0.9;
   const legs = g ? 'none' : pose.legs ?? 'stand';
+  const gaitAmp = speed !== undefined ? clamp(speed, 0, 1.25) : 1;
+  const walkAng = phase !== undefined ? phase * Math.PI * 2 : t * 9;
+  const runAng = phase !== undefined ? phase * Math.PI * 2 : t * 14;
   const idle = livingIdle(t, blinkPh);
   const tg = talkGesture(t, talk, blinkPh);
   const bodyDrop = legs === 'sit' ? 70 : legs === 'crouch' ? 62 * H : legs === 'ride' ? 68 * H : legs === 'push' ? 24 * H : 0;
@@ -149,7 +155,7 @@ export const Person: React.FC<PersonProps> = ({look, pose, expr = 'neutral', tal
 
   // --- C-arc spine curvature ---
   const bendX =
-    (legs === 'run' ? Math.sin(t * 14) * 8 :
+    (legs === 'run' ? Math.sin(runAng) * 8 * gaitAmp :
     legs === 'push' ? 14 :
     legs === 'fall' ? -18 :
     legs === 'crouch' || legs === 'ride' ? 6 :
@@ -202,9 +208,13 @@ export const Person: React.FC<PersonProps> = ({look, pose, expr = 'neutral', tal
     }
     let a0 = a[0], a1 = a[1];
     if (legs === 'run') {
-      const swRun = Math.sin(t * 14) * sg;
+      const swRun = Math.sin(runAng) * sg * gaitAmp;
       a0 += swRun * 24;
       a1 -= Math.max(0, swRun) * 14;
+    } else if (legs === 'walk' && a[0] < 25 && Math.abs(a[1]) < 25) {
+      const swWalk = -Math.sin(walkAng) * sg * gaitAmp;
+      a0 += swWalk * 12;
+      a1 -= Math.max(0, swWalk) * 18;
     } else if (legs === 'climb') {
       const swClimb = Math.sin(t * 7) * sg;
       a0 += swClimb * 26;
@@ -300,24 +310,24 @@ export const Person: React.FC<PersonProps> = ({look, pose, expr = 'neutral', tal
     }
   } else if (legs === 'walk') {
     for (const sg of [-1, 1]) {
-      const stride = Math.sin(t * 9) * sg;
-      const lift = Math.max(0, stride) * 20;
+      const stride = Math.sin(walkAng) * sg * gaitAmp;
+      const lift = Math.max(0, stride) * 20 * H;
       const hip: [number, number] = [sg * legX, bY + 10];
-      const knee: [number, number] = [sg * (legX + 5 + Math.max(0, stride) * 9), bY * 0.5 - lift * 0.65];
-      const ankle: [number, number] = [sg * (legX + stride * 10), -18 - lift];
+      const knee: [number, number] = [sg * (legX + (5 + Math.max(0, stride) * 9) * H), bY * 0.5 - lift * 0.55];
+      const ankle: [number, number] = [sg * (legX + stride * 10 * H), -18 - lift];
       legEls.push(drawLeg([hip, knee, ankle], 'leg' + sg));
       legEls.push(drawShoe(ankle[0], ankle[1], sg, 'sh' + sg, stride > 0 ? sg * stride * 14 : 0));
     }
   } else if (legs === 'run') {
     for (const sg of [-1, 1]) {
-      const stride = Math.sin(t * 14) * sg;
-      const lift = Math.max(0, stride) * 44;
-      const trail = Math.max(0, -stride) * 18;
+      const stride = Math.sin(runAng) * sg * gaitAmp;
+      const lift = Math.max(0, stride) * 32 * H;
+      const trail = Math.max(0, -stride) * 26 * H;
       const hip: [number, number] = [sg * legX, bY + 10];
-      const knee: [number, number] = [sg * (legX + 10 + Math.max(0, stride) * 14), bY * 0.44 - lift * 0.85];
-      const ankle: [number, number] = [sg * (legX + stride * 16), -18 - lift - trail * 0.5];
+      const knee: [number, number] = [sg * (legX + (8 + Math.max(0, stride) * 12) * H), bY * 0.48 - lift * 0.55];
+      const ankle: [number, number] = [sg * (legX + stride * 14 * H), -18 - lift * 0.8 - trail * 0.75];
       legEls.push(drawLeg([hip, knee, ankle], 'leg' + sg));
-      legEls.push(drawShoe(ankle[0], ankle[1], sg, 'sh' + sg, sg * (stride > 0 ? 18 : -10)));
+      legEls.push(drawShoe(ankle[0], ankle[1], sg, 'sh' + sg, sg * (stride > 0 ? 18 * gaitAmp : -10 * gaitAmp)));
     }
   } else if (legs === 'sit') {
     for (const sg of [-1, 1]) {
@@ -461,8 +471,8 @@ export const Person: React.FC<PersonProps> = ({look, pose, expr = 'neutral', tal
   // --- secondary motion: wind hair + lagging head counter-tilt + living micro-acting ---
   const hw = hairWindOffset(t, wind, velX, blinkPh);
   const rawHeadRot =
-    legs === 'run' ? -Math.sin(t * 14 - 0.85) * 3.8 :
-    legs === 'walk' ? -Math.sin(t * 9 - 0.75) * 2.2 :
+    legs === 'run' ? -Math.sin(runAng - 0.85) * 3.8 * gaitAmp :
+    legs === 'walk' ? -Math.sin(walkAng - 0.75) * 2.2 * gaitAmp :
     legs === 'jump' ? -Math.cos(t * 7 + blinkPh - 0.6) * 3.2 :
     legs === 'fall' ? Math.sin(t * 16 + blinkPh - 0.6) * 4.0 :
     -(pose.lean ?? 0) * 0.16;
@@ -474,8 +484,8 @@ export const Person: React.FC<PersonProps> = ({look, pose, expr = 'neutral', tal
 
   // ma: đuôi khói thay cho chân, cơ thể trôi bồng bềnh; người thường: nhịp bước + nhún nhảy + thở nhẹ
   const modeBob =
-    legs === 'walk' ? Math.abs(Math.sin(t * 9)) * 7 :
-    legs === 'run' ? Math.abs(Math.sin(t * 14)) * 16 :
+    legs === 'walk' ? Math.abs(Math.sin(walkAng)) * 7 * gaitAmp :
+    legs === 'run' ? Math.abs(Math.sin(runAng)) * 16 * gaitAmp :
     legs === 'ride' ? Math.sin(t * 6) * 4 :
     legs === 'jump' ? Math.sin(t * 7 + blinkPh) * 8 :
     legs === 'climb' ? Math.abs(Math.sin(t * 7)) * 6 : 0;

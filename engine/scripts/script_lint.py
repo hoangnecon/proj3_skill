@@ -8,6 +8,7 @@ import json
 import re
 import statistics
 import sys
+import unicodedata
 from collections import Counter
 from pathlib import Path
 
@@ -22,6 +23,7 @@ SENT_SPLIT_RE = re.compile(r"(?<=[.!?…])\s+(?=[^\s])")
 
 
 def strip_markup(s: str) -> str:
+    s = unicodedata.normalize("NFC", s)
     s = re.sub(r"</?en>", "", s, flags=re.I)
     s = TAG_RE.sub(" ", s)
     return " ".join(s.split())
@@ -92,11 +94,6 @@ if _len in ("long", "long_16x9"):
 VS_FULL = json.loads((ROOT / "standards/voice_standard.json").read_text())
 VS = VS_FULL["text"]
 RH = dict(VS_FULL["rhythm"])
-_ep_long_cfg = PA.get("episode_long_16x9", {}) if _len == "long_16x9" else {}
-if _len == "long_16x9" and _ep_long_cfg:
-    for _rk in ("target_ups", "phonation_ups", "blend_raw", "inside_pause_threshold_s", "inside_pause_target_s", "sentence_gap_s"):
-        if _rk in _ep_long_cfg:
-            RH[_rk] = _ep_long_cfg[_rk]
 allowed_tags = {x.lower() for x in VS.get("allowed_tags", [])}
 
 def seg_spoken_string(s: dict) -> str:
@@ -107,11 +104,11 @@ def seg_spoken_string(s: dict) -> str:
     return apply_bilingual(s.get("tts_text", s["text"]), eng)
 
 words = [w for s in segs for w in strip_markup(seg_spoken_string(s)).split()]
-dflt = script.get("pause_after", _ep_long_cfg.get("default_pause_after_s", PA["voice"]["default_pause_after_s"]))
+dflt = script.get("pause_after", PA["voice"]["default_pause_after_s"])
 pause = sum(float(s.get("pause_after", dflt)) for s in segs[:-1])
 script_wps = script.get("wps")
 
-# Estimate episode voice seconds using the v2.0 per-sentence rhythm budget (5.25 ups Short / 5.65 ups long_16x9)
+# Estimate episode voice seconds using the pure v2.0 per-sentence rhythm budget (5.25 ups Hải Đăng)
 est_speak = 0.0
 for s in segs:
     eng = list(global_english) + list(s.get("english", []))
@@ -390,46 +387,196 @@ if _len == "long_16x9" and segs:
             f"Emotional Triad thin/missing register(s): {', '.join(thin_regs)} — weave >= 3 beats in each of Cute/Funny, Spooky-Fun, and Curious",
         )
 
-    fast_wps = 0
-    slow_wps = 0
-    total_dyn = 0
+# SC-35: Pure 5.25 ups Voice Integrity — Ban Artificial Speed Warping!
+if script_wps is not None:
+    try:
+        top_wps_val = float(script_wps)
+        if not (4.95 <= top_wps_val <= 5.35):
+            err(
+                "SC-35",
+                f"top-level script 'wps' is {script_wps} (outside [4.95, 5.35]) — keep the pure 5.25 ups Hải Đăng voice standard",
+            )
+    except (TypeError, ValueError):
+        err("SC-35", f"top-level script 'wps' ({script_wps!r}) must be numeric in [4.95, 5.35]")
+
+if segs:
+    custom_wps_segs = 0
     for s in segs:
-        seg_wps_vals = []
+        seg_has_custom_wps = False
         if s.get("wps") is not None:
-            seg_wps_vals.append(float(s["wps"]))
-        for st in s.get("sentences", []):
+            seg_has_custom_wps = True
+            try:
+                v = float(s["wps"])
+                if not (4.80 <= v <= 5.45):
+                    err(
+                        "SC-35",
+                        f"{s['id']}: custom 'wps' {v} outside [4.80, 5.45] — never warp VieNeu-TTS faster than 5.45 or slower than 4.80 ups",
+                    )
+            except (TypeError, ValueError):
+                err("SC-35", f"{s['id']}: custom 'wps' ({s['wps']!r}) must be numeric in [4.80, 5.45]")
+        for j, st in enumerate(s.get("sentences", []), 1):
             if isinstance(st, dict) and st.get("wps") is not None:
-                seg_wps_vals.append(float(st["wps"]))
-        if seg_wps_vals:
-            total_dyn += 1
-            if any(v >= 5.8 for v in seg_wps_vals):
-                fast_wps += 1
-            if any(v <= 5.05 for v in seg_wps_vals):
-                slow_wps += 1
-    if total_dyn == 0:
-        err(
-            "SC-35",
-            "0 segments set dynamic 'wps' — flat monotone drone! Modulate wps across >= 12% of segments (5.9-6.2 ups for action/banter, 4.7-5.0 ups for spooky hush/turns)",
-        )
-    elif total_dyn < max(8, int(len(segs) * 0.12)) or fast_wps < 3 or slow_wps < 3:
+                seg_has_custom_wps = True
+                try:
+                    v = float(st["wps"])
+                    if not (4.80 <= v <= 5.45):
+                        err(
+                            "SC-35",
+                            f"{s['id']}.{j}: custom sentence 'wps' {v} outside [4.80, 5.45] — never warp VieNeu-TTS faster than 5.45 or slower than 4.80 ups",
+                        )
+                except (TypeError, ValueError):
+                    err("SC-35", f"{s['id']}.{j}: custom sentence 'wps' ({st['wps']!r}) must be numeric in [4.80, 5.45]")
+        if seg_has_custom_wps:
+            custom_wps_segs += 1
+
+    if custom_wps_segs / len(segs) > 0.10:
         warn(
             "SC-35",
-            f"weak tempo contrast (dynamic={total_dyn}/{len(segs)}, fast>=5.8:{fast_wps}, hush<=5.05:{slow_wps}) — vary wps on >= 12% of segments with >= 3 fast bursts and >= 3 hushed beats",
+            f"{custom_wps_segs}/{len(segs)} segments ({custom_wps_segs / len(segs):.0%} > 10%) set custom 'wps' overrides — keep 90-100% of segments at the pure 5.25 ups default; briskness comes from short clear sentences and action beats, not speeding up audio",
         )
 
     pa_list = [float(s.get("pause_after", dflt)) for s in segs]
-    mean_pa = sum(pa_list) / max(1, len(pa_list))
-    most_common_pa_share = Counter(round(x, 2) for x in pa_list).most_common(1)[0][1] / max(1, len(pa_list))
-    if mean_pa > 0.20:
+    mean_pa = sum(pa_list) / len(pa_list)
+    if mean_pa > 0.32 or mean_pa < 0.11:
         err(
             "SC-35",
-            f"mean pause_after is {mean_pa:.2f}s (> 0.20s) — narration drags! Keep default pauses brisk (0.10-0.15s) and reserve 0.26-0.38s only for real turns",
+            f"mean pause_after is {mean_pa:.2f}s (outside [0.11, 0.32]s; house default is 0.18s)",
         )
-    elif most_common_pa_share > 0.70:
-        warn(
-            "SC-35",
-            f"{most_common_pa_share:.0%} of segments use identical pause_after — vary pauses (0.10s rapid exchange, 0.14s normal, 0.28s suspense beat)",
+
+# SC-36: Crystal-Clear Spoken Hook & Plain Kid-Friendly Sentences (long_16x9)
+HOOK_CUE_RE = re.compile(
+    r"\?|\b(?:tưởng tượng|chuyện gì|điều gì|bỗng dưng|bất ngờ|bí mật|kỳ lạ|tí hon|thu nhỏ|khổng lồ)\b",
+    re.I,
+)
+MECHANICAL_JARGON_RE = re.compile(
+    r"\b(đòn bẩy loại\s+(?:một|hai|ba|1|2|3)|cấu trúc đòn bẩy|tâm điểm tựa|khóa chốt tự động|cơ chế thu phóng|hệ thống quang học)\b",
+    re.I,
+)
+
+
+def _spoken_sentences_of(s: dict) -> list[tuple[str, list[str]]]:
+    raw_chunks = (
+        [st if isinstance(st, str) else st.get("tts_text", st.get("text", "")) for st in s["sentences"]]
+        if s.get("sentences")
+        else [seg_spoken_string(s)]
+    )
+    out_sents = []
+    for chunk in raw_chunks:
+        clean_chunk = strip_markup(chunk)
+        for part in re.split(r"[.!?…]+", clean_chunk):
+            wlist = re.findall(r"[^\W_]+", part, re.UNICODE)
+            if wlist:
+                out_sents.append((part.strip(" \t\n\"'“”‘’«»"), wlist))
+    return out_sents
+
+
+if _len == "long_16x9" and segs:
+    for s in segs[:5]:
+        for sent_txt, wlist in _spoken_sentences_of(s):
+            if len(wlist) > 18:
+                err(
+                    "SC-36",
+                    f"{s['id']}: opening hook sentence has {len(wlist)} words (> 18 max for 10yo hook clarity): \"{sent_txt[:60]}...\"",
+                )
+    hook3_spoken = " ".join(strip_markup(seg_spoken_string(s)) + " " + strip_markup(s["text"]) for s in segs[:3])
+    if not HOOK_CUE_RE.search(hook3_spoken):
+        err(
+            "SC-36",
+            "opening hook (s1..s3) lacks an immediate wonder/curiosity cue ('?' or tưởng tượng/chuyện gì/điều gì/bỗng dưng/bất ngờ/bí mật/kỳ lạ/tí hon/thu nhỏ/khổng lồ)",
         )
+
+    all_spoken_sents = [
+        (s["id"], sent_txt, len(wlist))
+        for s in segs
+        for sent_txt, wlist in _spoken_sentences_of(s)
+    ]
+    if all_spoken_sents:
+        spoken_mean = statistics.mean(wc for _, _, wc in all_spoken_sents)
+        if spoken_mean > 15.5:
+            err(
+                "SC-36",
+                f"mean spoken sentence length is {spoken_mean:.1f} words (> 15.5 max; target 9-14 words/sentence for 10-year-old clarity)",
+            )
+        for sid, sent_txt, wc in all_spoken_sents:
+            if wc > 24:
+                err(
+                    "SC-36",
+                    f"{sid}: spoken sentence has {wc} words (> 24 max): \"{sent_txt[:60]}...\"",
+                )
+
+    jargon_hits = []
+    for s in segs:
+        seen_in_seg = set()
+        for candidate_txt in (strip_markup(s["text"]), strip_markup(seg_spoken_string(s))):
+            for m in MECHANICAL_JARGON_RE.finditer(candidate_txt):
+                key = m.group(0).lower()
+                if key not in seen_in_seg:
+                    seen_in_seg.add(key)
+                    jargon_hits.append((s["id"], m.group(0)))
+    if jargon_hits:
+        sample_jg = ", ".join(f"{sid}: '{ph}'" for sid, ph in jargon_hits[:5])
+        err(
+            "SC-36",
+            f"stiff textbook/mechanical jargon ({sample_jg}) — explain mechanics like a 10-year-old ('bập bênh bút chì', 'nút bấm màu xanh')!",
+        )
+
+# SC-37: Mandatory Episodic 'units' Chapter Plan (long_16x9)
+if _len == "long_16x9":
+    units = script.get("units")
+    if not isinstance(units, list) or not (4 <= len(units) <= 9) or not all(isinstance(u, dict) for u in units):
+        err(
+            "SC-37",
+            "long_16x9 script.json must declare 'units' (4-9 standalone episodic chapters of ~2-2.5 min / 15-42 segments each, validated one unit at a time before advancing)",
+        )
+    else:
+        valid_scale_modes = {"normal", "tiny", "mixed"}
+        expected_start_idx = 0
+        bounds_valid = True
+        for u_idx, u in enumerate(units, 1):
+            exp_uid = f"U{u_idx}"
+            uid = u.get("id")
+            if uid != exp_uid:
+                err("SC-37", f"units[{u_idx - 1}].id is {uid!r} (expected {exp_uid!r} in exact order U1..U{len(units)})")
+            utitle = u.get("title")
+            if not isinstance(utitle, str) or not utitle.strip():
+                err("SC-37", f"{exp_uid}: 'title' must be a non-empty string")
+            smode = u.get("scale_mode")
+            if smode not in valid_scale_modes:
+                err("SC-37", f"{exp_uid}: 'scale_mode' is {smode!r} (must be one of 'normal', 'tiny', 'mixed')")
+            s_start = u.get("seg_start")
+            s_end = u.get("seg_end")
+            if not isinstance(s_start, str) or s_start not in id_to_idx:
+                err("SC-37", f"{exp_uid}: seg_start {s_start!r} not found in script.json segments")
+                bounds_valid = False
+                continue
+            if not isinstance(s_end, str) or s_end not in id_to_idx:
+                err("SC-37", f"{exp_uid}: seg_end {s_end!r} not found in script.json segments")
+                bounds_valid = False
+                continue
+            a_i = id_to_idx[s_start]
+            b_i = id_to_idx[s_end]
+            if b_i < a_i:
+                err("SC-37", f"{exp_uid}: seg_end {s_end!r} comes before seg_start {s_start!r}")
+                bounds_valid = False
+                continue
+            unit_seg_count = b_i - a_i + 1
+            if not (12 <= unit_seg_count <= 45):
+                err(
+                    "SC-37",
+                    f"{exp_uid} ({s_start}..{s_end}): has {unit_seg_count} segments (must be 12-45 segments per unit)",
+                )
+            if segs and a_i != expected_start_idx:
+                exp_sid = ids[expected_start_idx] if expected_start_idx < len(ids) else "END"
+                err(
+                    "SC-37",
+                    f"{exp_uid}: seg_start is {s_start!r} but expected {exp_sid!r} (units must partition {ids[0]}..{ids[-1]} contiguously in exact order with 0 gaps and 0 overlaps)",
+                )
+            expected_start_idx = b_i + 1
+        if segs and bounds_valid and expected_start_idx != len(segs):
+            err(
+                "SC-37",
+                f"units end at {units[-1].get('seg_end')!r} instead of final segment {ids[-1]!r} (units must cover {ids[0]}..{ids[-1]} with 0 trailing segments)",
+            )
 
 # ---- beats map ----
 beats = (ROOT / "beats.md").read_text() if (ROOT / "beats.md").exists() else ""

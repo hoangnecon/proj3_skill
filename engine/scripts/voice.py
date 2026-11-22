@@ -65,29 +65,11 @@ def _load_pacing() -> dict:
 
 
 STD = _load_std()
-_RHYTHM_OVERRIDE_KEYS = (
-    "target_ups",
-    "phonation_ups",
-    "blend_raw",
-    "inside_pause_threshold_s",
-    "inside_pause_target_s",
-    "sentence_gap_s",
-)
 
 
 def _effective_rhythm(script: dict | None = None, pa: dict | None = None) -> dict:
-    r = dict(STD["rhythm"])
-    if isinstance(script, dict) and script.get("length") == "long_16x9":
-        if pa is None:
-            try:
-                pa = _load_pacing()
-            except FileNotFoundError:
-                pa = {}
-        ep_cfg = (pa or {}).get("episode_long_16x9") or {}
-        for k in _RHYTHM_OVERRIDE_KEYS:
-            if k in ep_cfg:
-                r[k] = ep_cfg[k]
-    return r
+    """Luôn giữ nguyên chuẩn nhịp 5.25 ups Hải Đăng tinh khiết từ standards/voice_standard.json cho mọi định dạng."""
+    return dict(STD["rhythm"])
 EN_SPAN_RE = re.compile(r"<en>(.*?)</en>", re.I | re.S)
 TAG_RE = re.compile(r"\[([^\]]+)\]")
 SENT_SPLIT_RE = re.compile(r"(?<=[.!?…])\s+(?=[^\s])")
@@ -240,7 +222,7 @@ def style_sentence(
     pitch_override: float | None = None,
     rhythm: dict | None = None,
 ):
-    """Áp nhịp nhanh theo từng câu (offline 5.25 ups / 5.65 ups long_16x9 + pitch 1.02 qua FFmpeg WSOLA)."""
+    """Áp nhịp nhanh theo từng câu (offline 5.25 ups chuẩn Hải Đăng + pitch 1.02 qua FFmpeg WSOLA)."""
     R = rhythm or STD["rhythm"]
     tr = rhythm_trim(raw_wav, R["inside_pause_threshold_s"], R["inside_pause_target_s"])
     raw_dur = max(len(tr) / SR, 0.08)
@@ -992,7 +974,7 @@ def main():
 
         sent_specs = resolve_segment_sentences(seg, global_english, rhythm=eff_rhythm, script_wps=script_wps)
         spoken_joined = " ".join(sp["tts"] for sp in sent_specs)
-        # trừ các khoảng gap_after nội đoạn khi đo tốc độ nói của đoạn để so với nhịp mục tiêu (5.25 ups hoặc 5.65 ups long_16x9)
+        # trừ các khoảng gap_after nội đoạn khi đo tốc độ nói của đoạn để so với nhịp mục tiêu (5.25 ups chuẩn Hải Đăng)
         intra_gaps = sum(sp["gap_after"] for sp in sent_specs)
         m = measure(w, spoken_joined, aw, rhythm=eff_rhythm)
         if intra_gaps > 0:

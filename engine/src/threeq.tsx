@@ -3,6 +3,7 @@
 import React from 'react';
 import {E, L, PAL, R, Rr, S, Sh, col, LINE, Smoke} from './kit';
 import {CartoonHand, HandKind, TaperLimb, curvedTorsoPath, hairWindOffset, livingIdle, talkGesture} from './anim';
+import {clamp} from './math';
 import type {Arm, Expr, Look, Pose} from './chars';
 
 const rad = (d: number) => (d * Math.PI) / 180;
@@ -15,6 +16,8 @@ export type ThreeQProps = {
   expr?: Expr;
   talk?: number; // 0..1 độ mở miệng khi nói
   t: number;
+  phase?: number; // pha bước theo quãng đường (tùy chọn)
+  speed?: number; // biên độ vận tốc bước 0..1.25 (tùy chọn)
   face?: 1 | -1; // 1 = quay phải-trước, -1 = quay trái-trước
   gaze?: number; // -1..1 hướng nhìn bổ sung
   gazeY?: number; // -1..1 hướng nhìn dọc (-1 = lên, +1 = xuống)
@@ -34,6 +37,8 @@ export const Person3Q: React.FC<ThreeQProps> = ({
   expr = 'neutral',
   talk = 0,
   t,
+  phase,
+  speed,
   face = 1,
   gaze = 0,
   gazeY = 0,
@@ -60,6 +65,9 @@ export const Person3Q: React.FC<ThreeQProps> = ({
   const HR = 100 * (look.head ?? 1);
   const hy = shY - 8 - HR * 0.9;
   const legs = g ? 'none' : pose.legs ?? 'stand';
+  const gaitAmp = speed !== undefined ? clamp(speed, 0, 1.25) : 1;
+  const walkAng = phase !== undefined ? phase * Math.PI * 2 : t * 9;
+  const runAng = phase !== undefined ? phase * Math.PI * 2 : t * 14;
   const idle = livingIdle(t, blinkPh);
   const tg = talkGesture(t, talk, blinkPh);
   const bodyDrop = legs === 'sit' ? 70 : legs === 'crouch' ? 62 * H : legs === 'ride' ? 72 * H : legs === 'push' ? 24 * H : 0;
@@ -68,12 +76,12 @@ export const Person3Q: React.FC<ThreeQProps> = ({
   const bendX =
     (legs === 'ride' ? 20 :
     legs === 'push' ? 26 :
-    legs === 'run' ? 16 :
+    legs === 'run' ? 16 * gaitAmp :
     legs === 'crouch' ? 14 :
     legs === 'fall' ? -22 :
     legs === 'jump' ? -8 :
     legs === 'climb' ? 6 :
-    legs === 'walk' ? 4 : 0) + idle.swayX;
+    legs === 'walk' ? 4 * gaitAmp : 0) + idle.swayX;
   const shShift = bendX * 0.35;
 
   // Độ lệch phối cảnh 3/4 (hướng mặt +x): vai gần rộng (-x), vai xa thu hẹp (+x), trục ngực lệch +x
@@ -148,12 +156,22 @@ export const Person3Q: React.FC<ThreeQProps> = ({
       const y2 = y1 - (sg < 0 ? fa * 0.14 : fa * 0.18);
       return [[x0, y0], [x1, y1], [x2, y2]];
     }
-    if (legs === 'run') {
-      const swRun = Math.sin(t * 14) * (sg < 0 ? -1 : 1);
-      const aRun = 14 + swRun * 44;
-      const eRun = 74 + Math.max(0, swRun) * 18;
+    if (legs === 'run' && a[0] < 85) {
+      const swRun = Math.sin(runAng) * (sg < 0 ? -1 : 1) * gaitAmp;
+      const aRun = 6 + 8 * gaitAmp + swRun * 44;
+      const eRun = 10 + (64 + Math.max(0, swRun) * 18) * clamp(gaitAmp, 0, 1);
       const t1 = rad(aRun);
       const t2 = rad(aRun + eRun);
+      const x1 = x0 + Math.sin(t1) * ua, y1 = y0 + Math.cos(t1) * ua;
+      const x2 = x1 + Math.sin(t2) * fa, y2 = y1 + Math.cos(t2) * fa;
+      return [[x0, y0], [x1, y1], [x2, y2]];
+    }
+    if (legs === 'walk' && a[0] < 25 && Math.abs(a[1]) < 25) {
+      const swWalk = Math.sin(walkAng) * (sg < 0 ? -1 : 1) * gaitAmp;
+      const aWalk = 6 + swWalk * 22;
+      const eWalk = 12 + Math.max(0, swWalk) * 14;
+      const t1 = rad(aWalk);
+      const t2 = rad(aWalk + eWalk);
       const x1 = x0 + Math.sin(t1) * ua, y1 = y0 + Math.cos(t1) * ua;
       const x2 = x1 + Math.sin(t2) * fa, y2 = y1 + Math.cos(t2) * fa;
       return [[x0, y0], [x1, y1], [x2, y2]];
@@ -259,34 +277,34 @@ export const Person3Q: React.FC<ThreeQProps> = ({
     farLegNode = draw3QLeg([[farHipX, bY + 10], [farHipX + 6, bY * 0.5], [farHipX + 10, -22]], true, 0);
     nearLegNode = draw3QLeg([[nearHipX, bY + 10], [nearHipX + 6, bY * 0.5], [nearHipX + 10, -16]], false, 0);
   } else if (legs === 'walk') {
-    const ph = Math.sin(t * 9);
-    const farLift = Math.max(0, -ph) * 18;
-    const nearLift = Math.max(0, ph) * 18;
+    const ph = Math.sin(walkAng) * gaitAmp;
+    const farLift = Math.max(0, -ph) * 18 * H;
+    const nearLift = Math.max(0, ph) * 18 * H;
     farLegNode = draw3QLeg(
-      [[farHipX, bY + 10], [farHipX + 16 - ph * 12, bY * 0.52 - farLift * 0.7], [farHipX + 10 - ph * 22, -22 - farLift]],
+      [[farHipX, bY + 10], [farHipX + (6 + 10 * gaitAmp - ph * 12) * H, bY * 0.52 - farLift * 0.6], [farHipX + 10 - ph * 22 * H, -22 - farLift]],
       true,
       farLift > 2 ? -10 : 0,
     );
     nearLegNode = draw3QLeg(
-      [[nearHipX, bY + 10], [nearHipX + 16 + ph * 12, bY * 0.52 - nearLift * 0.7], [nearHipX + 10 + ph * 22, -16 - nearLift]],
+      [[nearHipX, bY + 10], [nearHipX + (6 + 10 * gaitAmp + ph * 12) * H, bY * 0.52 - nearLift * 0.6], [nearHipX + 10 + ph * 22 * H, -16 - nearLift]],
       false,
       nearLift > 2 ? -10 : 0,
     );
   } else if (legs === 'run') {
-    const ph = Math.sin(t * 14);
-    const farLift = Math.max(0, -ph) * 42;
-    const nearLift = Math.max(0, ph) * 42;
-    const farTrail = Math.max(0, ph) * 20;
-    const nearTrail = Math.max(0, -ph) * 20;
+    const ph = Math.sin(runAng) * gaitAmp;
+    const farLift = Math.max(0, -ph) * 30 * H;
+    const nearLift = Math.max(0, ph) * 30 * H;
+    const farTrail = Math.max(0, ph) * 28 * H;
+    const nearTrail = Math.max(0, -ph) * 28 * H;
     farLegNode = draw3QLeg(
-      [[farHipX, bY + 10], [farHipX + 26 - ph * 26, bY * 0.46 - farLift * 0.85], [farHipX + 4 - ph * 42 - farTrail * 0.6, -22 - farLift - farTrail * 0.5]],
+      [[farHipX, bY + 10], [farHipX + (6 + 16 * gaitAmp - ph * 24) * H, bY * 0.50 - farLift * 0.55], [farHipX + 10 - (6 * gaitAmp + ph * 40) * H - farTrail * 0.55, -22 - farLift * 0.75 - farTrail * 0.85]],
       true,
-      farLift > 4 ? -14 : 18,
+      farLift > 4 ? -14 : 18 * clamp(gaitAmp, 0, 1),
     );
     nearLegNode = draw3QLeg(
-      [[nearHipX, bY + 10], [nearHipX + 26 + ph * 26, bY * 0.46 - nearLift * 0.85], [nearHipX + 4 + ph * 42 - nearTrail * 0.6, -16 - nearLift - nearTrail * 0.5]],
+      [[nearHipX, bY + 10], [nearHipX + (6 + 16 * gaitAmp + ph * 24) * H, bY * 0.50 - nearLift * 0.55], [nearHipX + 10 - (6 * gaitAmp - ph * 40) * H - nearTrail * 0.55, -16 - nearLift * 0.75 - nearTrail * 0.85]],
       false,
-      nearLift > 4 ? -14 : 18,
+      nearLift > 4 ? -14 : 18 * clamp(gaitAmp, 0, 1),
     );
   } else if (legs === 'sit') {
     farLegNode = draw3QLeg([[farHipX, bY], [farHipX + 36, bY + 18], [farHipX + 30, -22]], true, 0);
@@ -423,8 +441,8 @@ export const Person3Q: React.FC<ThreeQProps> = ({
 
   // --- ma: đuôi khói; người thường: nhịp bước + nhún nhảy + squash/stretch + thở nhẹ ---
   const modeBob =
-    legs === 'walk' ? Math.abs(Math.sin(t * 9)) * 7 :
-    legs === 'run' ? Math.abs(Math.sin(t * 14)) * 16 :
+    legs === 'walk' ? Math.abs(Math.sin(walkAng)) * 7 * gaitAmp :
+    legs === 'run' ? Math.abs(Math.sin(runAng)) * 16 * gaitAmp :
     legs === 'ride' ? Math.sin(t * 6) * 4 :
     legs === 'jump' ? Math.sin(t * 8) * 5 :
     legs === 'climb' ? Math.abs(Math.sin(t * 7)) * 6 : 0;
@@ -441,13 +459,13 @@ export const Person3Q: React.FC<ThreeQProps> = ({
   ) : null;
 
   // --- chuyển động thứ cấp: gió tóc + độ trễ đầu (head lag) + living micro-acting ---
-  const hw = hairWindOffset(t, wind + (legs === 'run' ? 0.9 : 0), velX * face, blinkPh);
+  const hw = hairWindOffset(t, wind + (legs === 'run' ? 0.9 * gaitAmp : 0), velX * face, blinkPh);
   const windTilt = Math.max(-2, Math.min(2, wind)) * 1.6;
   const headLag =
     (legs === 'ride' ? 5.5 + Math.sin(t * 6 - 0.8) * 2.0 + windTilt :
     legs === 'push' ? 6.5 :
-    legs === 'run' ? 4.5 + Math.sin(t * 14 - 0.9) * 3.2 + windTilt * 0.6 :
-    legs === 'walk' ? Math.sin(t * 9 - 0.85) * 2.2 :
+    legs === 'run' ? (4.5 + Math.sin(runAng - 0.9) * 3.2) * gaitAmp + windTilt * 0.6 :
+    legs === 'walk' ? Math.sin(walkAng - 0.85) * 2.2 * gaitAmp :
     legs === 'crouch' ? 3.5 :
     legs === 'fall' ? -10 + Math.sin(t * 18 - 0.6) * 4.0 :
     legs === 'jump' ? -3.5 :

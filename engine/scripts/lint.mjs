@@ -8,7 +8,7 @@ import path from 'node:path';
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {loadProject} from './load.mjs';
-import {actorBoxes, inter, area, CAPTION, W, H, measurePropBox, measureSubjectBox, measureHandPropBox, overlayBoxesAt, setTextsAt, projectBox, shotGeometry, actorStateAt, scalarKeyAt} from './geom.mjs';
+import {actorBoxes, inter, area, clip, CAPTION, W, H, measurePropBox, measureSubjectBox, measureHandPropBox, overlayBoxesAt, setTextsAt, projectBox, shotGeometry, actorStateAt, scalarKeyAt} from './geom.mjs';
 
 const phase = process.argv[2] ?? 'all';
 const P = await loadProject();
@@ -128,6 +128,120 @@ const scriptMeta = (() => {
   try { return JSON.parse(fs.readFileSync('script.json', 'utf8')); } catch { return {}; }
 })();
 const isLong16x9 = scriptMeta?.length === 'long_16x9' || scriptMeta?.format === '16:9';
+const isLegacyV4Showcase = /\bv4\.[0-9]/.test(scriptMeta?.title ?? '') && !scriptMeta?.length;
+const VALID_SCALE_MODES = new Set(['normal', 'tiny']);
+
+const segNum = (segId) => {
+  if (typeof segId !== 'string') return NaN;
+  const m = /^s(\d+)/i.exec(segId.trim());
+  return m ? parseInt(m[1], 10) : NaN;
+};
+
+const inSegWindows = (n, windows) => {
+  if (!Array.isArray(windows) || windows.length === 0) return true;
+  return windows.some((w) => {
+    if (!Array.isArray(w) || w.length < 2) return false;
+    const lo = segNum(String(w[0]));
+    const hi = segNum(String(w[1]));
+    if (!Number.isFinite(lo) || !Number.isFinite(hi)) return true;
+    return n >= Math.min(lo, hi) && n <= Math.max(lo, hi);
+  });
+};
+
+const shotSegOf = (r, s) => {
+  const rawAt = String(r?.at ?? s?.at ?? '');
+  const m = /^(s\d+[a-z]?)/i.exec(rawAt);
+  if (m) return m[1];
+  const tMid = ((r?.t0 ?? 0) + (r?.t1 ?? 0)) * 0.5;
+  let best = '';
+  let bestT = -Infinity;
+  for (const [sid, st] of Object.entries(P.C?.seg_starts ?? {})) {
+    if (typeof st === 'number' && st <= tMid + 0.08 && st >= bestT) {
+      best = sid;
+      bestT = st;
+    }
+  }
+  return best;
+};
+
+const segScaleMode = (() => {
+  const map = new Map();
+  const segArr = Array.isArray(scriptMeta?.segments) ? scriptMeta.segments : [];
+  const segIdxById = new Map();
+  segArr.forEach((seg, idx) => {
+    if (seg && typeof seg === 'object' && typeof seg.id === 'string') segIdxById.set(seg.id, idx);
+  });
+  if (Array.isArray(scriptMeta?.units)) {
+    const unitById = new Map();
+    for (const u of scriptMeta.units) {
+      if (!u || typeof u !== 'object') continue;
+      const sm = u.scale_mode ?? u.scaleMode;
+      if (u.id !== undefined) unitById.set(String(u.id), sm);
+      if (typeof sm !== 'string') continue;
+      let startS = u.seg_start ?? u.segStart ?? u.start_seg ?? u.startSeg ?? u.first_seg ?? u.from ?? null;
+      let endS = u.seg_end ?? u.segEnd ?? u.end_seg ?? u.endSeg ?? u.last_seg ?? u.to ?? null;
+      if (typeof u.range === 'string') {
+        const rm = /^(s\d+[a-z]?)\s*(?:\.\.|-|–|to)\s*(s\d+[a-z]?)$/i.exec(u.range.trim());
+        if (rm) { startS = rm[1]; endS = rm[2]; }
+      } else if (Array.isArray(u.range) && u.range.length === 2) {
+        [startS, endS] = u.range;
+      } else if (Array.isArray(u.seg_range) && u.seg_range.length === 2) {
+        [startS, endS] = u.seg_range;
+      }
+      if (startS && endS) {
+        const s0 = String(startS).trim(), s1 = String(endS).trim();
+        if (segIdxById.has(s0) && segIdxById.has(s1)) {
+          const i0 = segIdxById.get(s0), i1 = segIdxById.get(s1);
+          for (let idx = Math.min(i0, i1); idx <= Math.max(i0, i1); idx++) {
+            const sid = segArr[idx]?.id;
+            if (typeof sid === 'string') map.set(sid, sm);
+          }
+        } else {
+          const n0 = segNum(s0), n1 = segNum(s1);
+          if (Number.isFinite(n0) && Number.isFinite(n1)) {
+            for (let k = Math.min(n0, n1); k <= Math.max(n0, n1); k++) map.set(`s${k}`, sm);
+          }
+        }
+      }
+      const segList = Array.isArray(u.segs) ? u.segs : (Array.isArray(u.segments) ? u.segments : null);
+      if (segList && segList.length > 0) {
+        if (!startS && segList.length === 2 && typeof segList[0] === 'string' && typeof segList[1] === 'string') {
+          const n0 = segNum(segList[0]), n1 = segNum(segList[1]);
+          if (Number.isFinite(n0) && Number.isFinite(n1) && n1 >= n0) {
+            for (let k = n0; k <= n1; k++) map.set(`s${k}`, sm);
+          }
+        } else {
+          for (const item of segList) {
+            const sid = typeof item === 'string' ? item : item?.id;
+            if (typeof sid === 'string') map.set(sid.trim(), sm);
+          }
+        }
+      }
+    }
+    for (const seg of scriptMeta?.segments ?? []) {
+      if (!seg || typeof seg !== 'object' || typeof seg.id !== 'string') continue;
+      const uRef = seg.unit ?? seg.unit_id ?? seg.unitId;
+      if (uRef !== undefined && unitById.has(String(uRef))) {
+        const sm = unitById.get(String(uRef));
+        if (typeof sm === 'string') map.set(seg.id, sm);
+      }
+    }
+  }
+  for (const seg of scriptMeta?.segments ?? []) {
+    if (!seg || typeof seg !== 'object' || typeof seg.id !== 'string') continue;
+    const sm = seg.scale_mode ?? seg.scaleMode;
+    if (typeof sm === 'string') map.set(seg.id, sm);
+  }
+  return map;
+})();
+
+const isKidOrShrunkenActor = (a) => {
+  const lk = P.CAST?.[a.look] ?? P.EX_LOOKS?.[a.look];
+  if (!lk) return false;
+  if ((lk.h ?? 1) < 0.88 || lk.hair === 'kid' || (a.s ?? 1) <= 0.45) return true;
+  const roleVi = P.CAST_ROLES?.[a.look]?.vi ?? '';
+  return /\b(\d+\s*tuổi|học sinh|lớp trưởng|cậu bé|cô bé|tí hon)\b/i.test(roleVi);
+};
 
 // =============================== DESIGN ===============================
 const traitsOf = (l) => [l.glasses, l.hat && l.hat !== 'none', l.mustache, l.beard, l.pattern, l.earrings, l.chain, l.vest, l.lips,
@@ -366,6 +480,27 @@ if (phase !== 'shots') {
       if (d.cameraDir === 'top' && d.angle !== 'high' && !lineWaived(setsSrc, 'SE-18', id)) {
         warn('SE-18', `${id}: cameraDir 'top' should pair with angle 'high' and 3/4 elevated perspective (not a flat 90° floorplan) so horizon-rig characters sit naturally in space`);
       }
+    }
+    // SE-20: Set scaleMode & Stateless Plate Guard (long_16x9)
+    const anySetHasScaleMode = sets.some((id) => VALID_SCALE_MODES.has(P.EPISODE_SETS[id]?.scaleMode));
+    if (anySetHasScaleMode) {
+      for (const id of sets) {
+        const d = P.EPISODE_SETS[id];
+        if (!d || d.insert || lineWaived(setsSrc, 'SE-20', id)) continue;
+        if (d.scaleMode === undefined) {
+          warn('SE-20', `${id}: episode uses scaleMode on other sets, but '${id}' omits scaleMode ('normal' | 'tiny') — declare scaleMode on every stage plate to prevent scale-bleed`);
+        }
+      }
+    }
+  }
+  for (const id of sets) {
+    const d = P.EPISODE_SETS[id];
+    if (!d || lineWaived(setsSrc, 'SE-20', id)) continue;
+    if (d.scaleMode !== undefined && !VALID_SCALE_MODES.has(d.scaleMode)) {
+      err('SE-20', `${id}: invalid scaleMode '${d.scaleMode}' (expected 'normal' | 'tiny')`);
+    }
+    if (d.stateless !== undefined && typeof d.stateless !== 'boolean') {
+      err('SE-20', `${id}: stateless must be a boolean`);
     }
   }
   // PR-01, PR-02, PR-03 & PR-05: human-scale guard, internal text collision, disembodied head & partial-body continuity check on custom episode WORLD_PROPS
@@ -742,6 +877,78 @@ if (phase !== 'design') {
     if ((setDef?.shotScale === 'establishing' || setDef?.angle === 'wide') && !setDef?.insert) {
       if ((allCams[0][2] > 1.35 || allCams.slice(1).some((c) => c[2] > 1.45)) && !waived('LA-03', r.name)) {
         err('LA-03', `${tag}: fake close-up via camera zoom (${maxK.toFixed(2)}×) on establishing/wide set '${r.set}' — draw a dedicated 'medium' or 'closeup' sub-scene plate instead`);
+      }
+    }
+    // SH-22: Scale-Mode Continuity & Set Bleed Error
+    const rSeg = shotSegOf(r, s);
+    const shotSegNum = segNum(rSeg);
+    {
+      const segMode = (rSeg && segScaleMode.get(rSeg)) ?? (Number.isFinite(shotSegNum) ? segScaleMode.get(`s${shotSegNum}`) : undefined);
+      const plateScaleMode = setDef?.scaleMode;
+      if (segMode && plateScaleMode && !setDef?.insert && !waived('SH-22', r.name)) {
+        if (segMode === 'normal' && plateScaleMode === 'tiny') {
+          err('SH-22', `${tag} (${rSeg}): pre/post-shrink normal-scale segment staged on miniature tiny set '${r.set}'!`);
+          markHot(r.i, 'SH-22');
+        } else if (segMode === 'tiny' && plateScaleMode === 'normal') {
+          const shrunkenKids = (s.actors ?? []).filter((A) =>
+            Array.isArray(scriptMeta?.tiny_cast) ? scriptMeta.tiny_cast.includes(A.look) : isKidOrShrunkenActor(A),
+          );
+          if (shrunkenKids.length > 0) {
+            err('SH-22', `${tag} (${rSeg}): shrunken tiny-scale segment staged on normal-scale set '${r.set}' (${shrunkenKids.map((x) => x.id).join(', ')})!`);
+            markHot(r.i, 'SH-22');
+          }
+        }
+      }
+    }
+    // SH-23: Temporal Story-Order & Stateful Pose Bleed Error
+    if (Number.isFinite(shotSegNum) && !waived('SH-23', r.name)) {
+      for (const ex of s.extras ?? []) {
+        const def = (P.SUBJECTS ?? {})[ex.k];
+        if (!def || lineWaived(subjectsSrc, 'SH-23', ex.k)) continue;
+        if (typeof def.firstSeg === 'string') {
+          const minSeg = segNum(def.firstSeg);
+          if (Number.isFinite(minSeg) && shotSegNum < minSeg) {
+            err('SH-23', `${tag}: premature subject bleed: '${ex.k}' appears at ${rSeg} before firstSeg ${def.firstSeg}!`);
+            markHot(r.i, 'SH-23');
+          }
+        }
+        if (Array.isArray(def.appearSegs) && def.appearSegs.length > 0 && !inSegWindows(shotSegNum, def.appearSegs)) {
+          err('SH-23', `${tag}: out-of-scene subject bleed: '${ex.k}' at ${rSeg} outside allowed story windows!`);
+          markHot(r.i, 'SH-23');
+        }
+        if (def.poseSegs && typeof def.poseSegs === 'object') {
+          const exPoses = ex.pose !== undefined ? [...new Set(keyVals(ex.pose))] : [def.poses?.[0] ?? 'idle'];
+          for (const pose of exPoses) {
+            const pWins = def.poseSegs[pose];
+            if (Array.isArray(pWins) && pWins.length > 0 && !inSegWindows(shotSegNum, pWins)) {
+              err('SH-23', `${tag}: stateful pose bleed: '${ex.k}' uses pose '${pose}' at ${rSeg} outside allowed window (e.g. sticky tape already removed)!`);
+              markHot(r.i, 'SH-23');
+            }
+          }
+        }
+      }
+    }
+    // PR-09: Anti-Statue Living Creature Motion Guard
+    if (dur > 2.2 && !waived('PR-09', r.name)) {
+      for (const ex of s.extras ?? []) {
+        const def = (P.SUBJECTS ?? {})[ex.k];
+        if (def?.kind !== 'creature' || lineWaived(subjectsSrc, 'PR-09', ex.k)) continue;
+        const hasExPath = Array.isArray(ex.path) && ex.path.length >= 2 && ex.path.some((w, wi) =>
+          wi > 0 && Math.hypot((w[0] ?? 0) - (ex.path[wi - 1][0] ?? 0), (w[1] ?? 0) - (ex.path[wi - 1][1] ?? 0)) > 1,
+        );
+        const poseKeys = Array.isArray(ex.pose) ? ex.pose : [];
+        const exprKeys = Array.isArray(ex.expr) ? ex.expr : [];
+        const hasPoseBeats = poseKeys.length >= 2 && new Set(poseKeys.map((x) => String(Array.isArray(x) ? x[0] : x))).size >= 2;
+        const hasExprBeats = exprKeys.length >= 2 && new Set(exprKeys.map((x) => String(Array.isArray(x) ? x[0] : x))).size >= 2;
+        if (!hasExPath && !hasPoseBeats && !hasExprBeats) {
+          const msg = `${tag}: frozen statue creature '${ex.k}' stands in 1 static pose at 1 spot for ${dur.toFixed(1)}s ("đứng như trời trồng") — add path locomotion or >= 2 dynamic pose/action beats!`;
+          if (isLegacyV4Showcase) {
+            warn('PR-09', msg);
+          } else {
+            err('PR-09', msg);
+            markHot(r.i, 'PR-09');
+          }
+        }
       }
     }
     // SE-18: Perspective-Horizon Consistency Guard (shots)
@@ -1451,6 +1658,7 @@ if (phase !== 'design') {
   };
   let prevAxis = null;
   const layoutReport = [];
+  const tinyCreatureRatios = new Map();
   for (const r of rows) {
     let worstGrid = null;
     const shotScaleIssues = [];
@@ -1461,10 +1669,51 @@ if (phase !== 'design') {
     const rawExtras = shotDef.extras ?? [];
     const isInsertSet = Boolean(P.SETS[r.set]?.insert);
     const setSignOccByKey = new Map();
+    const la03SampleByProp = new Map();
     for (const u of [0.15, 0.5, 0.85]) {
       const t = r.t0 + (r.t1 - r.t0) * u;
       const g = shotGeometry(r, t, P, rows);
       const B = g.actors;
+      // Collect rendered subject-to-grounded-actor pixel height ratios for LA-03 cross-angle scale lock
+      {
+        const groundedActors = B.filter((x) => {
+          if (x.fg || x.mountedOn || x.h <= 0 || area(clip(x.all)) <= 0) return false;
+          const da = (shotDef.actors ?? []).find((q) => q.id === x.id);
+          if (da?.fg || da?.mount || da?.ride) return false;
+          if (da?.op !== undefined && da.op <= 0.05) return false;
+          if (da?.enter !== undefined) {
+            try {
+              const tEn = typeof da.enter === 'number' ? r.t0 + da.enter : P.tAt(da.enter);
+              if (t < tEn + 0.05) return false;
+            } catch {}
+          }
+          if (da?.exit !== undefined) {
+            try {
+              const tEx = typeof da.exit === 'number' ? r.t0 + da.exit : P.tAt(da.exit);
+              if (t > tEx + 0.25) return false;
+            } catch {}
+          }
+          return true;
+        });
+        if (groundedActors.length >= 1) {
+          const tinyGrounded = groundedActors.filter((x) => isKidOrShrunkenActor(x));
+          const refActors = tinyGrounded.length > 0 ? tinyGrounded : groundedActors;
+          const actorPxH = refActors.reduce((sum, x) => sum + x.h, 0) / refActors.length;
+          for (let prIdx = 0; prIdx < g.props.length; prIdx++) {
+            const pr = g.props[prIdx];
+            if (pr.fg || !pr.onScreen) continue;
+            const subjDef = (P.SUBJECTS ?? {})[pr.k];
+            if (!subjDef) continue;
+            const subjPxH = pr.screenBox.y1 - pr.screenBox.y0;
+            if (!(subjPxH > 0)) continue;
+            const ratio = subjPxH / Math.max(1, actorPxH);
+            const slotKey = `${prIdx}:${pr.id ?? pr.k}`;
+            if (!la03SampleByProp.has(slotKey) || u === 0.5) {
+              la03SampleByProp.set(slotKey, {pr, subjDef, ratio});
+            }
+          }
+        }
+      }
       if (g.gridLayout) {
         if (!worstGrid
           || g.gridLayout.maxCellCount > worstGrid.maxCellCount
@@ -1702,6 +1951,29 @@ if (phase !== 'design') {
         prevAxis = {i: r.i, set: r.set, loc: curLoc, neutral: isNeutralAxisAngle(curSetDef), actors: curAxisActors};
       }
     }
+    // LA-03: per-shot scaleWithTinyActor anatomical ratio lock & tiny-set cross-angle sample collection
+    {
+      const rSetDef = P.SETS[r.set];
+      const rSeg = shotSegOf(r, shotDef);
+      const rSegNum = segNum(rSeg);
+      const rSegMode = (rSeg && segScaleMode.get(rSeg)) ?? (Number.isFinite(rSegNum) ? segScaleMode.get(`s${rSegNum}`) : undefined);
+      for (const {pr, subjDef, ratio} of la03SampleByProp.values()) {
+        if (Array.isArray(subjDef.scaleWithTinyActor) && subjDef.scaleWithTinyActor.length === 2
+          && rSetDef?.scaleMode !== 'normal' && rSegMode !== 'normal') {
+          const [minR, maxR] = subjDef.scaleWithTinyActor;
+          if ((ratio < minR || ratio > maxR) && !waived('LA-03', r.name) && !lineWaived(subjectsSrc, 'LA-03', pr.k)) {
+            const baseKey = subjDef.partialOf ?? pr.k;
+            err('LA-03', `#${r.i} '${r.name}': creature '${pr.k}' scale ratio ${ratio.toFixed(2)}x vs actor outside anatomical [${minR}, ${maxR}] — use a partial anatomy subject (${baseKey}Paw / ${baseKey}Head) for tight close-ups instead of shrinking a giant creature!`);
+            markHot(r.i, 'LA-03');
+          }
+        }
+        if (subjDef.kind === 'creature' && !subjDef.partialOf && rSetDef?.scaleMode === 'tiny'
+          && !waived('LA-03', r.name) && !lineWaived(subjectsSrc, 'LA-03', pr.k)) {
+          if (!tinyCreatureRatios.has(pr.k)) tinyCreatureRatios.set(pr.k, []);
+          tinyCreatureRatios.get(pr.k).push({shotIdx: r.i, shotName: r.name, set: r.set, ratio});
+        }
+      }
+    }
     for (const {samples, hits} of setSignOccByKey.values()) {
       const persistent = samples.size >= 2;
       for (const h of hits) {
@@ -1724,6 +1996,25 @@ if (phase !== 'design') {
     });
     if (r.reaches.length) (hot[r.i] ??= []).push('reach');
     if (r.keys.length) (hot[r.i] ??= []).push('key');
+  }
+  // LA-03: episode-wide cross-angle creature scale spread across tiny sets
+  for (const [ck, samples] of tinyCreatureRatios) {
+    if (samples.length < 2) continue;
+    let minS = samples[0], maxS = samples[0], sum = 0;
+    for (const sm of samples) {
+      if (sm.ratio < minS.ratio) minS = sm;
+      if (sm.ratio > maxS.ratio) maxS = sm;
+      sum += sm.ratio;
+    }
+    const mean = sum / samples.length;
+    const variance = samples.reduce((acc, sm) => acc + (sm.ratio - mean) * (sm.ratio - mean), 0) / samples.length;
+    const cv = mean > 0 ? Math.sqrt(variance) / mean : 0;
+    const spread = maxS.ratio / Math.max(0.01, minS.ratio);
+    if (spread > 1.85) {
+      err('LA-03', `inconsistent cross-angle creature scale across shots for '${ck}' on tiny sets: max/min ratio ${spread.toFixed(2)}x (${maxS.ratio.toFixed(2)}x in #${maxS.shotIdx} '${maxS.shotName}' vs ${minS.ratio.toFixed(2)}x in #${minS.shotIdx} '${minS.shotName}', CV=${(cv * 100).toFixed(1)}% > 1.85x) — use ${ck}Paw / ${ck}Head for tight close-ups instead of shrinking a giant creature!`);
+      markHot(minS.shotIdx, 'LA-03');
+      markHot(maxS.shotIdx, 'LA-03');
+    }
   }
   const mergedStrips = [];
   const stripByName = new Map();
