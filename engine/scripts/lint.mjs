@@ -1725,6 +1725,21 @@ if (phase !== 'design') {
     if (r.reaches.length) (hot[r.i] ??= []).push('reach');
     if (r.keys.length) (hot[r.i] ??= []).push('key');
   }
+  const mergedStrips = [];
+  const stripByName = new Map();
+  for (const st of strips) {
+    const prev = stripByName.get(st.name);
+    if (prev) {
+      prev.t0 = Math.round(Math.min(prev.t0, st.t0) * 100) / 100;
+      prev.t1 = Math.round(Math.max(prev.t1, st.t1) * 100) / 100;
+    } else {
+      const copy = {...st};
+      stripByName.set(copy.name, copy);
+      mergedStrips.push(copy);
+    }
+  }
+  strips.length = 0;
+  strips.push(...mergedStrips);
   fs.mkdirSync('qa', {recursive: true});
   fs.writeFileSync('qa/hot.json', JSON.stringify(Object.fromEntries(Object.entries(hot).map(([k, v]) => [k, [...new Set(v)]])), null, 1));
   fs.writeFileSync('qa/strips_needed.json', JSON.stringify(strips, null, 1));
