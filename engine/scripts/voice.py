@@ -1097,7 +1097,13 @@ def main():
     if not len(default_rates):
         default_rates = np.array([m["rate_wps"] for m in ms])
     cents = np.array([m["centroid_hz"] for m in ms])
-    tried = [x["attempts"] for x in timeline if x["attempts"]]
+    sent_tried = [
+        len(s.get("tries", []))
+        for x in timeline
+        for s in (attempts_log.get(x["id"], {}).get("sentences") or [])
+        if s.get("tries")
+    ]
+    tried = sent_tried if sent_tried else [x["attempts"] for x in timeline if x["attempts"]]
     EC = STD["episode_checks"]
     ep_vals = {
         "f0_spread_st": float(np.std(12 * np.log2(f0s / np.median(f0s)))) if len(f0s) else 99.0,
