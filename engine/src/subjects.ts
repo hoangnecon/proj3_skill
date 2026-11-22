@@ -11,6 +11,9 @@ export type SubjectSeat = {
   view?: 'front' | 'side' | 'back' | '3q';
   face?: 1 | -1;
   zOffset?: number; // depth-sort nudge above subject (default +20)
+  straddle?: boolean; // 3-layer straddle sandwich: far limb behind -> subject + SeatShadow -> torso + near limb + grip in front
+  grip?: [number, number]; // subject-local (gx, gy) IK hand target so rider grabs actual shell/collar/shoulder
+  wind?: number; // default wind stream felt by riders in this pose (e.g. 1.4 in fly, 0.8 in hover)
 };
 
 export type SubjectRenderOpts = {

@@ -36,6 +36,7 @@ export const segEnd = (seg: string) => Math.max(...WORDS.filter((w) => w.seg ===
 
 export type TT = number | string; // seconds from shot start, or an absolute word anchor
 export type Keys<T> = T | [T, TT][];
+export type ActionFx = 'dust' | 'sweat' | 'speed' | 'impact' | 'stars';
 
 export type Actor = {
   id: string; // stable within a shot; the same character keeps the same id across shots
@@ -71,6 +72,12 @@ export type Actor = {
   look2?: number; // side view head tilt, + = look up
   tip?: boolean; // tiptoe (short steps, lean)
   pant?: boolean; // out of breath (chest heave + puffs)
+  // ---- studio 2D animation physics & action FX (v5.0) ----
+  arcH?: number; // parabolic jump height (px) along path or jump bounce, keeping ground shadow planted on floor
+  wind?: number; // wind force (-1..+1, or higher e.g. 1.5 in flight) driving secondary hair & cloth drag
+  pushTarget?: [number, number]; // world (x, y) contact point that push/pull hands lock directly onto via IK
+  fx?: ActionFx[]; // procedural action FX ('dust' | 'sweat' | 'speed' | 'impact' | 'stars') rendered with the actor
+  shadow?: boolean; // ground contact shadow (default true for grounded non-ghost non-fg actors; false to opt out)
 };
 
 export type OverKind = 'tag' | 'bubble' | 'label' | 'stamp' | 'score' | 'pin' | 'title' | 'card' | 'arrow';
@@ -106,6 +113,8 @@ export type ExtraDef = {
   z?: number; // depth-sort nudge
   fg?: boolean; // render in foreground plane (d = 1.2)
   path?: [number, number, TT][]; // optional animated motion path for creatures/vehicles
+  altitude?: number; // vertical elevation (px) above floor plane (y is visual flying center, shadow projects onto y + altitude)
+  shadow?: boolean; // contact/altitude shadow (default true for SUBJECTS)
 };
 
 export type Mood = 'default' | 'morning' | 'golden' | 'danger' | 'lab' | 'flashback' | 'dramatic';

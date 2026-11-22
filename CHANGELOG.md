@@ -1,5 +1,22 @@
 # Changelog
 
+## `v5.0.0` — 2026-11-22 · Studio 2D Animation Physics (`src/anim.ts`), 3-Layer Straddle Mounting, Contact-Locked Effort, Living Action FX, Animation Craft CI (`MO-13..15`) & "Pasted-Sticker Test" Blind Review
+- **Pillar 1 — Studio 2D Animation Physics & Biomechanics Toolkit (`engine/src/anim.ts`, `engine.ts`, `subjects.ts`):**
+  - Added pure-TS `src/anim.ts` providing 12-principles easing (`springSettle`, `anticipateEase`, `parabolicArc`), 4-phase foot-roll gait biomechanics (`footCycle` with `walk` 60% stance vs `run` 38% airborne flight phase + `gaitHipBob` delayed head counter-nod), organic tapered articulated limbs (`taperSegPath`, `TaperLimb` with merged silhouette outline, sleeve cuffs & joint creases), curved C-arc torso builder (`curvedTorsoPath`), secondary hair/cloth wind helper (`hairWindOffset`), grounding shadows (`GroundShadow`, `SeatShadow`), and procedural riso action FX (`DustPuff`, `SweatDrops`, `SpeedLines`, `ImpactBurst`, `DizzyStars`).
+  - Extended `Actor` (`arcH`, `wind`, `pushTarget`, `fx`, `shadow`), `ExtraDef` (`altitude`, `shadow`), and `SubjectSeat` (`straddle`, `grip`, `wind`).
+- **Pillar 2 — 4-View Rig Upgrades & 3-Layer Straddle Mount Composition (`chars.tsx`, `side.tsx`, `threeq.tsx`, `back.tsx`, `Film.tsx`):**
+  - Upgraded character rigs with tapered articulated limbs, curved spine silhouettes, 4-phase foot-roll cycles, secondary hair wind drag, and `layer="far" | "near"` split rendering.
+  - Upgraded `Film.tsx` with automatic altitude-responsive `GroundShadow`s, parabolic `arcH` jump arcs, contact-locked `pushTarget` IK, procedural `ActionFx` rendering, and 3-layer straddle mount sandwich (`layer="far"` behind creature → creature + `SeatShadow` → `layer="near"` hugging flank with hands IK-locked onto `SubjectSeat.grip`).
+- **Pillar 3 — Animation Craft CI (`MO-13`, `MO-14`, `MO-15`) & "Pasted-Sticker Test" Blind Review (`engine/scripts/lint.mjs`, `engine/scripts/blind_pack.mjs`):**
+  - `MO-13` (No Air-Pushing / Contact-Lock Guard): validates `pushTarget: [tx, ty]` format & real arm reach (`> 380 * H * s` ERROR, `> 280 * H * s * 1.15` WARN + HOT), and flags `long_16x9` `push` poses/legs lacking `pushTarget` or `reach` (WARN + HOT).
+  - `MO-14` (Straddle Mount & Rider Cohesion Guard): validates every `Actor.mount` resolves to a valid `SubjectSeat` (ERROR), flags `>= 2` riders on a creature lacking `straddle: true` / `grip` (WARN + HOT), and rejects contradictory rider facing directions on the same creature (ERROR).
+  - `MO-15` (Living Motion & Secondary Action Guard): validates `Actor.fx` keys against `dust | sweat | speed | impact | stars` (ERROR), warns on weightless `fall`/`trip` with zero `fx` and zero `shake` (WARN), and warns on `fly`/`hover` extras missing `altitude` (WARN).
+  - Updated `MO-08` `lives` detection to recognize `arcH`, `mount`, `pushTarget`, `fx`, and `wind`, and excluded `anim.tsx` in `CH-10`.
+  - `blind_pack.mjs`: added explicit **Pasted-Sticker Anti-Pattern Check** under `acting` and `contact` in both 16:9 (10-check) and 9:16 (8-check) `RUBRIC.md` templates.
+- **Pillar 4 — Deep Studio 2D Animation Skills Rewrite & `v5.0.0` Docs:**
+  - Rewrote `skills/sv-21-motion/SKILL.md` with full Studio 2D Animation Craft (`v5.0`) guide, DO vs DON'T table (`MO-13..15`), and expanded strip/defect checklists.
+  - Updated `sv-20-design-system`, `sv-22-shots-camera`, `sv-02-long-form`, `CONVENTIONS.md`, `README.md`, and `.claude-plugin/plugin.json` (`5.0.0`); `validate_skills.py` reports **11 skills, 135 lint rules implemented, 0 errors, 0 warnings**.
+
 ## `v4.5.0` — 2026-11-22 · Deterministic G2→G4 Asset Blueprint (`plan_assets.py`), Glanceable Set Overview (`overview_sets.jpg`), Fast Long-Form QA Probes & Benchmark Suite v4.5 (`tools/benchmark_suite.py`)
 - **Pillar 1 — G2→G4 Asset Blueprint Planner, Set Overview Contact Sheet & Fast Long-Form Probes (`plan_assets.py`, `design.mjs`, `qa.mjs`):**
   - `engine/scripts/plan_assets.py`: zero-dependency deterministic G2→G4 blueprint and parallel worker planner reading `script.json`, `brief.md`, and `beats.md` in `< 0.5 s` to emit `qa/asset_blueprint.json` + `qa/asset_blueprint.md` (planned cast roster, recurring multi-pose Hero Subjects with `+seats` flags, multi-angle/sub-scene `sets_matrix`, and conflict-free G4/G5 worker splits).

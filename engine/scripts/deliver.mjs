@@ -83,7 +83,7 @@ if (process.env.SV_SKIP_RENDER && fresh) {
   const DEPS = makeShotHash(rows, P.SHOTS);
   const hashes = rows.map((r) => DEPS.hashOf(r));
   const globalFiles = [
-    'src/Film.tsx', 'src/Root.tsx', 'src/format.ts', 'src/kit.tsx', 'src/chars.tsx',
+    'src/Film.tsx', 'src/Root.tsx', 'src/format.ts', 'src/kit.tsx', 'src/anim.ts', 'src/chars.tsx',
     'src/side.tsx', 'src/back.tsx', 'src/threeq.tsx', 'src/subjects.ts', 'src/overlays.tsx', 'src/data/words.json',
     'src/data/cues.json', 'src/episode/cast.ts', 'src/episode/subjects.tsx', 'src/props.tsx',
   ];

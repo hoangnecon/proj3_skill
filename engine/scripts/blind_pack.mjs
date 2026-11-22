@@ -250,8 +250,8 @@ const rubric = isLong16x9
    - In \`looked\`, include \`"contact"\` (or \`"card"\`) for every shot, plus \`"crops"\` for HOT shots.
 4. **Include \`"blind_sha"\`** from the slice entry verbatim in each JSONL review line.
 5. **Check ALL 10 criteria** (\`acting\`, \`contact\`, \`overlap\`, \`set\`, \`text\`, \`caption\`, \`beat\`, \`model\`, \`framing\`, \`variety\`) formatted as \`"ok — ..."\` or \`"fix — ..."\`, with a \`note\` of >= 6 words describing what you actually saw:
-   - \`acting\`: expression, gesture, posture, and gaze match the narration beat; **verify articulated bent knees/elbows and dynamic physics** (no stiff, board-like standing on mounts or mid-action!).
-   - \`contact\`: feet planted on ground/floor, hands actually meet props/targets, seated bodies rest on seats; **verify mounted riders sit physically on their mount facing the travel direction, and verify non-OTS creatures are not half-sliced off the frame edge**.
+   - \`acting\`: expression, gesture, posture, and gaze match the narration beat; **verify articulated bent knees/elbows and dynamic physics** (no stiff, board-like standing on mounts or mid-action!). **Pasted-Sticker Anti-Pattern Check (MANDATORY \`fix\`):** flag automatic \`fix\` if limbs/torso read as a rigid brick with zero spine curve, knee flexion, or secondary hair/FX life, or if a character looks frozen mid-air during a jump/fall instead of showing real arc weight and reaction FX.
+   - \`contact\`: feet planted on ground/floor, hands actually meet props/targets, seated bodies rest on seats; **verify mounted riders sit physically on their mount facing the travel direction, and verify non-OTS creatures are not half-sliced off the frame edge**. **Pasted-Sticker Anti-Pattern Check (MANDATORY \`fix\`):** flag automatic \`fix\` if (a) a grounded character floats with no contact shadow or frozen mid-air jump, (b) hands in \`push\`/\`hold\`/\`ride\` grab empty air instead of the physical target/grip point, or (c) riders sit pasted flat on one side of a creature instead of straddling with a seat shadow.
    - \`overlap\`: no unintended character/prop collisions or faces hidden behind props/overlays.
    - \`set\`: environment reads clearly, clean perspective, no stray/clipped set geometry.
    - \`text\`: every sign, label, and overlay is legible, unclipped, and unoccluded.
@@ -272,7 +272,15 @@ const rubric = isLong16x9
    - For non-HOT shots with non-empty \`images.strips\`, open those strips; only open \`images.card_fallback\` if a frame on the contact page is ambiguous or looks suspicious.
    - In \`looked\`, include \`"contact"\` (or \`"card"\`) for every shot, plus \`"crops"\` for HOT shots.
 4. **Include \`"blind_sha"\`** from the slice entry verbatim in each JSONL review line.
-5. Check all 8 criteria (\`acting\`, \`contact\`, \`overlap\`, \`set\`, \`text\`, \`caption\`, \`beat\`, \`model\`) formatted as \`"ok — ..."\` or \`"fix — ..."\`, with a \`note\` of >= 6 words describing what you actually saw.
+5. **Check ALL 8 criteria** (\`acting\`, \`contact\`, \`overlap\`, \`set\`, \`text\`, \`caption\`, \`beat\`, \`model\`) formatted as \`"ok — ..."\` or \`"fix — ..."\`, with a \`note\` of >= 6 words describing what you actually saw:
+   - \`acting\`: expression, gesture, posture, and gaze match the narration beat. **Pasted-Sticker Anti-Pattern Check (MANDATORY \`fix\`):** flag automatic \`fix\` if limbs/torso read as a rigid brick with zero spine curve, knee flexion, or secondary hair/FX life, or if a character looks frozen mid-air during a jump/fall.
+   - \`contact\`: feet planted on ground/floor, hands actually meet props/targets, seated bodies rest on seats. **Pasted-Sticker Anti-Pattern Check (MANDATORY \`fix\`):** flag automatic \`fix\` if (a) a grounded character floats with no contact shadow or frozen mid-air jump, (b) hands in \`push\`/\`hold\`/\`ride\` grab empty air instead of the physical target/grip point, or (c) riders sit pasted flat on one side of a creature instead of straddling with a seat shadow.
+   - \`overlap\`: no unintended character/prop collisions or faces hidden behind props/overlays.
+   - \`set\`: environment reads clearly, clean perspective, no stray/clipped set geometry.
+   - \`text\`: every sign, label, and overlay is legible, unclipped, and unoccluded.
+   - \`caption\`: caption band is clear of faces, hands, and hero props.
+   - \`beat\`: visual action and timing match the spoken \`narration\` for this shot.
+   - \`model\`: character proportions, outfits, and identity stay on-model.
 6. Submit reviews via \`node scripts/qa.mjs review --batch <file.jsonl>\`.
 `;
 fs.writeFileSync(path.join(outDir, 'RUBRIC.md'), rubric);

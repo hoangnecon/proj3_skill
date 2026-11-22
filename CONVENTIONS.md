@@ -1,4 +1,4 @@
-# Conventions (`v4.5.0`)
+# Conventions (`v5.0.0`)
 
 Enforced by `tools/validate_skills.py`.
 
@@ -42,7 +42,7 @@ pin `standards/` by hash.
 | OV-01..04 | overlays | `lint.mjs shots` |
 | CA-01..07 | camera: zoom, move jolt, ratio, establish, world bounds (`CA-01..05`), 180° axis/eyeline continuity (`CA-06`), Long-Form shot-size progression & variety rhythm (`CA-07`) | `lint.mjs shots` |
 | SZ-01..02 | on-screen size and framing | `lint.mjs shots` |
-| MO-01..12 | motion (turnaround-squash, reach-across-face / raised-arms walk, floating `seatH`) | `lint.mjs shots` |
+| MO-01..15 | motion (`src/anim.ts`): walk/reach/sit/ride (`MO-01..09`), turnaround-squash (`MO-10`), reach-across-face / raised-arms walk (`MO-11`), floating `seatH` (`MO-12`), contact-locked `pushTarget` (`MO-13`), straddle mount & rider cohesion (`MO-14`), valid `ActionFx`, fall/trip impact weight & flying `altitude` shadow (`MO-15`) | `lint.mjs shots` |
 | KY-01 | animated set keys | `lint.mjs shots` |
 | CO-01..03 | coverage | `lint.mjs shots` |
 | PC-01..03 | shot pacing (`standards/pacing.json`) | `lint.mjs shots` |

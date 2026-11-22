@@ -47,6 +47,7 @@ const VALID_SHOT_SCALES = new Set(['establishing', 'medium', 'closeup', 'insert'
 const VALID_MOODS = new Set(['default', 'morning', 'golden', 'danger', 'lab', 'flashback', 'dramatic']);
 const EXPRS = new Set(['neutral', 'smug', 'angry', 'shock', 'sad', 'cry', 'joy', 'stern', 'sly', 'deadpan', 'eager', 'shh']);
 const SIDE_ARMS = new Set(['swing', 'down', 'hold', 'phone', 'cane', 'carry', 'ride', 'shh', 'raise', 'pocket', 'run', 'crouch', 'jump', 'fall', 'push', 'climb', 'cheer']);
+const VALID_FX = new Set(['dust', 'sweat', 'speed', 'impact', 'stars']);
 const OVER = new Set(['tag', 'bubble', 'label', 'stamp', 'score', 'pin', 'title', 'card', 'arrow']);
 const TH = {shapes: 60, colours: 8, texts: 2, halftone: 2, glow: 1, insertShapes: 15}; // exemplar median = 60 shapes
 const scriptMeta = (() => {
@@ -322,7 +323,7 @@ if (phase !== 'shots') {
   {
     const walkT = (d) => fs.existsSync(d) ? fs.readdirSync(d, {withFileTypes: true}).flatMap((e) => e.isDirectory() ? walkT(path.join(d, e.name)) : [path.join(d, e.name)]) : [];
     // every episode .tsx (a new file is no way around it); the engine rig files and the exemplar are not episode code
-    const ENGINE = /^src[\\/](chars|kit|side|back|threeq|subjects|Film|Root|overlays)\.tsx$|^src[\\/](design|exemplar)[\\/]/;
+    const ENGINE = /^src[\\/](chars|kit|side|back|threeq|subjects|anim|Film|Root|overlays)\.tsx$|^src[\\/](design|exemplar)[\\/]/;
     const files = walkT('src').filter((f) => /\.tsx$/.test(f) && !ENGINE.test(f));
     const DECL = /^(?:export\s+)?(?:const|let|function|type|interface|class)\s+([A-Za-z_$][\w$]*)/;
     const FACE = /\b\w*(eye|pupil|blink|iris|lash|brow|mouth|face|cheek|blush)\w*/i;
@@ -426,6 +427,9 @@ if (phase !== 'design') {
     }
   }
   // per resolved shot
+  const hot = {};
+  const markHot = (i, rule) => { (hot[i] ??= []).push(rule); };
+  const keyVals = (v) => (Array.isArray(v) ? v.map((x) => String(x[0])) : v !== undefined && v !== null ? [String(v)] : []);
   rows.forEach((r, i) => {
     const s = shots[i];
     const tag = `#${i} '${r.name}'`;
@@ -464,7 +468,7 @@ if (phase !== 'design') {
       err('CA-04', `${tag}: first shot in '${r.set}' is not an establishing frame (zoom ${Math.min(k0, k1)} > 1.2)`);
     // something must change in every shot (actor motion, camera move, set state, talk, expression, overlay)
     const lives = r.cam2 || (s.keys && Object.keys(s.keys).length) || (s.over ?? []).length || s.of || s.punch ||
-      (s.actors ?? []).some((A) => A.path || A.reach || A.talk || A.hop || A.shake || A.pant || A.ride || ['p', 'e', 'legs', 'arms', 'view'].some((k) => Array.isArray(A[k]))) ||
+      (s.actors ?? []).some((A) => A.path || A.reach || A.talk || A.hop || A.shake || A.pant || A.ride || A.arcH || A.mount || A.pushTarget || (A.fx && A.fx.length) || A.wind || ['p', 'e', 'legs', 'arms', 'view'].some((k) => Array.isArray(A[k]))) ||
       (s.extras ?? []).some((E) => (E.path && E.path.length > 1) || Array.isArray(E.pose) || Array.isArray(E.expr));
     if (!lives && !waived('MO-08', r.name)) warn('MO-08', `${tag}: nothing moves or changes for ${dur.toFixed(1)} s — add a camera drift, an expression key or a gesture`);
     // overlays visible at once
@@ -555,6 +559,117 @@ if (phase !== 'design') {
         } else if (A.seatH > 40 && (bed === 'outdoor' || bed === 'street' || bed === 'rain') && !hasSeatProp) {
           warn('MO-12', `${tag}: ${a.id} has seatH=${A.seatH} (> 40) on ${bed} set '${r.set}' without a bench/stool/chair/desk in extras — floating sit`);
         }
+      }
+      // MO-13: No Air-Pushing / Contact-Lock Guard
+      {
+        const hasPush = keyVals(A.p).some((v) => v.includes('push')) || keyVals(A.legs).some((v) => v.includes('push'));
+        if (A.pushTarget !== undefined) {
+          if (!(Array.isArray(A.pushTarget) && A.pushTarget.length === 2 && Number.isFinite(A.pushTarget[0]) && Number.isFinite(A.pushTarget[1]))) {
+            err('MO-13', `${tag}: actor '${a.id}' pushTarget must be a 2-element numeric coordinate [tx, ty]`);
+          } else if (!waived('MO-13', r.name)) {
+            let minDist = Infinity;
+            for (const u of [0.15, 0.5, 0.85]) {
+              const st = actorStateAt(a, A, r.t0 + dur * u, r, P);
+              const d = Math.hypot(A.pushTarget[0] - st.x, A.pushTarget[1] - (st.y - 410 * H * a.s));
+              if (d < minDist) minDist = d;
+            }
+            const maxPushErr = 380 * H * a.s;
+            const maxPushWarn = 280 * H * a.s * 1.15;
+            if (minDist > maxPushErr) {
+              err('MO-13', `${tag}: actor '${a.id}' pushTarget [${A.pushTarget.join(', ')}] is impossibly far (${Math.round(minDist)} px > ${Math.round(maxPushErr)} px) — move actor closer to the target`);
+            } else if (minDist > maxPushWarn) {
+              warn('MO-13', `${tag}: actor '${a.id}' pushTarget [${A.pushTarget.join(', ')}] exceeds comfortable arm reach (${Math.round(minDist)} px > ${Math.round(maxPushWarn)} px) — verify arm contact`);
+              markHot(r.i, 'MO-13');
+            }
+          }
+        }
+        if (hasPush) {
+          const hasContactLock = (Array.isArray(A.pushTarget) && A.pushTarget.length === 2) || (Array.isArray(A.reach) && A.reach.length > 0);
+          if (!hasContactLock && !waived('MO-13', r.name) && isLong16x9) {
+            warn('MO-13', `${tag}: actor '${a.id}' uses 'push' without pushTarget [tx, ty] or reach — hands risk pushing empty air; lock hands onto the physical target`);
+            markHot(r.i, 'MO-13');
+          }
+        }
+      }
+      // MO-15: Living Motion & Secondary Action Guard (actor FX + fall/trip impact weight)
+      if (A.fx !== undefined) {
+        if (!Array.isArray(A.fx)) {
+          err('MO-15', `${tag}: actor '${a.id}' fx must be an array of ActionFx keys (${[...VALID_FX].join('|')})`);
+        } else {
+          for (const fk of A.fx) {
+            if (!VALID_FX.has(fk)) {
+              err('MO-15', `${tag}: actor '${a.id}' unknown fx '${fk}' (expected ${[...VALID_FX].join('|')})`);
+            }
+          }
+        }
+      }
+      {
+        const hasFallOrTrip = keyVals(A.p).some((v) => v === 'fall' || v === 'trip') || keyVals(A.legs).some((v) => v === 'fall');
+        if (hasFallOrTrip && !(Array.isArray(A.fx) && A.fx.length > 0) && !s.shake && !waived('MO-15', r.name)) {
+          warn('MO-15', `${tag}: actor '${a.id}' uses fall/trip with zero fx and zero camera shake — add fx: ['impact', 'stars'] or fx: ['dust'] for physical impact weight`);
+        }
+      }
+    }
+    // MO-14: Straddle Mount & Rider Cohesion Guard
+    {
+      const tMid = (r.t0 + r.t1) / 2;
+      const mountedByTarget = new Map();
+      for (const A of s.actors ?? []) {
+        if (!A.mount?.target) continue;
+        const targetId = A.mount.target;
+        const slot = A.mount.slot ?? 0;
+        const ex = (s.extras ?? []).find((e) => e.id === targetId);
+        if (!ex) {
+          if (!waived('MO-14', r.name)) {
+            err('MO-14', `${tag}: actor '${A.id}' mounts target '${targetId}' which is not an extra id in this shot`);
+          }
+          continue;
+        }
+        const def = (P.SUBJECTS ?? {})[ex.k];
+        if (!def) {
+          if (!waived('MO-14', r.name)) {
+            err('MO-14', `${tag}: actor '${A.id}' mounts '${ex.k}' which is not registered in SUBJECTS (no SubjectSeat available)`);
+          }
+          continue;
+        }
+        const exPoses = ex.pose !== undefined ? keyVals(ex.pose) : [def.poses?.[0] ?? 'default'];
+        const curPose = scalarKeyAt(ex.pose, def.poses?.[0] ?? 'default', r, P, tMid);
+        for (const pose of exPoses) {
+          const resolved = def.seats?.[pose]?.[slot] ?? def.seats?.default?.[slot] ?? null;
+          if (!resolved && !waived('MO-14', r.name)) {
+            err('MO-14', `${tag}: actor '${A.id}' mounts '${ex.k}' (pose '${pose}', slot ${slot}) which has no matching SubjectSeat`);
+          }
+        }
+        const curSeat = def.seats?.[curPose]?.[slot] ?? def.seats?.default?.[slot] ?? null;
+        if (!mountedByTarget.has(targetId)) mountedByTarget.set(targetId, {ex, def, riders: []});
+        mountedByTarget.get(targetId).riders.push({A, seat: curSeat});
+      }
+      for (const {ex, def, riders} of mountedByTarget.values()) {
+        if (def.kind === 'creature' && riders.length >= 2) {
+          const seats = riders.map((rd) => rd.seat).filter(Boolean);
+          const hasStraddleOrGrip = seats.length > 0 && seats.every((st) => st.straddle === true || (Array.isArray(st.grip) && st.grip.length === 2));
+          if (!hasStraddleOrGrip && !waived('MO-14', r.name) && !lineWaived(subjectsSrc, 'MO-14', ex.k)) {
+            warn('MO-14', `${tag}: mounted riders on creature '${ex.k}' lack straddle:true / grip anchors in SubjectSeat — riders risk looking pasted flat on top of the shell`);
+            markHot(r.i, 'MO-14');
+          }
+          const fSign = ex.flip ? -1 : 1;
+          const riderFaces = riders.map(({A, seat}) => {
+            const seatFace = seat?.face ? seat.face * fSign : fSign;
+            const effFace = A.face !== undefined ? scalarKeyAt(A.face, seatFace, r, P, tMid) : seatFace;
+            return {id: A.id, dir: effFace < 0 ? -1 : 1};
+          });
+          const dirs = new Set(riderFaces.map((rf) => rf.dir));
+          if (dirs.size > 1 && !waived('MO-14', r.name)) {
+            err('MO-14', `${tag}: mounted riders on creature '${ex.k}' face contradictory directions (${riderFaces.map((rf) => `${rf.id}:${rf.dir > 0 ? '+1' : '-1'}`).join(', ')}) — all riders on the same creature must face the travel direction`);
+          }
+        }
+      }
+    }
+    // MO-15: Flying / hovering extra altitude check (grounding shadow below)
+    for (const ex of s.extras ?? []) {
+      const poses = keyVals(ex.pose);
+      if (poses.some((pv) => pv === 'fly' || pv === 'hover') && ex.altitude === undefined && !waived('MO-15', r.name)) {
+        warn('MO-15', `${tag}: extra '${ex.k}' uses pose 'fly'/'hover' without altitude — set altitude: 160..280 so the flying creature casts a grounding shadow below`);
       }
     }
     if (i > 0 && i < rows.length - 1
@@ -738,8 +853,6 @@ if (phase !== 'design') {
   // ---- screen geometry (GE-*, LA-*): measured from the shot table, no render. Each hit makes the shot HOT:
   // its review must open the measurement crops (node scripts/qa.mjs crops <i>) — see sv-22 "review cards".
   const looks = {...(P.EX_LOOKS ?? {}), ...P.CAST};
-  const hot = {};
-  const markHot = (i, rule) => { (hot[i] ??= []).push(rule); };
   const seen = new Set();
   const flag = (r, rule, msg, who = '', makeHot = rule !== 'GE-10') => {
     if (waived(rule, r.name) || seen.has(`${r.i}|${rule}|${who}`)) return; // one warning per shot, rule and actor

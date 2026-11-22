@@ -19,6 +19,7 @@ import {CAST, CAST_ROLES} from '../episode/cast';
 import {EX_LOOKS} from '../exemplar/looks';
 import {LayerG} from '../Film';
 import {FRAME_W, FRAME_H} from '../format';
+import {GroundShadow} from '../anim';
 
 const ALL: Record<string, Look> = {...EX_LOOKS, ...CAST};
 const EXPRS: Expr[] = ['neutral', 'joy', 'smug', 'sly', 'eager', 'shock', 'angry', 'stern', 'sad', 'cry', 'deadpan', 'shh'];
@@ -122,7 +123,8 @@ export const ExprSheet: React.FC<{look: string}> = ({look: key}) => {
       <Txt x={40} y={1444} s={28} c="concreteDark" w={800} a="start">dáng vận động 3/4 (ARTICULATED PHYSICS) — gập gối, nghiêng thân, squash & stretch</Txt>
       {PHYSICS_POSES.map((p, i) => (
         <g key={p} transform={`translate(${180 + i * 328} 1910) scale(0.62)`}>
-          <Person3Q look={look} pose={POSES[p]} expr={physExpr(p)} t={0.35} face={1} />
+          <GroundShadow x={0} y={4} rx={p === 'fall' ? 130 : 82} ry={18} alt={p === 'jump' ? 56 : p === 'fall' ? 24 : 0} opacity={0.24} />
+          <Person3Q look={look} pose={POSES[p]} expr={physExpr(p)} t={0.35} face={1} wind={p === 'run' || p === 'ride' ? 1.1 : 0} />
         </g>
       ))}
       {PHYSICS_POSES.map((p, i) => <Txt key={p} x={180 + i * 328} y={1954} s={28} c="blue" w={900}>{p}</Txt>)}
@@ -396,7 +398,7 @@ export const SubjectSheet: React.FC<{id: string; sizes?: Record<string, PropSize
       <Txt x={50} y={136} s={26} c="blue" w={800} a="start">
         {`${def.kind.toUpperCase()} · tỷ lệ chuẩn: ${def.relToActor[0]}×–${def.relToActor[1]}× người · ${def.poses.length} pose`}
       </Txt>
-      <Txt x={W - 50} y={136} s={22} c="concreteDark" w={800} a="end">chuẩn: người lớn 575 px · trẻ em 435 px · vạch 100 px · chốt vàng #n = mount</Txt>
+      <Txt x={W - 50} y={136} s={22} c="concreteDark" w={800} a="end">chuẩn: người lớn 575 px · trẻ em 435 px · vạch 100 px · chốt vàng #n = mount · thoi xanh = grip</Txt>
 
       {/* Main pose grid */}
       {poses.map((pose, i) => {
@@ -471,14 +473,28 @@ export const SubjectSheet: React.FC<{id: string; sizes?: Record<string, PropSize
               <g transform={`translate(${subjX} ${baseY}) scale(${sc})`}>
                 {def.render(pose, {t: 0.5, expr: defaultExpr})}
               </g>
-              {/* Numbered gold target pins (#0, #1...) for mount/seat anchors */}
+              {/* Numbered gold target pins (#0, #1...) for mount/seat anchors + teal grip diamonds */}
               {seatArr.map((_, si) => {
                 const seat = resolveSeat(def, pose, si);
                 if (!seat) return null;
                 const px = subjX + seat.dx * sc;
                 const py = baseY + seat.dy * sc;
+                const gx = seat.grip ? subjX + seat.grip[0] * sc : null;
+                const gy = seat.grip ? baseY + seat.grip[1] * sc : null;
                 return (
                   <g key={`seat-${si}`}>
+                    {gx !== null && gy !== null && (
+                      <g>
+                        <line x1={px} y1={py} x2={gx} y2={gy} stroke={PAL.teal} strokeWidth={2.5} strokeDasharray="6 4" opacity={0.9} />
+                        <polygon
+                          points={`${gx},${gy - 10} ${gx + 10},${gy} ${gx},${gy + 10} ${gx - 10},${gy}`}
+                          fill={PAL.teal}
+                          stroke={PAL.ink}
+                          strokeWidth={2.5}
+                          strokeLinejoin="round"
+                        />
+                      </g>
+                    )}
                     <line x1={px - 22} y1={py} x2={px + 22} y2={py} stroke={PAL.ink} strokeWidth={2.5} opacity={0.85} />
                     <line x1={px} y1={py - 22} x2={px} y2={py + 22} stroke={PAL.ink} strokeWidth={2.5} opacity={0.85} />
                     <circle cx={px} cy={py} r={14} fill={PAL.gold} stroke={PAL.ink} strokeWidth={3} />

@@ -2,7 +2,9 @@
 // Gốc = điểm trên mặt đất dưới hông, mặt quay về +x. Cùng tỉ lệ với rig chính diện (chars.tsx).
 // Dáng đi: bàn chân trụ dán chặt mặt đất (không trượt) — pha bước = quãng đường / SIDE_CYCLE.
 import React from 'react';
-import {E, L, PAL, R, Rr, S, Sh, col, LINE} from './kit';
+import {E, L, PAL, R, Rr, S, Sh, col} from './kit';
+import {TaperLimb, curvedTorsoPath, footCycle, gaitHipBob, hairWindOffset} from './anim';
+import type {FootSample} from './anim';
 import type {Look, Expr} from './chars';
 
 const rad = (d: number) => (d * Math.PI) / 180;
@@ -35,17 +37,10 @@ export type SideProps = {
   look2?: number; // nghiêng đầu: + nhìn lên
   squash?: number;
   pitch?: number;
+  wind?: number;
+  velX?: number;
+  layer?: 'all' | 'far' | 'near';
   prop?: (h: {near: P; far: P}) => React.ReactNode;
-};
-
-const limb = (pts: P[], w: number, c: string, k: string) => {
-  const d = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join('');
-  return (
-    <g key={k}>
-      <path d={d} fill="none" stroke={PAL.ink} strokeWidth={w + LINE * 2} strokeLinecap="round" strokeLinejoin="round" />
-      <path d={d} fill="none" stroke={col(c)} strokeWidth={w} strokeLinecap="round" strokeLinejoin="round" />
-    </g>
-  );
 };
 
 /** IK 2 khúc; bend=+1 khớp giữa lồi về +x (đầu gối), -1 lồi về -x (khuỷu tay) */
@@ -62,9 +57,7 @@ const ik = (a: P, b: P, l1: number, l2: number, bend: number): P => {
   return bend > 0 ? (p1[0] > p2[0] ? p1 : p2) : p1[0] < p2[0] ? p1 : p2;
 };
 
-const smooth = (u: number) => u * u * (3 - 2 * u);
-
-export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, slope = 0, legs = 'walk', seatH = 120, arms = 'swing', expr = 'neutral', talk = 0, blinkPh = 0, lean = 0, look2 = 0, squash, pitch, prop}) => {
+export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, slope = 0, legs = 'walk', seatH = 120, arms = 'swing', expr = 'neutral', talk = 0, blinkPh = 0, lean = 0, look2 = 0, squash, pitch, wind = 0, velX = 0, layer = 'all', prop}) => {
   const W = look.w ?? 1;
   const H = look.h ?? 1;
   const belly = look.belly ?? 0;
@@ -74,62 +67,41 @@ export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, 
   const armW = 28 * Math.min(1.25, W);
   const ua = 104 * H, fa = 96 * H;
   const HR = 100 * (look.head ?? 1);
-  const S0 = SIDE_STRIDE * Math.min(1.15, H) * speed;
   const ground = (x: number) => x * slope;
 
   const runPhase = phase !== 0 ? phase : t * 2.1;
   const runSpd = speed > 0.05 ? Math.min(1.3, speed) : 1;
 
-  // ---- chân (2-segment biomechanical IK) ----
-  const feet: {p: P; lift: number; rot: number}[] = [];
+  // ---- chân (4-phase foot-roll biomechanics + 2-segment IK) ----
+  const feet: FootSample[] = [];
   let hipY = -178 * H;
   let hipX = 0;
   let autoLean = 0;
   let autoPitch = 0;
   let autoSquash = 1;
+  let gaitHeadLag = 0;
+  let gaitTwist = 0;
 
   if (legs === 'walk') {
-    for (const i of [0, 1]) {
-      const q = (((phase + i * 0.5) % 1) + 1) % 1;
-      let x: number, y: number, lift = 0;
-      if (q < STANCE) {
-        x = S0 * (0.5 - q / STANCE);
-        y = ground(x);
-      } else {
-        const r = (q - STANCE) / (1 - STANCE);
-        x = -S0 / 2 + S0 * smooth(r);
-        lift = Math.sin(Math.PI * r) * (26 + 30 * Math.abs(slope)) * Math.min(1, speed * 1.4);
-        y = ground(x) - lift;
-      }
-      x += (i ? -1 : 1) * 14 * (1 - Math.min(1, speed * 2));
-      y = ground(x) - lift;
-      feet.push({p: [x, y], lift, rot: lift > 1 ? -10 : 0});
+    const walkStride = SIDE_STRIDE * Math.min(1.15, H);
+    for (const i of [0, 1] as const) {
+      feet.push(footCycle(phase, i, walkStride, speed, slope, 'walk'));
     }
-    // nhún: thấp nhất lúc hai chân chạm đất
-    hipY += 7 * speed * Math.cos(4 * Math.PI * phase) + ground(0) * 0.5;
+    const bob = gaitHipBob(phase, speed, 'walk');
+    hipY += bob.dy + ground(0) * 0.5;
+    gaitHeadLag = bob.headLagDeg;
+    gaitTwist = bob.torsoTwist;
     autoLean = 3 * speed;
   } else if (legs === 'run') {
-    const SRun = SIDE_STRIDE * 1.45 * Math.min(1.15, H) * runSpd;
-    const runStance = 0.42;
-    for (const i of [0, 1]) {
-      const q = (((runPhase + i * 0.5) % 1) + 1) % 1;
-      let x: number, y: number, lift = 0, rot = 0;
-      if (q < runStance) {
-        x = SRun * (0.5 - q / runStance);
-        y = ground(x);
-        rot = (q / runStance) * 16;
-      } else {
-        const r = (q - runStance) / (1 - runStance);
-        x = -SRun / 2 + SRun * smooth(r);
-        lift = Math.sin(Math.PI * r) * (54 + 28 * Math.abs(slope)) * Math.min(1.1, runSpd);
-        y = ground(x) - lift;
-        rot = r < 0.45 ? 18 : -14;
-      }
-      feet.push({p: [x, y], lift, rot});
+    const runStride = SIDE_STRIDE * 1.45 * Math.min(1.15, H);
+    for (const i of [0, 1] as const) {
+      feet.push(footCycle(runPhase, i, runStride, runSpd, slope, 'run'));
     }
-    // stronger vertical flight bounce + forward sprint lean
-    hipY = -178 * H - 14 * runSpd + 16 * runSpd * Math.cos(4 * Math.PI * runPhase) + ground(0) * 0.5;
-    autoLean = 12;
+    const bob = gaitHipBob(runPhase, runSpd, 'run');
+    hipY = -178 * H + bob.dy + ground(0) * 0.5;
+    gaitHeadLag = bob.headLagDeg;
+    gaitTwist = bob.torsoTwist;
+    autoLean = 12 * Math.min(1.15, runSpd);
   } else if (legs === 'sit') {
     hipY = -seatH;
     hipX = -10;
@@ -144,7 +116,8 @@ export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, 
     autoLean = 14;
     autoSquash = 0.92;
   } else if (legs === 'jump') {
-    hipY = -178 * H - 55 + Math.sin(t * 8) * 5;
+    const jCyc = Math.sin(t * 7 + blinkPh);
+    hipY = -178 * H - 55 + jCyc * 6;
     autoLean = 6;
     autoSquash = 1.07;
   } else if (legs === 'fall') {
@@ -152,7 +125,7 @@ export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, 
     autoPitch = -65;
     autoSquash = 0.94;
   } else if (legs === 'push') {
-    hipY = -152 * H;
+    hipY = -146 * H;
     hipX = -10;
     autoLean = 26;
     autoSquash = 0.95;
@@ -168,38 +141,54 @@ export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, 
   const shY = -178 * H - 196 * H + lowered;
   const hip: P = [hipX, hipY];
 
+  // ---- C-arc spine curvature ----
+  const bendX =
+    legs === 'run' ? 18 * runSpd + gaitTwist * 0.8 :
+    legs === 'ride' ? 22 :
+    legs === 'push' ? 28 :
+    legs === 'crouch' ? 16 :
+    legs === 'fall' ? -24 :
+    legs === 'jump' ? -6 :
+    legs === 'climb' ? 10 :
+    legs === 'walk' ? 4 * speed + gaitTwist * 0.5 + Math.sin(t * 2.5 + blinkPh) * 1.2 :
+    Math.sin(t * 2.5 + blinkPh) * 1.2;
+  const topShift = bendX * 0.35;
+
   const shoe = look.shoes ?? 'red';
   const pants = look.pants;
   const drawLeg = (i: number, shadeO: number) => {
     let knee: P, ankle: P, toeRot = 0;
     if (legs === 'walk' || legs === 'run') {
       const f = feet[i];
-      ankle = [f.p[0], f.p[1] - 14];
+      // During stance push-off (lift < 1), lift ankle gently as heel rises so toe stays planted on ground
+      const heelOff = f.lift < 1 ? f.heelLift * 0.72 : 0;
+      ankle = [f.x, f.y - 14 - heelOff];
       knee = ik(hip, ankle, thigh, shin, +1);
-      toeRot = f.rot;
+      toeRot = f.toeRot;
     } else if (legs === 'sit') {
       // bàn chân đặt trước; đầu gối tự gập theo độ cao hông (ngồi xuống mượt khi seatH giảm dần)
       ankle = [hip[0] + thigh * 0.95 - i * 12, -14];
       knee = ik(hip, ankle, thigh, shin, +1);
     } else if (legs === 'ride') {
-      // thigh forward-down gripping mount, knee bent ~105°, ankle tucked beneath hip
-      ankle = [hip[0] + (i === 0 ? 10 : -4) * H, hip[1] + 98 * H];
+      // thigh forward-down gripping mount, boots angled cleanly along curved stirrup/shell flank
+      ankle = [hip[0] + (i === 0 ? 14 : -4) * H, hip[1] + (i === 0 ? 96 : 98) * H];
       knee = ik(hip, ankle, thigh, shin, +1);
-      toeRot = 18;
+      toeRot = i === 0 ? 24 : 20;
     } else if (legs === 'crouch') {
       // feet braced flat on ground, deep athletic knee bend
       ankle = [hip[0] + (i === 0 ? 34 : -10) * H, -14];
       knee = ik(hip, ankle, thigh, shin, +1);
       toeRot = 0;
     } else if (legs === 'jump') {
+      const jCyc = Math.sin(t * 7 + blinkPh);
       if (i === 0) {
-        // front knee tucked high
-        ankle = [hip[0] + 24 * H, hip[1] + 94 * H];
-        toeRot = 24;
+        // front knee tucked high with subtle mid-air hover tuck
+        ankle = [hip[0] + (24 + jCyc * 4) * H, hip[1] + (94 - jCyc * 8) * H];
+        toeRot = 24 + jCyc * 6;
       } else {
         // back leg trailing bent
-        ankle = [hip[0] - 66 * H, hip[1] + 116 * H];
-        toeRot = 32;
+        ankle = [hip[0] - (66 - jCyc * 5) * H, hip[1] + (116 - jCyc * 6) * H];
+        toeRot = 32 + jCyc * 5;
       }
       knee = ik(hip, ankle, thigh, shin, +1);
     } else if (legs === 'fall') {
@@ -215,13 +204,13 @@ export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, 
       knee = ik(hip, ankle, thigh, shin, +1);
     } else if (legs === 'push') {
       if (i === 0) {
-        // front foot planted forward with bent knee
-        ankle = [hip[0] + 46 * H, -14];
+        // front shoe planted completely flat with deeply bent driving knee
+        ankle = [hip[0] + 48 * H, -14];
         toeRot = 0;
       } else {
-        // back leg braced far behind (-thigh * 0.95)
-        ankle = [hip[0] - thigh * 0.95, -14];
-        toeRot = 18;
+        // back shoe angled toe-down (+28°) pushing off toes!
+        ankle = [hip[0] - thigh * 0.95, -24];
+        toeRot = 28;
       }
       knee = ik(hip, ankle, thigh, shin, +1);
     } else if (legs === 'climb') {
@@ -238,17 +227,25 @@ export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, 
     const k = 'lg' + i;
     return (
       <g key={k}>
-        {limb([hip, knee, ankle], legW, pants, k + 'l')}
+        <TaperLimb
+          pts={[hip, knee, ankle]}
+          wTop={legW * 1.12}
+          wMid={legW * 0.96}
+          wBot={legW * 0.80}
+          fill={pants}
+          dim={shadeO}
+          jointCrease={true}
+        />
         <g transform={`translate(${ankle[0].toFixed(1)} ${ankle[1].toFixed(1)}) rotate(${toeRot.toFixed(1)})`}>
           <S d={Rr(-18, -6, 62, 26, 12)} f={shoe} />
+          {shadeO > 0 && <path d={Rr(-18, -6, 62, 26, 12)} fill={PAL.ink} opacity={shadeO} />}
         </g>
-        {shadeO > 0 && <path d={`M${hip[0].toFixed(1)} ${hip[1].toFixed(1)}L${knee[0].toFixed(1)} ${knee[1].toFixed(1)}L${ankle[0].toFixed(1)} ${ankle[1].toFixed(1)}`} stroke={PAL.ink} strokeWidth={legW} strokeLinecap="round" strokeLinejoin="round" fill="none" opacity={shadeO} />}
       </g>
     );
   };
 
   // ---- tay ----
-  const shoulder: P = [hipX + 4 * W, shY + 26];
+  const shoulder: P = [hipX + 4 * W + topShift + gaitTwist, shY + 26];
   const resolvedArms =
     arms === 'swing' && (legs === 'run' || legs === 'ride' || legs === 'crouch' || legs === 'jump' || legs === 'fall' || legs === 'push' || legs === 'climb')
       ? legs
@@ -278,9 +275,10 @@ export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, 
       a = near ? 26 : 36;
       e = near ? 68 : 60;
     } else if (resolvedArms === 'jump') {
-      // arms swept up/forward
-      a = near ? 128 : 142;
-      e = near ? 26 : 18;
+      // arms swept up/forward with subtle mid-air lift
+      const jCyc = Math.sin(t * 7 + blinkPh);
+      a = (near ? 128 : 142) + jCyc * 8;
+      e = (near ? 26 : 18) - jCyc * 4;
     } else if (resolvedArms === 'fall') {
       // arms flailing up/back
       const fl = Math.sin(t * 20 + (near ? 0 : 2.3)) * 22;
@@ -317,45 +315,64 @@ export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, 
   const farA = armPts(false);
   const sleeveC = look.top === 'tank' ? skin : look.topC;
   const fullSleeve = ['suit', 'uniform', 'robe', 'chef', 'aothe', 'blouse'].includes(look.top);
+  const hasShortSleeve = !fullSleeve && look.top !== 'tank';
   const drawArm = (p: P[], k: string, dim: boolean) => (
     <g key={k}>
-      {limb(p, armW, fullSleeve ? sleeveC : skin, k + 'a')}
-      {!fullSleeve && limb([p[0], [p[0][0] + (p[1][0] - p[0][0]) * 0.5, p[0][1] + (p[1][1] - p[0][1]) * 0.5]], armW + 6, sleeveC, k + 's')}
+      <TaperLimb
+        pts={p}
+        wTop={armW * 1.08}
+        wMid={armW * 0.92}
+        wBot={armW * 0.76}
+        fill={fullSleeve ? sleeveC : skin}
+        dim={dim ? 0.22 : 0}
+        sleeveFrac={hasShortSleeve ? 0.48 : undefined}
+        sleeveFill={hasShortSleeve ? sleeveC : undefined}
+        jointCrease={true}
+      />
       <S d={E(p[2][0], p[2][1], 16, 16)} f={skin} />
-      {dim && <path d={`M${p[0][0].toFixed(1)} ${p[0][1].toFixed(1)}L${p[1][0].toFixed(1)} ${p[1][1].toFixed(1)}L${p[2][0].toFixed(1)} ${p[2][1].toFixed(1)}`} stroke={PAL.ink} strokeWidth={armW} strokeLinecap="round" strokeLinejoin="round" fill="none" opacity={0.22} />}
+      {dim && <path d={E(p[2][0], p[2][1], 16, 16)} fill={PAL.ink} opacity={0.22} />}
     </g>
   );
 
-  // ---- thân ----
+  // ---- thân (curved C-arc spine silhouette) ----
   const sY = shY;
   const bY = hipY;
   const fr = hipX + 54 * W + belly * 34; // bụng phía trước
   const bk = hipX - 52 * W;
   const long = look.top === 'robe' || look.top === 'aothe';
   const hem = long ? bY + 118 * H : bY + 26;
-  const torso = `M${bk + 4} ${sY - 10}C${bk - 6} ${sY + 40} ${bk - 4} ${(sY + bY) / 2} ${bk + 2} ${hem}L${fr - 8} ${hem}C${fr + belly * 16} ${hem - 40} ${fr + belly * 20} ${(sY + bY) / 2} ${fr - 6} ${sY + 60}C${fr - 4} ${sY + 10} ${hipX + 30 * W} ${sY - 16} ${hipX + 8} ${sY - 18}C${hipX - 10} ${sY - 18} ${bk + 10} ${sY - 18} ${bk + 4} ${sY - 10}Z`;
+  const torso = curvedTorsoPath(bk, fr, bk, fr, sY, hem, bendX, belly);
   const pat: React.ReactNode[] = [];
   if (look.pattern === 'dots' || look.pattern === 'flowers') {
     for (let r = 0; r < 9; r++) for (let c = 0; c < 4; c++) pat.push(<circle key={r + '-' + c} cx={bk + 12 + c * 26 + (r % 2) * 12} cy={sY + 4 + r * 26} r={5} fill={col(look.patC ?? 'yellow')} />);
   } else if (look.pattern === 'stripes') {
-    for (let i = 0; i < 12; i++) pat.push(<rect key={i} x={bk - 20} y={sY + 12 + i * 22} width={200} height={8} fill={col(look.patC ?? 'trim')} />);
+    for (let i = 0; i < 12; i++) pat.push(<rect key={i} x={bk - 40} y={sY + 12 + i * 22} width={240} height={8} fill={col(look.patC ?? 'trim')} />);
   }
   const det: React.ReactNode[] = [];
   if (look.top === 'shirt' || look.top === 'polo' || look.top === 'uniform') {
-    det.push(<S key="col" d={`M${hipX + 8} ${sY - 18}L${hipX + 30 * W} ${sY + 4}L${hipX + 18} ${sY + 14}Z`} f={look.top === 'polo' ? look.topC2 ?? 'trim' : look.topC} />);
-    for (let i = 0; i < (look.top === 'polo' ? 2 : 5); i++) det.push(<circle key={'b' + i} cx={fr - 14 + (i > 2 ? belly * 10 : 0)} cy={sY + 40 + i * 34} r={4} fill={PAL.ink} />);
-    if (look.top === 'uniform') det.push(<S key="pk" d={Rr(hipX + 4, sY + 50, 34, 34, 6)} f={look.topC} />);
+    det.push(<S key="col" d={`M${hipX + 8 + topShift} ${sY - 14}L${hipX + 30 * W + topShift} ${sY + 8}L${hipX + 18 + topShift} ${sY + 18}Z`} f={look.top === 'polo' ? look.topC2 ?? 'trim' : look.topC} />);
+    for (let i = 0; i < (look.top === 'polo' ? 2 : 5); i++) det.push(<circle key={'b' + i} cx={fr - 14 + topShift * (1 - i * 0.16) + (i > 2 ? belly * 10 : 0)} cy={sY + 40 + i * 34} r={4} fill={PAL.ink} />);
+    if (look.top === 'uniform') det.push(<S key="pk" d={Rr(hipX + 4 + topShift * 0.7, sY + 50, 34, 34, 6)} f={look.topC} />);
   } else if (look.top === 'suit') {
-    det.push(<S key="tie" d={`M${fr - 22} ${sY - 6}l12 0l6 110l-14 18Z`} f={look.topC2 ?? 'red'} />);
-    det.push(<S key="lap" d={`M${hipX + 8} ${sY - 18}L${fr - 8} ${sY + 120}L${fr - 30} ${sY + 20}Z`} f={look.topC} />);
+    det.push(<S key="tie" d={`M${fr - 22 + topShift} ${sY - 6}l12 0l6 110l-14 18Z`} f={look.topC2 ?? 'red'} />);
+    det.push(<S key="lap" d={`M${hipX + 8 + topShift} ${sY - 14}L${fr - 8 + topShift * 0.6} ${sY + 120}L${fr - 30 + topShift * 0.8} ${sY + 20}Z`} f={look.topC} />);
   }
-  if (look.vest) det.push(<S key="vs" d={`M${bk + 2} ${sY + 4}L${fr - 8} ${sY + 4}L${fr - 4} ${bY + 20}L${bk} ${bY + 20}Z`} f="orange" />, <rect key="vs2" x={bk} y={bY - 60} width={fr - bk} height={14} fill={PAL.trim} stroke={PAL.ink} strokeWidth={3} />);
-  if (look.chain) det.push(<path key="ch" d={`M${hipX + 6} ${sY - 14}Q${fr} ${sY + 40} ${fr - 6} ${sY - 2}`} fill="none" stroke={PAL.gold} strokeWidth={7} strokeDasharray="2 9" strokeLinecap="round" />);
+  if (look.vest) det.push(<S key="vs" d={`M${bk + 2 + topShift} ${sY + 4}L${fr - 8 + topShift} ${sY + 4}L${fr - 4} ${bY + 20}L${bk} ${bY + 20}Z`} f="orange" />, <rect key="vs2" x={bk} y={bY - 60} width={fr - bk} height={14} fill={PAL.trim} stroke={PAL.ink} strokeWidth={3} />);
+  if (look.chain) det.push(<path key="ch" d={`M${hipX + 6 + topShift} ${sY - 12}Q${fr + topShift * 0.8} ${sY + 40} ${fr - 6 + topShift} ${sY - 2}`} fill="none" stroke={PAL.gold} strokeWidth={7} strokeDasharray="2 9" strokeLinecap="round" />);
+
+  // ---- secondary motion: wind hair + gait head lag ----
+  const effWind = wind + (legs === 'run' ? runSpd * 0.9 : legs === 'walk' ? speed * 0.25 : 0);
+  const hw = hairWindOffset(t, effWind, velX, blinkPh);
+  const dynamicHeadLag =
+    gaitHeadLag +
+    (legs === 'jump' ? Math.cos(t * 7 + blinkPh) * 3 : legs === 'fall' ? Math.sin(t * 16 + blinkPh) * 4.5 : 0) -
+    (lean + autoLean) * 0.14 +
+    Math.max(-2, Math.min(2, hw.rot * 0.06));
 
   // ---- đầu ----
   const hy = sY - 8 - HR * 0.9;
-  const hx = hipX + 12;
-  const head = <HeadSide look={look} x={hx} y={hy} r={HR} expr={expr} talk={talk} t={t} blinkPh={blinkPh} tilt={look2} />;
+  const hx = hipX + 12 + topShift;
+  const head = <HeadSide look={look} x={hx} y={hy} r={HR} expr={expr} talk={talk} t={t} blinkPh={blinkPh} tilt={look2 + dynamicHeadLag} hw={hw} />;
 
   const legBack = drawLeg(1, 0.18);
   const legFront = drawLeg(0, 0);
@@ -365,42 +382,67 @@ export const PersonSide: React.FC<SideProps> = ({look, t, phase = 0, speed = 0, 
   const sxSq = 1 / Math.sqrt(sq);
   const totalRot = lean + autoLean + (pitch ?? autoPitch);
 
+  const showFar = layer !== 'near';
+  const showNear = layer !== 'far';
+
   return (
     <g transform={`rotate(${totalRot.toFixed(2)} ${hipX.toFixed(1)} ${hipY.toFixed(1)}) scale(${sxSq.toFixed(4)} ${sq.toFixed(4)})`}>
-      {legs === 'fall' && (
+      {showNear && legs === 'fall' && (
         <g>
           <L d={`M${bk - 26} ${sY + 40}q-20 30 6 54`} w={4} o={0.35} />
           <L d={`M${hipX + 104} ${hipY + 34}q20 18 4 44`} w={4} o={0.35} />
         </g>
       )}
-      {drawArm(farA, 'fa', true)}
-      {legBack}
-      <S d={torso} f={look.topC} />
-      <clipPath id={`ts-${look.name}`}><path d={torso} /></clipPath>
-      <g clipPath={`url(#ts-${look.name})`}>
-        {pat}
-        <Sh d={`M${bk - 10} ${sY - 30}L${bk + 26} ${sY - 30}L${bk + 26} ${hem + 10}L${bk - 10} ${hem + 10}Z`} o={0.55} />
-      </g>
-      {det}
-      <S d={R(hipX - 4, sY - 40, 34, 30)} f="skinShade" />
-      {legFront}
-      {head}
-      {prop?.(hands)}
-      {drawArm(nearA, 'na', false)}
+      {showFar && drawArm(farA, 'fa', true)}
+      {showFar && legBack}
+      {showNear && (
+        <>
+          <S d={torso} f={look.topC} />
+          <clipPath id={`ts-${look.name}`}><path d={torso} /></clipPath>
+          <g clipPath={`url(#ts-${look.name})`}>
+            {pat}
+            <Sh d={`M${(bk - 24 + Math.min(0, bendX * 0.6)).toFixed(1)} ${sY - 30}L${(bk + 28 + Math.max(0, bendX * 0.45)).toFixed(1)} ${sY - 30}L${(bk + 28).toFixed(1)} ${hem + 14}L${(bk - 24).toFixed(1)} ${hem + 14}Z`} o={0.55} />
+          </g>
+          {det}
+          <S d={R(hipX - 4 + topShift, sY - 40, 34, 30)} f="skinShade" />
+          {legFront}
+          {head}
+          {prop?.(hands)}
+          {drawArm(nearA, 'na', false)}
+        </>
+      )}
     </g>
   );
 };
 
-const HeadSide: React.FC<{look: Look; x: number; y: number; r: number; expr: Expr; talk: number; t: number; blinkPh: number; tilt: number}> = ({look, x, y, r, expr, talk, t, blinkPh, tilt}) => {
+type HairWind = {dx: number; dy: number; rot: number};
+
+const HeadSide: React.FC<{look: Look; x: number; y: number; r: number; expr: Expr; talk: number; t: number; blinkPh: number; tilt: number; hw: HairWind}> = ({look, x, y, r, expr, talk, t, blinkPh, tilt, hw}) => {
   const skin = look.skin ?? 'skin';
   const hairC = look.hairC ?? 'hair';
+  const wdx = hw.dx;
+  const wdy = hw.dy;
   const els: React.ReactNode[] = [];
-  // tóc phía sau
-  if (look.hair === 'bun') els.push(<S key="bun" d={E(-r * 0.85, -r * 0.55, r * 0.36, r * 0.32)} f={hairC} />);
-  if (look.hair === 'long') els.push(<S key="lg" d={`M${-r * 0.2} ${-r * 0.9}C${-r * 1.2} ${-r * 0.8} ${-r * 1.15} ${r * 0.9} ${-r * 0.7} ${r * 1.45}L${-r * 0.1} ${r * 1.2}C${-r * 0.4} ${r * 0.6} ${-r * 0.2} ${0} ${0} ${-r * 0.2}Z`} f={hairC} />);
+  // tóc phía sau (with wind & bounce secondary motion)
+  if (look.hair === 'bun') {
+    els.push(
+      <g key="bun" transform={`rotate(${(hw.rot * 0.45).toFixed(2)} ${(-r * 0.68).toFixed(1)} ${(-r * 0.45).toFixed(1)}) translate(0 ${(wdy * 0.35).toFixed(1)})`}>
+        <S d={E(-r * 0.85, -r * 0.55, r * 0.36, r * 0.32)} f={hairC} />
+      </g>,
+    );
+  }
+  if (look.hair === 'long') {
+    els.push(
+      <S
+        key="lg"
+        d={`M${(-r * 0.2).toFixed(1)} ${(-r * 0.9).toFixed(1)}C${(-r * 1.2 + wdx * 0.35).toFixed(1)} ${(-r * 0.8 + wdy * 0.25).toFixed(1)} ${(-r * 1.15 + wdx * 0.85).toFixed(1)} ${(r * 0.85 + wdy * 0.65).toFixed(1)} ${(-r * 0.72 + wdx * 1.25).toFixed(1)} ${(r * 1.42 + wdy * 1.05).toFixed(1)}L${(-r * 0.12 + wdx * 0.85).toFixed(1)} ${(r * 1.18 + wdy * 0.75).toFixed(1)}C${(-r * 0.4 + wdx * 0.4).toFixed(1)} ${(r * 0.58 + wdy * 0.35).toFixed(1)} ${(-r * 0.2).toFixed(1)} 0 0 ${(-r * 0.2).toFixed(1)}Z`}
+        f={hairC}
+      />,
+    );
+  }
   if (look.hair === 'curly') for (let i = 0; i < 7; i++) {
     const a = Math.PI * (0.75 + (i / 6) * 1.0);
-    els.push(<S key={'cu' + i} d={E(Math.cos(a) * r * 0.95 - r * 0.05, Math.sin(a) * r * 0.95, r * 0.34, r * 0.34)} f={hairC} />);
+    els.push(<S key={'cu' + i} d={E(Math.cos(a) * r * 0.95 - r * 0.05 + wdx * 0.14, Math.sin(a) * r * 0.95 + wdy * 0.14, r * 0.34, r * 0.34)} f={hairC} />);
   }
   // mặt nghiêng: hộp sọ + mũi + cằm
   // mặt nghiêng tròn: má phúng, mũi là một nút nhỏ, cằm tròn — không mũi nhọn
@@ -422,13 +464,19 @@ const HeadSide: React.FC<{look: Look; x: number; y: number; r: number; expr: Exp
     case 'curly':
       for (let i = 0; i < 5; i++) {
         const a = Math.PI * (1.15 + (i / 4) * 0.55);
-        els.push(<S key={'cf' + i} d={E(Math.cos(a) * r * 0.78, Math.sin(a) * r * 0.82, r * 0.3, r * 0.27)} f={hairC} />);
+        els.push(<S key={'cf' + i} d={E(Math.cos(a) * r * 0.78 + wdx * 0.08, Math.sin(a) * r * 0.82 + wdy * 0.08, r * 0.3, r * 0.27)} f={hairC} />);
       }
       break;
     default:
       // side/neat/short/kid/bun/long: mũ tóc phủ đỉnh và gáy, mái chấm trán
       hp(`M${-r * 0.92} ${r * 0.25}C${-r * 1.05} ${-r * 0.9} ${r * 0.3} ${-r * 1.25} ${r * 0.86} ${-r * 0.42}C${r * 0.6} ${-r * 0.5} ${r * 0.35} ${-r * 0.45} ${r * 0.16} ${-r * 0.36}C${0} ${-r * 0.3} ${-r * 0.2} ${-r * 0.1} ${-r * 0.32} ${r * 0.0}C${-r * 0.5} ${-r * 0.06} ${-r * 0.7} ${r * 0.1} ${-r * 0.92} ${r * 0.25}Z`, 'h');
-      if (look.hair === 'kid' || look.hair === 'short') els.push(<path key="spk" d={`M${r * 0.6} ${-r * 0.52}l${r * 0.14} ${-r * 0.1}l${-r * 0.02} ${r * 0.14}`} fill={col(hairC)} stroke={PAL.ink} strokeWidth={4} />);
+      if (look.hair === 'kid' || look.hair === 'short') {
+        els.push(
+          <g key="spk" transform={`rotate(${(hw.rot * 0.55).toFixed(2)} ${(r * 0.6).toFixed(1)} ${(-r * 0.52).toFixed(1)})`}>
+            <path d={`M${(r * 0.6).toFixed(1)} ${(-r * 0.52).toFixed(1)}l${(r * 0.14).toFixed(1)} ${(-r * 0.1).toFixed(1)}l${(-r * 0.02).toFixed(1)} ${(r * 0.14).toFixed(1)}`} fill={col(hairC)} stroke={PAL.ink} strokeWidth={4} />
+          </g>,
+        );
+      }
   }
   // mũ
   const hat = look.hat ?? 'none';
@@ -490,7 +538,8 @@ const HeadSide: React.FC<{look: Look; x: number; y: number; r: number; expr: Exp
   if (look.mustache) els.push(<S key="mu" d={`M${mx - r * 0.24} ${my - 10}q${r * 0.24} ${-r * 0.16} ${r * 0.4} ${-r * 0.02}q${-r * 0.16} ${r * 0.12} ${-r * 0.4} ${r * 0.08}Z`} f={look.beardC ?? hairC} />);
   if (look.beard) {
     const bl = look.beard === 'long' ? r * 0.9 : r * 0.4;
-    els.push(<S key="bd" d={`M${mx - r * 0.3} ${my + r * 0.18}Q${mx - r * 0.1} ${my + r * 0.2 + bl} ${mx + r * 0.05} ${my + r * 0.18}Z`} f={look.beardC ?? hairC} />);
+    const bSway = look.beard === 'long' ? wdx * 0.35 : wdx * 0.1;
+    els.push(<S key="bd" d={`M${(mx - r * 0.3).toFixed(1)} ${(my + r * 0.18).toFixed(1)}Q${(mx - r * 0.1 + bSway).toFixed(1)} ${(my + r * 0.2 + bl).toFixed(1)} ${(mx + r * 0.05).toFixed(1)} ${(my + r * 0.18).toFixed(1)}Z`} f={look.beardC ?? hairC} />);
   }
   if (look.glasses === 'round' || look.glasses === 'square') {
     els.push(look.glasses === 'round' ? <circle key="gl" cx={ex + 4} cy={ey} r={r * 0.24} fill={PAL.white} fillOpacity={0.25} stroke={PAL.ink} strokeWidth={5} /> : <rect key="gl" x={ex - r * 0.2} y={ey - r * 0.17} width={r * 0.48} height={r * 0.34} rx={6} fill={PAL.white} fillOpacity={0.25} stroke={PAL.ink} strokeWidth={5} />);
@@ -500,5 +549,5 @@ const HeadSide: React.FC<{look: Look; x: number; y: number; r: number; expr: Exp
     els.push(<S key="sg" d={`M${ex - r * 0.22} ${ey - r * 0.14}h${r * 0.5}l${-r * 0.04} ${r * 0.26}q${-r * 0.2} ${r * 0.08} ${-r * 0.42} 0Z`} f="ink" sw={3} />);
     els.push(<L key="sga" d={`M${ex - r * 0.22} ${ey - r * 0.08}L${-r * 0.16} ${-r * 0.04}`} w={5} />);
   }
-  return <g transform={`translate(${x} ${y}) rotate(${-tilt} 0 ${r * 0.8})`}>{els}</g>;
+  return <g transform={`translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${(-tilt).toFixed(2)} 0 ${(r * 0.8).toFixed(1)})`}>{els}</g>;
 };

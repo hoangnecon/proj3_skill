@@ -2,6 +2,7 @@
 // Gốc toạ độ = điểm giữa hai bàn chân. Trục y âm là đi lên. Chuẩn quay phải-trước (+x), lật mượt bằng scale(face, 1).
 import React from 'react';
 import {E, L, PAL, R, Rr, S, Sh, col, LINE, Smoke} from './kit';
+import {TaperLimb, curvedTorsoPath, hairWindOffset} from './anim';
 import type {Arm, Expr, Look, Pose} from './chars';
 
 const rad = (d: number) => (d * Math.PI) / 180;
@@ -17,21 +18,28 @@ export type ThreeQProps = {
   face?: 1 | -1; // 1 = quay phải-trước, -1 = quay trái-trước
   gaze?: number; // -1..1 hướng nhìn bổ sung
   blinkPh?: number;
+  wind?: number; // luồng gió thổi ngược hướng mặt (mặc định 0)
+  velX?: number; // vận tốc ngang thế giới px/s (mặc định 0)
+  layer?: 'all' | 'far' | 'near'; // tách lớp kẹp vật cưỡi (mặc định 'all')
   prop?: (h: Hands) => React.ReactNode;
   propBack?: (h: Hands) => React.ReactNode;
 };
 
-const limb = (pts: [number, number][], w: number, c: string, key: string, nl = false) => {
-  const d = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join('');
-  return (
-    <g key={key}>
-      {!nl && <path d={d} fill="none" stroke={PAL.ink} strokeWidth={w + LINE * 2} strokeLinecap="round" strokeLinejoin="round" />}
-      <path d={d} fill="none" stroke={col(c)} strokeWidth={w} strokeLinecap="round" strokeLinejoin="round" />
-    </g>
-  );
-};
-
-export const Person3Q: React.FC<ThreeQProps> = ({look, pose, expr = 'neutral', talk = 0, t, face = 1, gaze = 0, blinkPh = 0, prop, propBack}) => {
+export const Person3Q: React.FC<ThreeQProps> = ({
+  look,
+  pose,
+  expr = 'neutral',
+  talk = 0,
+  t,
+  face = 1,
+  gaze = 0,
+  blinkPh = 0,
+  wind = 0,
+  velX = 0,
+  layer = 'all',
+  prop,
+  propBack,
+}) => {
   const g = look.ghost;
   const skin = g ? 'ghost' : look.skin ?? 'skin';
   const W = look.w ?? 1;
@@ -46,12 +54,24 @@ export const Person3Q: React.FC<ThreeQProps> = ({look, pose, expr = 'neutral', t
   const HR = 100 * (look.head ?? 1);
   const hy = shY - 8 - HR * 0.9;
   const legs = g ? 'none' : pose.legs ?? 'stand';
-  const bodyDrop = legs === 'sit' ? 70 : legs === 'crouch' ? 62 * H : legs === 'ride' ? 68 * H : legs === 'push' ? 24 * H : 0;
+  const bodyDrop = legs === 'sit' ? 70 : legs === 'crouch' ? 62 * H : legs === 'ride' ? 72 * H : legs === 'push' ? 24 * H : 0;
+
+  // Độ cong cột sống chữ C theo tư thế
+  const bendX =
+    legs === 'ride' ? 20 :
+    legs === 'push' ? 26 :
+    legs === 'run' ? 16 :
+    legs === 'crouch' ? 14 :
+    legs === 'fall' ? -22 :
+    legs === 'jump' ? -8 :
+    legs === 'climb' ? 6 :
+    legs === 'walk' ? 4 : 0;
+  const shShift = bendX * 0.35;
 
   // Độ lệch phối cảnh 3/4 (hướng mặt +x): vai gần rộng (-x), vai xa thu hẹp (+x), trục ngực lệch +x
   const nearShX = -sw * 0.88;
   const farShX = sw * 0.68;
-  const cxT = sw * 0.24; // đường tâm ngực (khuy áo, cà vạt, cổ áo)
+  const cxT = sw * 0.24 + shShift * 0.85; // đường tâm ngực (khuy áo, cà vạt, cổ áo)
   const nearHemX = -ww * 0.88;
   const farHemX = ww * 0.78 + belly * 24;
 
@@ -63,18 +83,18 @@ export const Person3Q: React.FC<ThreeQProps> = ({look, pose, expr = 'neutral', t
   const armW = 30 * Math.min(1.25, W);
   const ua = 104 * H, fa = 96 * H;
   const shoulder = (sg: number): [number, number] => [
-    sg < 0 ? nearShX + 14 : farShX - 10,
+    (sg < 0 ? nearShX + 14 : farShX - 10) + shShift,
     sY + (sg < 0 ? 18 : 14),
   ];
   const target = (sg: number, n: string): [number, number] => {
-    const fcx = HR * 0.22;
+    const fcx = HR * 0.22 + shShift;
     switch (n) {
       case 'mouth': return [fcx + sg * HR * 0.16, hyy + HR * 0.58];
       case 'taste': return [fcx + sg * HR * 0.16 + 30, hyy + HR * 0.58 + 88];
       case 'eye': return [fcx + sg * HR * 0.24, hyy + HR * 0.2];
-      case 'ear': return [sg < 0 ? -HR * 0.78 : HR * 0.82, hyy + HR * 0.14];
-      case 'head': return [sg * HR * 0.55 + HR * 0.1, hyy - HR * 0.6];
-      case 'over': return [sg * 36 + 10, hyy - HR * 1.6];
+      case 'ear': return [(sg < 0 ? -HR * 0.78 : HR * 0.82) + shShift, hyy + HR * 0.14];
+      case 'head': return [sg * HR * 0.55 + HR * 0.1 + shShift, hyy - HR * 0.6];
+      case 'over': return [sg * 36 + 10 + shShift, hyy - HR * 1.6];
       case 'chest': return [cxT + sg * 10, sY + 90];
       case 'pray': return [cxT + 6, sY + 42];
       case 'crossL': return [cxT + sw * 0.34, sY + 118];
@@ -82,7 +102,7 @@ export const Person3Q: React.FC<ThreeQProps> = ({look, pose, expr = 'neutral', t
       case 'hip': return [sg < 0 ? nearHemX - 8 : farHemX + 6, bY - 10];
       case 'front': return [cxT + sg * 20, sY + 148];
     }
-    return [sg < 0 ? nearShX : farShX, sY + 200];
+    return [(sg < 0 ? nearShX : farShX) + shShift, sY + 200];
   };
   const armPts = (sg: number, a: Arm): [number, number][] => {
     const [x0, y0] = shoulder(sg);
@@ -149,12 +169,20 @@ export const Person3Q: React.FC<ThreeQProps> = ({look, pose, expr = 'neutral', t
   const sleeveC = look.top === 'tank' ? skin : g ? 'ghostDeep' : look.topC;
   const fullSleeve = ['suit', 'uniform', 'robe', 'chef', 'aothe', 'blouse'].includes(look.top);
 
-  const farArmInFront = rp[2][0] < farShX - 10 || (typeof pose.ra === 'string' && !['hip', 'over'].includes(pose.ra));
+  const farArmInFront = rp[2][0] < farShX + shShift - 10 || (typeof pose.ra === 'string' && !['hip', 'over'].includes(pose.ra));
   const drawArm = (p: [number, number][], k: string, dim = false) => (
     <g key={k}>
-      {limb(p, armW, fullSleeve ? sleeveC : skin, k + 'a')}
-      {!fullSleeve && limb([p[0], [p[0][0] + (p[1][0] - p[0][0]) * 0.5, p[0][1] + (p[1][1] - p[0][1]) * 0.5]], armW + 6, sleeveC, k + 's')}
-      {dim && <path d={`M${p[0][0].toFixed(1)} ${p[0][1].toFixed(1)}L${p[1][0].toFixed(1)} ${p[1][1].toFixed(1)}L${p[2][0].toFixed(1)} ${p[2][1].toFixed(1)}`} stroke={PAL.ink} strokeWidth={armW} strokeLinecap="round" strokeLinejoin="round" fill="none" opacity={0.18} />}
+      <TaperLimb
+        pts={p}
+        wTop={armW * 1.12}
+        wMid={armW * 0.94}
+        wBot={armW * 0.78}
+        fill={fullSleeve ? sleeveC : skin}
+        sleeveFrac={!fullSleeve && look.top !== 'tank' ? 0.5 : undefined}
+        sleeveFill={sleeveC}
+        jointCrease={true}
+        dim={dim ? 0.18 : 0}
+      />
     </g>
   );
   const drawHand = (p: [number, number], k: string, dim = false) => (
@@ -177,18 +205,24 @@ export const Person3Q: React.FC<ThreeQProps> = ({look, pose, expr = 'neutral', t
   const draw3QLeg = (pts: [number, number][], isFar: boolean, toeRot = 0) => {
     const w = isFar ? legW * 0.94 : legW;
     const ankle = pts[pts.length - 1];
-    const d = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join('');
     const swShoe = isFar ? 58 : 62;
     const shShoe = isFar ? 23 : 24;
     const sxOff = isFar ? -18 : -20;
     const syOff = isFar ? -6 : -8;
     return (
       <g key={isFar ? 'leg-far' : 'leg-near'}>
-        {limb(pts, w, look.pants, isFar ? 'lf' : 'ln')}
-        {isFar && <path d={d} stroke={PAL.ink} strokeWidth={w} strokeLinecap="round" strokeLinejoin="round" fill="none" opacity={0.16} />}
+        <TaperLimb
+          pts={pts}
+          wTop={w * 1.18}
+          wMid={w * 0.96}
+          wBot={w * 0.74}
+          fill={look.pants}
+          dim={isFar ? 0.18 : 0}
+          jointCrease={true}
+        />
         <g transform={`translate(${ankle[0].toFixed(1)} ${ankle[1].toFixed(1)}) rotate(${toeRot.toFixed(1)})`}>
           <S d={Rr(sxOff, syOff, swShoe, shShoe, 11)} f={shoe} />
-          {isFar && <path d={Rr(sxOff, syOff, swShoe, shShoe, 11)} fill={PAL.ink} opacity={0.14} />}
+          {isFar && <path d={Rr(sxOff, syOff, swShoe, shShoe, 11)} fill={PAL.ink} opacity={0.18} />}
         </g>
       </g>
     );
@@ -234,9 +268,18 @@ export const Person3Q: React.FC<ThreeQProps> = ({look, pose, expr = 'neutral', t
     farLegNode = draw3QLeg([[farHipX, bY + 4], [farHipX + 44, bY + 42 * H], [farHipX + 18, -22]], true, 0);
     nearLegNode = draw3QLeg([[nearHipX, bY + 4], [nearHipX + 38, bY + 46 * H], [nearHipX - 4, -16]], false, 0);
   } else if (legs === 'ride') {
-    // knees clearly bent forward-outward straddling mount, boots tucked cleanly beneath hip
-    farLegNode = draw3QLeg([[farHipX, bY + 6], [farHipX + 48, bY + 32 * H], [farHipX + 20, -24 * H]], true, 18);
-    nearLegNode = draw3QLeg([[nearHipX, bY + 6], [nearHipX + 44, bY + 38 * H], [nearHipX + 10, -18 * H]], false, 20);
+    // true athletic straddle: far thigh forward-down (~97 deg knee bend) with boot tucked behind shell;
+    // near hip seated deep, thigh forward-down gripping near flank, shin angled back-down with heel-down boot
+    farLegNode = draw3QLeg(
+      [[farHipX, bY + 4], [farHipX + 50, bY + 28 * H], [farHipX + 28, bY + 88 * H]],
+      true,
+      -14,
+    );
+    nearLegNode = draw3QLeg(
+      [[nearHipX, bY + 6], [nearHipX + 46, bY + 34 * H], [nearHipX + 12, bY + 96 * H]],
+      false,
+      -18,
+    );
   } else if (legs === 'jump') {
     farLegNode = draw3QLeg([[farHipX, bY + 6], [farHipX + 46, bY + 26 * H], [farHipX + 12, bY + 78 * H]], true, 24);
     nearLegNode = draw3QLeg([[nearHipX, bY + 6], [nearHipX + 40, bY + 34 * H], [nearHipX - 12, bY + 86 * H]], false, 28);
@@ -278,19 +321,19 @@ export const Person3Q: React.FC<ThreeQProps> = ({look, pose, expr = 'neutral', t
     );
   }
 
-  // --- thân 3/4 bất đối xứng ---
+  // --- thân 3/4 bất đối xứng với đường cong cột sống chữ C ---
   const long = look.top === 'robe' || look.top === 'aothe' || g;
   const hemY = long ? (g ? bY + 40 : -40) : bY + 26;
   const lHem = long ? nearHemX - 28 : nearHemX;
   const rHem = long ? farHemX + 26 : farHemX;
-  const torso = `M${nearShX} ${sY + 20}C${nearShX - 6} ${sY - 6} ${nearShX + 28} ${sY - 18} ${-24} ${sY - 18}L${32} ${sY - 18}C${farShX - 12} ${sY - 18} ${farShX + 6} ${sY - 6} ${farShX} ${sY + 20}C${farShX + belly * 36} ${(sY + bY) / 2} ${rHem + belly * 24} ${hemY - 40} ${rHem} ${hemY}L${lHem} ${hemY}C${lHem - belly * 12} ${hemY - 40} ${nearShX - belly * 10} ${(sY + bY) / 2} ${nearShX} ${sY + 20}Z`;
+  const torso = curvedTorsoPath(nearShX, farShX, lHem, rHem, sY, hemY, bendX, belly);
   const topC = g ? 'ghostDeep' : look.topC;
 
   const pattern: React.ReactNode[] = [];
   if (look.pattern === 'dots' || look.pattern === 'flowers') {
     for (let r = 0; r < 9; r++)
       for (let c = 0; c < 6; c++) {
-        const px = nearShX + 16 + c * ((farShX - nearShX) / 5.2) + (r % 2) * 13;
+        const px = nearShX + shShift * 0.5 + 16 + c * ((farShX - nearShX) / 5.2) + (r % 2) * 13;
         const py = sY + 4 + r * 26;
         if (py > hemY - 12 || px > rHem + 30) continue;
         pattern.push(look.pattern === 'flowers'
@@ -301,7 +344,7 @@ export const Person3Q: React.FC<ThreeQProps> = ({look, pose, expr = 'neutral', t
     for (let i = 0; i < 12; i++) {
       const py = sY + 12 + i * 22;
       if (py > hemY - 6) break;
-      pattern.push(<rect key={i} x={nearShX - 40} y={py} width={farShX - nearShX + 110} height={8} fill={col(look.patC ?? 'trim')} />);
+      pattern.push(<rect key={i} x={nearShX - 40} y={py} width={farShX - nearShX + 120} height={8} fill={col(look.patC ?? 'trim')} />);
     }
   }
 
@@ -314,9 +357,9 @@ export const Person3Q: React.FC<ThreeQProps> = ({look, pose, expr = 'neutral', t
     const nb = look.top === 'polo' ? 2 : 5;
     for (let i = 0; i < nb; i++) collar.push(<circle key={'b' + i} cx={cxT + i * 1.6 + (i > 2 ? belly * 8 : 0)} cy={sY + 34 + i * 34} r={4.5} fill={PAL.ink} />);
     if (look.top === 'uniform') {
-      collar.push(<S key="p1" d={Rr(nearShX + 20, sY + 50, 44, 40, 6)} f={topC} />, <S key="p2" d={Rr(cxT + 14, sY + 50, 32, 38, 6)} f={topC} />);
-      collar.push(<S key="ep1" d={Rr(nearShX - 2, sY - 8, 42, 14, 6)} f="gold" />, <S key="ep2" d={Rr(farShX - 34, sY - 8, 34, 13, 6)} f="gold" />);
-      collar.push(<S key="bd" d={E(nearShX + 42, sY + 30, 11, 11)} f="red" />);
+      collar.push(<S key="p1" d={Rr(nearShX + shShift + 20, sY + 50, 44, 40, 6)} f={topC} />, <S key="p2" d={Rr(cxT + 14, sY + 50, 32, 38, 6)} f={topC} />);
+      collar.push(<S key="ep1" d={Rr(nearShX + shShift - 2, sY - 8, 42, 14, 6)} f="gold" />, <S key="ep2" d={Rr(farShX + shShift - 34, sY - 8, 34, 13, 6)} f="gold" />);
+      collar.push(<S key="bd" d={E(nearShX + shShift + 42, sY + 30, 11, 11)} f="red" />);
     }
   } else if (look.top === 'suit') {
     collar.push(<S key="sh" d={`M${cxT - 30} ${sY - 18}L${cxT + 22} ${sY - 18}L${cxT + 14} ${sY + 120}L${cxT - 16} ${sY + 120}Z`} f="trim" />);
@@ -334,7 +377,7 @@ export const Person3Q: React.FC<ThreeQProps> = ({look, pose, expr = 'neutral', t
     collar.push(<S key="v" d={`M${cxT - 34} ${sY - 18}L${cxT + 2} ${sY + 70}L${cxT + 26} ${sY - 18}`} f={c2} />);
     collar.push(<S key="belt" d={R(lHem - 4, bY - 40, rHem - lHem + 8, 22)} f={c2} />);
   } else if (look.top === 'aothe') {
-    collar.push(<S key="v" d={`M${cxT - 24} ${sY - 18}C${cxT} ${sY + 10} ${cxT + 18} ${sY + 40} ${farShX - 4} ${sY + 78}`} f="none" sw={6} />);
+    collar.push(<S key="v" d={`M${cxT - 24} ${sY - 18}C${cxT} ${sY + 10} ${cxT + 18} ${sY + 40} ${farShX + shShift - 4} ${sY + 78}`} f="none" sw={6} />);
     collar.push(<S key="n" d={Rr(cxT - 28, sY - 30, 52, 20, 8)} f={c2} />);
   } else if (look.top === 'blouse') {
     collar.push(<S key="v" d={`M${cxT - 34} ${sY - 18}Q${cxT} ${sY + 50} ${cxT + 26} ${sY - 18}Z`} f={skin} />);
@@ -345,8 +388,8 @@ export const Person3Q: React.FC<ThreeQProps> = ({look, pose, expr = 'neutral', t
   }
   if (look.chain) collar.push(<path key="ch" d={`M${cxT - 34} ${sY - 10}Q${cxT} ${sY + 60} ${cxT + 28} ${sY - 10}`} fill="none" stroke={PAL.gold} strokeWidth={7} strokeDasharray="2 9" strokeLinecap="round" />);
   if (look.vest) {
-    collar.push(<S key="v1" d={`M${nearShX + 4} ${sY + 6}L${cxT - 28} ${sY - 10}L${cxT - 20} ${bY + 20}L${nearHemX - 4} ${bY + 20}Z`} f="orange" />);
-    collar.push(<S key="v2" d={`M${farShX - 4} ${sY + 6}L${cxT + 22} ${sY - 10}L${cxT + 18} ${bY + 20}L${farHemX + 4} ${bY + 20}Z`} f="orange" />);
+    collar.push(<S key="v1" d={`M${nearShX + shShift + 4} ${sY + 6}L${cxT - 28} ${sY - 10}L${cxT - 20} ${bY + 20}L${nearHemX - 4} ${bY + 20}Z`} f="orange" />);
+    collar.push(<S key="v2" d={`M${farShX + shShift - 4} ${sY + 6}L${cxT + 22} ${sY - 10}L${cxT + 18} ${bY + 20}L${farHemX + 4} ${bY + 20}Z`} f="orange" />);
     collar.push(<rect key="v3" x={nearHemX - 6} y={bY - 70} width={farHemX - nearHemX + 12} height={16} fill={PAL.trim} stroke={PAL.ink} strokeWidth={3} />);
     collar.push(<rect key="v4" x={nearHemX - 6} y={bY - 30} width={farHemX - nearHemX + 12} height={16} fill={PAL.trim} stroke={PAL.ink} strokeWidth={3} />);
   }
@@ -370,42 +413,77 @@ export const Person3Q: React.FC<ThreeQProps> = ({look, pose, expr = 'neutral', t
     </g>
   ) : null;
 
-  const head = <Head3Q look={look} hy={hyy} R={HR} expr={expr} talk={talk} t={t} gaze={gaze} blinkPh={blinkPh} />;
+  // --- chuyển động thứ cấp: gió tóc + độ trễ đầu (head lag) ---
+  const hw = hairWindOffset(t, wind + (legs === 'run' ? 0.9 : 0), velX * face, blinkPh);
+  const windTilt = Math.max(-2, Math.min(2, wind)) * 1.6;
+  const headLag =
+    legs === 'ride' ? 5.5 + Math.sin(t * 6 - 0.8) * 2.0 + windTilt :
+    legs === 'push' ? 6.5 :
+    legs === 'run' ? 4.5 + Math.sin(t * 14 - 0.9) * 3.2 + windTilt * 0.6 :
+    legs === 'walk' ? Math.sin(t * 9 - 0.85) * 2.2 :
+    legs === 'crouch' ? 3.5 :
+    legs === 'fall' ? -10 + Math.sin(t * 18 - 0.6) * 4.0 :
+    legs === 'jump' ? -3.5 :
+    legs === 'climb' ? Math.sin(t * 7 - 0.7) * 2.5 :
+    windTilt * 0.8;
+
+  const head = (
+    <g transform={`translate(${shShift.toFixed(1)} 0) rotate(${headLag.toFixed(2)} 0 ${(sY - 22).toFixed(1)})`}>
+      <Head3Q look={look} hy={hyy} R={HR} expr={expr} talk={talk} t={t} gaze={gaze} blinkPh={blinkPh} hw={hw} />
+    </g>
+  );
+
+  const showFar = layer !== 'near';
+  const showNear = layer !== 'far';
 
   return (
     <g transform={`scale(${face} 1)`}>
       <g transform={`translate(0 ${(-bob).toFixed(1)}) rotate(${totalRot.toFixed(2)} 0 ${bY.toFixed(1)}) scale(${sxSq.toFixed(4)} ${sq.toFixed(4)})`} opacity={g ? 0.93 : 1}>
-        {g && <ellipse cx={0} cy={hyy} rx={HR * 3.2} ry={HR * 4} fill="url(#glowG)" />}
-        {motionLines}
-        {propBack?.(hands)}
-        {!farArmInFront && drawArm(rp, 'ra', true)}
-        {!farArmInFront && drawHand(hands.r, 'hr', true)}
-        {farLegNode}
-        {nearLegNode}
-        {tail}
-        <S d={torso} f={topC} />
-        <clipPath id={`t3q-${look.name}`}><path d={torso} /></clipPath>
-        <g clipPath={`url(#t3q-${look.name})`}>
-          {pattern}
-          {/* bóng chấm riso sườn lưng (-x) và vai xa thu sâu (+x) */}
-          <Sh d={`M${nearShX - 40} ${sY - 30}L${nearShX * 0.34} ${sY - 30}L${lHem * 0.38} ${hemY + 10}L${lHem - 40} ${hemY + 10}Z`} o={0.55} />
-          <Sh d={`M${farShX * 0.62} ${sY - 30}L${farShX + 50} ${sY - 30}L${rHem + 50} ${hemY + 10}L${rHem * 0.68} ${hemY + 10}Z`} o={0.32} />
-        </g>
-        {collar}
-        {/* cổ */}
-        <S d={R(-14, sY - 44, 38, 30)} f={g ? 'ghost' : 'skinShade'} />
-        {head}
-        {farArmInFront && drawArm(rp, 'ra')}
-        {drawArm(lp, 'la')}
-        {prop?.(hands)}
-        {farArmInFront && drawHand(hands.r, 'hr')}
-        {drawHand(hands.l, 'hl')}
+        {showNear && g && <ellipse cx={0} cy={hyy} rx={HR * 3.2} ry={HR * 4} fill="url(#glowG)" />}
+        {showNear && motionLines}
+        {showFar && propBack?.(hands)}
+        {showFar && !farArmInFront && drawArm(rp, 'ra', true)}
+        {showFar && !farArmInFront && drawHand(hands.r, 'hr', true)}
+        {showFar && farLegNode}
+        {showNear && nearLegNode}
+        {showNear && tail}
+        {showNear && (
+          <>
+            <S d={torso} f={topC} />
+            <clipPath id={`t3q-${look.name}`}><path d={torso} /></clipPath>
+            <g clipPath={`url(#t3q-${look.name})`}>
+              {pattern}
+              {/* bóng chấm riso sườn lưng (-x) và vai xa thu sâu (+x) */}
+              <Sh d={`M${nearShX + shShift - 40} ${sY - 30}L${(nearShX + shShift) * 0.34} ${sY - 30}L${lHem * 0.38} ${hemY + 10}L${lHem - 40} ${hemY + 10}Z`} o={0.55} />
+              <Sh d={`M${(farShX + shShift) * 0.62} ${sY - 30}L${farShX + shShift + 50} ${sY - 30}L${rHem + 50} ${hemY + 10}L${rHem * 0.68} ${hemY + 10}Z`} o={0.32} />
+            </g>
+            {/* cổ */}
+            <S d={R(-14 + shShift, sY - 44, 38, 34)} f={g ? 'ghost' : 'skinShade'} />
+            {collar}
+            {head}
+            {farArmInFront && drawArm(rp, 'ra')}
+            {drawArm(lp, 'la')}
+            {prop?.(hands)}
+            {farArmInFront && drawHand(hands.r, 'hr')}
+            {drawHand(hands.l, 'hl')}
+          </>
+        )}
       </g>
     </g>
   );
 };
 
-const Head3Q: React.FC<{look: Look; hy: number; R: number; expr: Expr; talk: number; t: number; gaze: number; blinkPh: number}> = ({look, hy, R: r, expr, talk, t, gaze, blinkPh}) => {
+const Head3Q: React.FC<{
+  look: Look;
+  hy: number;
+  R: number;
+  expr: Expr;
+  talk: number;
+  t: number;
+  gaze: number;
+  blinkPh: number;
+  hw?: {dx: number; dy: number; rot: number};
+}> = ({look, hy, R: r, expr, talk, t, gaze, blinkPh, hw = {dx: 0, dy: 0, rot: 0}}) => {
   const g = look.ghost;
   const skin = g ? 'ghost' : look.skin ?? 'skin';
   const hairC = look.hairC ?? 'hair';
@@ -413,14 +491,34 @@ const Head3Q: React.FC<{look: Look; hy: number; R: number; expr: Expr; talk: num
   const fcx = r * 0.22 + gx; // tâm ngũ quan lệch về phía nhìn (+x)
   const els: React.ReactNode[] = [];
 
-  // tóc phía sau đầu (lệch về phía gáy -x)
-  if (look.hair === 'bun') els.push(<S key="bun" d={E(-r * 0.44, hy - r * 0.88, r * 0.4, r * 0.32)} f={hairC} />);
+  // tóc phía sau đầu (lệch về phía gáy -x, tung bay theo gió hw)
+  if (look.hair === 'bun') {
+    const bunBx = -r * 0.44 + hw.dx * 0.22;
+    const bunBy = hy - r * 0.88 + hw.dy * 0.32 + Math.sin(t * 10 + blinkPh) * (Math.abs(hw.dx) > 4 ? 2.4 : 0.7);
+    const bunRot = hw.rot * 0.52;
+    els.push(
+      <g key="bun" transform={`rotate(${bunRot.toFixed(1)} ${(-r * 0.36).toFixed(1)} ${(hy - r * 0.72).toFixed(1)})`}>
+        <S d={E(bunBx, bunBy, r * 0.4, r * 0.32)} f={hairC} />
+      </g>,
+    );
+  }
   if (look.hair === 'curly') for (let i = 0; i < 9; i++) {
     const a = Math.PI * (0.85 + (i / 8) * 1.18);
-    els.push(<S key={'cu' + i} d={E(Math.cos(a) * r * 1.0 - r * 0.08, hy + Math.sin(a) * r * 0.98 + r * 0.08, r * 0.35, r * 0.35)} f={hairC} />);
+    els.push(<S key={'cu' + i} d={E(Math.cos(a) * r * 1.0 - r * 0.08 + hw.dx * 0.12, hy + Math.sin(a) * r * 0.98 + r * 0.08 + hw.dy * 0.1, r * 0.35, r * 0.35)} f={hairC} />);
   }
   if (look.hair === 'long') {
-    els.push(<S key="lg" d={`M${-r * 1.04} ${hy - r * 0.22}C${-r * 1.18} ${hy + r * 0.88} ${-r * 1.04} ${hy + r * 1.42} ${-r * 0.66} ${hy + r * 1.52}L${r * 0.62} ${hy + r * 1.44}C${r * 0.96} ${hy + r * 1.28} ${r * 1.04} ${hy + r * 0.78} ${r * 0.92} ${hy - r * 0.2}Z`} f={hairC} />);
+    const tx = hw.dx * 1.45;
+    const ty = hw.dy * 0.85;
+    const mx1 = hw.dx * 0.85;
+    const my1 = hw.dy * 0.45;
+    const wv = Math.sin(t * 11.5 + blinkPh) * (2.5 + Math.min(2.5, Math.abs(hw.dx) / 14) * 3.5);
+    els.push(
+      <S
+        key="lg"
+        d={`M${(-r * 1.04).toFixed(1)} ${(hy - r * 0.22).toFixed(1)}C${(-r * 1.18 + mx1).toFixed(1)} ${(hy + r * 0.88 + my1).toFixed(1)} ${(-r * 1.04 + tx * 0.85).toFixed(1)} ${(hy + r * 1.42 + ty).toFixed(1)} ${(-r * 0.66 + tx).toFixed(1)} ${(hy + r * 1.52 + ty + wv).toFixed(1)}Q${(tx * 0.88).toFixed(1)} ${(hy + r * 1.44 + ty - wv * 0.8).toFixed(1)} ${(r * 0.62 + tx * 0.78).toFixed(1)} ${(hy + r * 1.44 + ty + wv * 0.6).toFixed(1)}C${(r * 0.96 + mx1 * 0.55).toFixed(1)} ${(hy + r * 1.28 + my1).toFixed(1)} ${(r * 1.04 + mx1 * 0.28).toFixed(1)} ${(hy + r * 0.78 + my1 * 0.5).toFixed(1)} ${(r * 0.92).toFixed(1)} ${(hy - r * 0.2).toFixed(1)}Z`}
+        f={hairC}
+      />,
+    );
   }
 
   // tai xa (hé nhẹ ở rìa +x)
@@ -580,7 +678,11 @@ const Head3Q: React.FC<{look: Look; hy: number; R: number; expr: Expr; talk: num
       // mái tỉa nhọn nghiêng theo 3/4 + lọn mai che trước tai gần
       hp(`${cap3q(0.16, -0.16)}L${r * 0.84} ${hy - r * 0.34}Q${r * 0.66} ${hy - r * 0.22} ${r * 0.5} ${hy - r * 0.4}Q${r * 0.3} ${hy - r * 0.18} ${r * 0.12} ${hy - r * 0.4}Q${-r * 0.12} ${hy - r * 0.18} ${-r * 0.32} ${hy - r * 0.36}Q${-r * 0.56} ${hy - r * 0.12} ${-r * 0.74} ${hy + r * 0.04}L${-r * 1.0} ${hy + r * 0.16}Z`, 'h');
       if (look.hair === 'kid') {
-        hp(`M${r * 0.04} ${hy - r * 1.0}C${r * 0.22} ${hy - r * 1.3} ${r * 0.44} ${hy - r * 1.24} ${r * 0.46} ${hy - r * 1.06}C${r * 0.32} ${hy - r * 1.06} ${r * 0.22} ${hy - r * 0.98} ${r * 0.18} ${hy - r * 0.94}Z`, 'cow');
+        els.push(
+          <g key="cow" transform={`rotate(${(hw.rot * 0.95).toFixed(1)} ${(r * 0.08).toFixed(1)} ${(hy - r * 0.96).toFixed(1)})`}>
+            <S d={`M${r * 0.04} ${hy - r * 1.0}C${r * 0.22} ${hy - r * 1.3} ${r * 0.44} ${hy - r * 1.24} ${r * 0.46} ${hy - r * 1.06}C${r * 0.32} ${hy - r * 1.06} ${r * 0.22} ${hy - r * 0.98} ${r * 0.18} ${hy - r * 0.94}Z`} f={hairC} />
+          </g>,
+        );
       }
       els.push(<L key="hl" d={`M${-r * 0.4} ${hy - r * 0.84}q${r * 0.28} ${-r * 0.12} ${r * 0.54} ${-r * 0.04}`} w={6} c="white" o={0.3} />);
       break;
@@ -588,13 +690,32 @@ const Head3Q: React.FC<{look: Look; hy: number; R: number; expr: Expr; talk: num
     case 'bun':
       hp(`${cap3q(0.22, -0.1)}C${r * 0.82} ${hy - r * 0.44} ${r * 0.42} ${hy - r * 0.58} ${r * 0.12} ${hy - r * 0.58}C${-r * 0.22} ${hy - r * 0.54} ${-r * 0.68} ${hy - r * 0.3} ${-r * 1.0} ${hy + r * 0.22}Z`, 'h');
       break;
-    case 'long':
+    case 'long': {
       hp(`${cap3q(0.32, -0.06)}C${r * 0.8} ${hy - r * 0.34} ${r * 0.44} ${hy - r * 0.44} ${r * 0.18} ${hy - r * 0.64}C${-r * 0.16} ${hy - r * 0.34} ${-r * 0.64} ${hy - r * 0.3} ${-r * 1.0} ${hy + r * 0.32}Z`, 'h');
-      // lọn tóc dài ôm má gần (-x) và lọn mảnh mép mặt xa (+x)
-      hp(`M${-r * 0.96} ${hy - r * 0.08}C${-r * 1.08} ${hy + r * 0.6} ${-r * 1.02} ${hy + r * 1.12} ${-r * 0.8} ${hy + r * 1.38}C${-r * 0.72} ${hy + r * 1.0} ${-r * 0.72} ${hy + r * 0.42} ${-r * 0.76} ${hy - r * 0.08}Z`, 'lkN');
-      hp(`M${r * 0.94} ${hy - r * 0.1}C${r * 1.02} ${hy + r * 0.5} ${r * 0.96} ${hy + r * 0.95} ${r * 0.82} ${hy + r * 1.2}C${r * 0.8} ${hy + r * 0.86} ${r * 0.82} ${hy + r * 0.38} ${r * 0.84} ${hy - r * 0.1}Z`, 'lkF');
+      // lọn tóc dài ôm má gần (-x) và lọn mảnh mép mặt xa (+x), tung bay theo gió ngược (-x)
+      const lkX = hw.dx * 1.05;
+      const lkY = hw.dy * 0.65;
+      els.push(
+        <g key="lkN" transform={`rotate(${(-hw.rot * 0.22).toFixed(1)} ${(-r * 0.86).toFixed(1)} ${(hy - r * 0.08).toFixed(1)})`}>
+          <S
+            d={`M${(-r * 0.96).toFixed(1)} ${(hy - r * 0.08).toFixed(1)}C${(-r * 1.08 + lkX * 0.45).toFixed(1)} ${(hy + r * 0.6 + lkY * 0.4).toFixed(1)} ${(-r * 1.02 + lkX * 0.82).toFixed(1)} ${(hy + r * 1.12 + lkY * 0.75).toFixed(1)} ${(-r * 0.8 + lkX).toFixed(1)} ${(hy + r * 1.38 + lkY).toFixed(1)}C${(-r * 0.72 + lkX * 0.65).toFixed(1)} ${(hy + r * 1.0 + lkY * 0.6).toFixed(1)} ${(-r * 0.72 + lkX * 0.28).toFixed(1)} ${(hy + r * 0.42 + lkY * 0.25).toFixed(1)} ${(-r * 0.76).toFixed(1)} ${(hy - r * 0.08).toFixed(1)}Z`}
+            f={hairC}
+          />
+        </g>,
+      );
+      const lkFX = hw.dx * 0.45;
+      const lkFY = hw.dy * 0.4;
+      els.push(
+        <g key="lkF" transform={`rotate(${(-hw.rot * 0.14).toFixed(1)} ${(r * 0.89).toFixed(1)} ${(hy - r * 0.1).toFixed(1)})`}>
+          <S
+            d={`M${(r * 0.94).toFixed(1)} ${(hy - r * 0.1).toFixed(1)}C${(r * 1.02 + lkFX * 0.4).toFixed(1)} ${(hy + r * 0.5 + lkFY * 0.4).toFixed(1)} ${(r * 0.96 + lkFX * 0.78).toFixed(1)} ${(hy + r * 0.95 + lkFY * 0.75).toFixed(1)} ${(r * 0.82 + lkFX).toFixed(1)} ${(hy + r * 1.2 + lkFY).toFixed(1)}C${(r * 0.8 + lkFX * 0.6).toFixed(1)} ${(hy + r * 0.86 + lkFY * 0.6).toFixed(1)} ${(r * 0.82 + lkFX * 0.25).toFixed(1)} ${(hy + r * 0.38 + lkFY * 0.25).toFixed(1)} ${(r * 0.84).toFixed(1)} ${(hy - r * 0.1).toFixed(1)}Z`}
+            f={hairC}
+          />
+        </g>,
+      );
       els.push(<L key="hl" d={`M${-r * 0.48} ${hy - r * 0.84}q${r * 0.26} ${-r * 0.14} ${r * 0.52} ${-r * 0.08}`} w={6} c="white" o={0.35} />);
       break;
+    }
     case 'curly':
       for (let i = 0; i < 7; i++) {
         const a = Math.PI * (1.04 + (i / 6) * 0.82);
