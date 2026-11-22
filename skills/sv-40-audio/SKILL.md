@@ -67,13 +67,14 @@ arrow → whoosh; flash/wipe/solid cuts → whoosh.
 
 ## Workflow
 1. G5 passed (`qa/shots.json` fresh: `node scripts/times.mjs`).
-2. Write `audio.json` from beats.md (sections) and the shotlist (keys used).
-3. Mix and measure with **sv-42-mix-master** (`scripts/mix.py` runs the house chain and `audio_qa.py`).
-4. From the report check only the sound-design part here: the sfx list matches what you expect (count
-   reaches/keys), sections and silences sit where beats.md says. Levels, spectrum and loudness are sv-42's.
-5. Listen through on headphones at least: the hook, every key/reach shot, the silence before the turn, the
+2. **Action-to-Foley pre-plan (`v5.2.0`):** run `python3 scripts/plan_audio.py` to auto-derive contiguous ambience bed spans and synchronized physical foley cues (`footsteps`, `jump_whoosh`, `land_thud`, `effort_scrape`, `wing_buzz`, `impact_hit`, `whoosh_fast`, `tap_press`, `mech_trigger`, `ui_pop`) directly from `qa/shots.json` into `qa/audio_plan_suggested.json` (pass `--write-audio-json` only if `audio.json` has no custom accents yet) so zero physical actions go silent.
+3. Write or refine `audio.json` from `beats.md` (sections), the shotlist (`keys` used), and `qa/audio_plan_suggested.json` (top physical `accents`).
+4. Mix and measure with **sv-42-mix-master** (`scripts/mix.py` runs the house chain and `audio_qa.py`).
+5. From the report check only the sound-design part here: the sfx list matches what you expect (count
+   reaches/keys/physical accents), sections and silences sit where beats.md says. Levels, spectrum and loudness are sv-42's.
+6. Listen through on headphones at least: the hook, every key/reach/physical-foley shot, the silence before the turn, the
    ending. Music must never compete with a word. Fix in audio.json, re-mix.
-6. G6 is passed through sv-42 (its review lists the plots and listening notes).
+7. G6 is passed through sv-42 (its review lists the plots and listening notes).
 
 ## Rules
 - Never raise the music to "fill" a quiet part; use a bed or silence.

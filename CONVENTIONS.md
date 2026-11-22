@@ -1,4 +1,4 @@
-# Conventions (`v5.1.0`)
+# Conventions (`v5.2.0`)
 
 Enforced by `tools/validate_skills.py`.
 
@@ -40,7 +40,7 @@ pin `standards/` by hash.
 | LA-01..04 | layout & scale CI: set `actorScale`/`shotScale`/`location` & `relToActor` ratios (`LA-01`), 3×3 spatial grid & union occupancy clutter budget (`LA-02`), ban fake close-up camera zoom on establishing/wide sets (`LA-03`), z-aware occlusion & awkward hero creature frame-edge cut-off (`LA-04`) | `lint.mjs design` & `shots` |
 | AN-01..02 | anchors | `lint.mjs shots` |
 | OV-01..04 | overlays | `lint.mjs shots` |
-| CA-01..07 | camera: zoom, move jolt, ratio, establish, world bounds (`CA-01..05`), 180° axis/eyeline continuity (`CA-06`), Long-Form shot-size progression & variety rhythm (`CA-07`) | `lint.mjs shots` |
+| CA-01..08 | camera: zoom, move jolt, ratio, establish, world bounds (`CA-01..05`), 180° axis/eyeline continuity (`CA-06`), Long-Form shot-size progression & variety rhythm (`CA-07`), multi-waypoint `ShotDef.camKeys` choreography guard (`CA-08`) | `lint.mjs shots` |
 | SZ-01..02 | on-screen size and framing | `lint.mjs shots` |
 | MO-01..16 | motion (`src/anim.ts`): walk/reach/sit/ride (`MO-01..09`), turnaround-squash (`MO-10`), reach-across-face / raised-arms walk (`MO-11`), floating `seatH` (`MO-12`), contact-locked `pushTarget` (`MO-13`), straddle mount & rider cohesion (`MO-14`), valid `ActionFx`, fall/trip impact weight & flying `altitude` shadow (`MO-15`), Long-Shot Choreography Density Guard on `long_16x9` (`MO-16`: `> 5.0 s` / `> 8.5 s`) | `lint.mjs shots` |
 | KY-01 | animated set keys | `lint.mjs shots` |
@@ -52,7 +52,7 @@ A rule documented in a skill must name its lint ID when one exists. A waiver is
 `// lint-ok: <ID> <reason>` on the shot's line, and it must be justified in the G5 review.
 
 ## Gates
-- There are seven gates, G1 to G7 (see sv-00). Run `scripts/sv_doctor.py --stage G#` for fast zero-cost preflight before checking or passing a gate, and `scripts/plan_assets.py` at the G2→G4 handoff to derive the deterministic asset blueprint (cast, Hero Subjects, and multi-angle/sub-scene set targets).
+- There are seven gates, G1 to G7 (see sv-00). Run `scripts/sv_doctor.py --stage G#` for fast zero-cost preflight before checking or passing a gate, `scripts/plan_assets.py` at the G2→G4 handoff to derive the deterministic asset blueprint (cast, Hero Subjects, and multi-angle/sub-scene set targets), and `scripts/plan_audio.py` at the G5→G6 handoff to derive synchronized physical foley cues and ambience bed spans from `qa/shots.json`.
 - `scripts/design.mjs` renders all design sheets plus location-sorted `qa/design/overview_sets.jpg` (single-page set overview contact sheet), per-location multi-angle continuity strips `qa/design/location_<loc>_pack.jpg` (for every location with `>= 2` rendered sets), and `qa/design/visual_spec.json`.
 - `scripts/sv_gate.py` writes `gates/log.jsonl` with hashes of each gate's inputs. When an input changes, that gate and every later gate become STALE.
 - Review files must name every evidence file with a remark of at least 4 words, and must be newer than the evidence.

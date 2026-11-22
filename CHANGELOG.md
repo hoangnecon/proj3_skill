@@ -1,5 +1,17 @@
 # Changelog
 
+## `v5.2.0` — 2026-11-22 · Multi-Waypoint Cinematic Camera (`ShotDef.camKeys`, `CA-08`), Zero-Leak Adaptive Chunk Delivery & Action-to-Foley Planner (`plan_audio.py`)
+- **Pillar 1 — Multi-Waypoint Cinematic Camera Engine (`engine.ts`, `Film.tsx`, `entry.tsx`, `geom.mjs`):**
+  - Added `ShotDef.camKeys` (`[cx, cy, zoom, at][]`) multi-waypoint camera choreography so rich 5–14 s shots can smoothly track, hold, pan, and push across beats inside one continuous take instead of a single linear `cam → cam2` slide.
+  - Exported richer physical action metadata (`arcH`, `pushTarget`, `fx`, `extraEvents`) from `shotTable()` (`entry.tsx`) and evaluated `camKeys` accurately in `Film.tsx` and `geom.mjs`.
+- **Pillar 2 — `CA-08` Camera Choreography Guard & Zero-Leak Adaptive Chunk Delivery (`lint.mjs`, `bundle_cache.mjs`, `deliver.mjs`, `sv_doctor.py`):**
+  - Added `CA-08` (`lint.mjs shots`, total **138 lint rules**): validates `ShotDef.camKeys` waypoint tuples, strictly ascending timestamps, world bounds & `LA-03` zoom caps, and abrupt pan/zoom velocity jolts.
+  - Added automatic stale `$TMPDIR` Remotion temp directory sweep in `bundle_cache.mjs` + `tmp_remotion_mb` monitoring in `sv_doctor.py`, and adaptive tight-disk macro-block chunk sizing in `deliver.mjs` to eliminate `ENOSPC` leaks on 10-minute 16:9 renders.
+- **Pillar 3 — Action-to-Foley Audio Planner (`engine/scripts/plan_audio.py`), Benchmark Integration & `v5.2.0` Docs/Manifest:**
+  - Added zero-dependency `engine/scripts/plan_audio.py`: reads `qa/shots.json` (plus optional `script.json` & `src/data/cues.json`) in `< 0.1 s` to derive contiguous ambience bed spans (`beds`), synchronized physical foley cues (`footsteps`, `jump_whoosh`, `land_thud`, `effort_scrape`, `impact_hit`, `whoosh_fast`, `tap_press`, `mech_trigger`, `wing_buzz`, `ui_pop`), and `mix.py`-compatible `suggested_accents` into `qa/audio_plan_suggested.json` (with safe opt-in `--write-audio-json` preserving any existing custom accents).
+  - Updated `tools/benchmark_suite.py` (`v5.2.0`) to execute `plan_audio.py` in the isolated 16:9 Long-Form sandbox and report `foley_cues=<N>` in the scorecard.
+  - Updated `sv-02-long-form`, `sv-22-shots-camera`, `sv-40-audio`, `sv-41-qa-delivery`, `CONVENTIONS.md`, `README.md`, `CHANGELOG.md`, and `.claude-plugin/plugin.json` (`5.2.0`, **138 lint rules**).
+
 ## `v5.1.0` — 2026-11-22 · Spatial Location Packs (24–30 Multi-Angle Redrawn Sets, `SE-17`, `location_<loc>_pack.jpg`) & Rich Multi-Action Long-Form Shots (`shots_long_16x9`, `MO-16`)
 - **Pillar 1 — Spatial Location Packs (`sets/types.ts`, `plan_assets.py`, `design.mjs`, `lint.mjs`):**
   - Extended `SetDef` with `cameraDir?: 'front' | 'reverse' | 'left' | 'right' | 'top' | 'low' | 'detail'` and `landmarks?: string[]` (shared physical room fixtures drawn consistently across every redrawn camera angle of the same room).

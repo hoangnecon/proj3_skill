@@ -11,9 +11,10 @@ description: Final QA and delivery of a story-video episode — render the maste
 ## Workflow
 1. Status: `python3 scripts/sv_gate.py status` — G1–G6 must be PASS (not STALE). If something is stale,
    go back to that skill; never deliver around a stale gate.
-2. Render: `node scripts/deliver.mjs` (≈ 10–15 min for 150 s; run it in the background). It refuses a stale
+2. Render: `node scripts/deliver.mjs` (or `SV_CHUNK_RENDER=1 node scripts/deliver.mjs` for 10-min 16:9 macro-block chunks; ≈ 10–15 min for 150 s; run it in the background). It refuses a stale
    mix and refuses to start when the disk has less free space than the frames need (~0.6 MB per frame + 1.5 GB):
    free space first, and ask the user before deleting anything of theirs (caches included).
+   - **Zero-leak adaptive chunking (`v5.2.0`):** `scripts/bundle_cache.mjs` automatically sweeps stale Remotion temp directories in `$TMPDIR` (also monitored via `tmp_remotion_mb` in `scripts/sv_doctor.py`), and `scripts/deliver.mjs` adaptively scales down macro-block chunk size on tight disks so 10-minute 16:9 renders never hit `ENOSPC`.
    The Remotion render goes to `out/_render.mp4`; ffmpeg then takes its picture and the sound straight from
    `public/mix.wav` (Remotion's AAC kept 2048 priming samples → sound 43 ms late, sync check failed).
    `SV_SKIP_RENDER=1` reuses `_render.mp4` for audio-only fixes.

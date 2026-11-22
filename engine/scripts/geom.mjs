@@ -24,6 +24,22 @@ const clamp = (u) => Math.max(0, Math.min(1, u));
 const easeIO = (u) => (u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2);
 
 export const camAt = (row, t) => {
+  if (Array.isArray(row.camKeys) && row.camKeys.length >= 2) {
+    const ks = row.camKeys;
+    if (t <= ks[0][3]) return [ks[0][0], ks[0][1], ks[0][2]];
+    const last = ks[ks.length - 1];
+    if (t >= last[3]) return [last[0], last[1], last[2]];
+    let p0 = ks[0], p1 = ks[1];
+    for (let i = 0; i + 1 < ks.length; i++) {
+      if (t <= ks[i + 1][3]) {
+        p0 = ks[i];
+        p1 = ks[i + 1];
+        break;
+      }
+    }
+    const u = easeIO(clamp((t - p0[3]) / Math.max(0.01, p1[3] - p0[3])));
+    return [lerp(p0[0], p1[0], u), lerp(p0[1], p1[1], u), Math.exp(lerp(Math.log(p0[2]), Math.log(p1[2]), u))];
+  }
   const c1 = row.cam, c2 = row.cam2 ?? row.cam;
   const u = easeIO(clamp((t - row.t0) / Math.max(0.01, row.t1 - row.t0)));
   return [lerp(c1[0], c2[0], u), lerp(c1[1], c2[1], u), Math.exp(lerp(Math.log(c1[2]), Math.log(c2[2]), u))];

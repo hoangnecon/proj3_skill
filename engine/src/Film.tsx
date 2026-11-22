@@ -619,14 +619,43 @@ export const Film: React.FC = () => {
   const ts = t - shot.t0;
   const dur = Math.max(0.01, shot.t1 - shot.t0);
   const u = clamp(ts / dur);
-  const e = shot.ease === 'lin' ? u : shot.ease === 'out' ? easeOut(u) : shot.ease === 'in' ? u * u * u : easeIO(u);
-  const c1 = shot.cam, c2 = shot.cam2 ?? shot.cam;
-  let k = Math.exp(lerp(Math.log(c1[2]), Math.log(c2[2]), e));
+  const applyEase = (v: number) =>
+    shot.ease === 'lin' ? v : shot.ease === 'out' ? easeOut(v) : shot.ease === 'in' ? v * v * v : easeIO(v);
+  let cx: number, cy: number, k: number;
+  if (shot.camKeys && shot.camKeys.length >= 2) {
+    const ks = shot.camKeys.map(([x, y, z, tt]) => [x, y, z, abs(tt, shot)] as const);
+    if (t <= ks[0][3]) {
+      [cx, cy, k] = [ks[0][0], ks[0][1], ks[0][2]];
+    } else if (t >= ks[ks.length - 1][3]) {
+      const last = ks[ks.length - 1];
+      [cx, cy, k] = [last[0], last[1], last[2]];
+    } else {
+      let p0 = ks[0], p1 = ks[1];
+      for (let i = 0; i + 1 < ks.length; i++) {
+        if (t <= ks[i + 1][3]) {
+          p0 = ks[i];
+          p1 = ks[i + 1];
+          break;
+        }
+      }
+      const segU = clamp((t - p0[3]) / Math.max(0.01, p1[3] - p0[3]));
+      const se = applyEase(segU);
+      cx = lerp(p0[0], p1[0], se);
+      cy = lerp(p0[1], p1[1], se);
+      k = Math.exp(lerp(Math.log(p0[2]), Math.log(p1[2]), se));
+    }
+  } else {
+    const e = applyEase(u);
+    const c1 = shot.cam, c2 = shot.cam2 ?? shot.cam;
+    cx = lerp(c1[0], c2[0], e);
+    cy = lerp(c1[1], c2[1], e);
+    k = Math.exp(lerp(Math.log(c1[2]), Math.log(c2[2]), e));
+  }
   if (shot.punch) k *= 1 + shot.punch * Math.exp(-ts * 9);
   const sh = shot.shake ?? 0;
   const cam: [number, number, number] = [
-    lerp(c1[0], c2[0], e) + Math.sin(t * 0.9) * 3 + Math.sin(t * 37) * sh,
-    lerp(c1[1], c2[1], e) + Math.cos(t * 0.7) * 3 + Math.cos(t * 31) * sh,
+    cx + Math.sin(t * 0.9) * 3 + Math.sin(t * 37) * sh,
+    cy + Math.cos(t * 0.7) * 3 + Math.cos(t * 31) * sh,
     k,
   ];
 

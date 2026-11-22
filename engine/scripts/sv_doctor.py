@@ -20,6 +20,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from collections import Counter
 from pathlib import Path
@@ -762,6 +763,39 @@ def check_g7(profile: dict) -> dict:
             f"tight disk space for PNG intermediates: {free_gb:.2f} GB free (jpeg ~{jpeg_est_gb:.2f} GB OK; png ~{png_est_gb:.2f} GB)"
         )
 
+    # Scan TMPDIR for orphaned Remotion render/bundle temp directories
+    remotion_tmp_prefixes = ("remotion-webpack-bundle-", "remotion-v4-0-", "react-motion-render")
+    tmp_remotion_bytes = 0
+    tmp_remotion_dirs = 0
+    try:
+        tmp_root = Path(tempfile.gettempdir())
+        if tmp_root.is_dir():
+            for entry in tmp_root.iterdir():
+                if not entry.name.startswith(remotion_tmp_prefixes):
+                    continue
+                try:
+                    if entry.is_symlink() or not entry.is_dir():
+                        continue
+                except OSError:
+                    continue
+                tmp_remotion_dirs += 1
+                for dirpath, _dirnames, filenames in os.walk(entry, followlinks=False):
+                    for fn in filenames:
+                        try:
+                            tmp_remotion_bytes += os.lstat(os.path.join(dirpath, fn)).st_size
+                        except OSError:
+                            pass
+    except OSError:
+        pass
+    tmp_remotion_mb = round(tmp_remotion_bytes / (1024.0 * 1024.0), 1)
+    if tmp_remotion_mb >= 300:
+        msg = (
+            f"Found {tmp_remotion_mb:.0f} MB of stale Remotion temp dirs in TMPDIR — "
+            "run bundle_cache cleanup or remove stale remotion-* dirs in $TMPDIR"
+        )
+        warnings.append(msg)
+        fixes.append(msg)
+
     # Check mix freshness
     mr = jload("qa/mix_report.json")
     has_public_mix = (ROOT / "public/mix.wav").is_file()
@@ -806,6 +840,8 @@ def check_g7(profile: dict) -> dict:
 
     metrics = {
         "disk_free_gb": free_gb,
+        "tmp_remotion_mb": tmp_remotion_mb,
+        "tmp_remotion_dirs": tmp_remotion_dirs,
         "total_frames": total_frames,
         "est_footprint_jpeg_gb": jpeg_est_gb,
         "est_footprint_png_gb": png_est_gb,

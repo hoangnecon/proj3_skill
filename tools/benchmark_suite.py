@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unified Dual-Format Quality & Speed Benchmark CLI (RSI v5.1.0).
+"""Unified Dual-Format Quality & Speed Benchmark CLI (RSI v5.2.0).
 
 Runs a clean, read-only regression & speed benchmark across the suite and
 representative 9:16 Short + 16:9 Long-Form projects inside isolated temporary
@@ -8,7 +8,7 @@ sandboxes (source episode directories are never modified):
   1. Suite integrity: tools/validate_skills.py (skills, lint rules, errors, warnings, ms)
   2. Script syntax:   node --check on engine/scripts/*.mjs + py_compile on engine/scripts/*.py
   3. 9:16 Short:      plan_assets.py (if present), lint.mjs all, qa.mjs layout, voice.py --preflight, sv_doctor.py --stage all
-  4. 16:9 Long-Form:  plan_assets.py (if present), lint.mjs shots, qa.mjs layout, qa.mjs place <set>, sv_doctor.py --stage G5
+  4. 16:9 Long-Form:  plan_assets.py (if present), plan_audio.py (if present & qa/shots.json), lint.mjs shots, qa.mjs layout, qa.mjs place <set>, sv_doctor.py --stage G5
   5. Optional script: --long-script [<dir>] (runs plan_assets.py blueprint check in isolated sandbox)
   6. Optional render: --bench-render [N] / --render-frames N (timed Remotion frame render inside temp sandbox)
 
@@ -568,6 +568,75 @@ def run_plan_assets_check(ep: Path, py_exe: str, env: dict[str, str]) -> dict:
     }
 
 
+def run_plan_audio_check(ep: Path, py_exe: str, env: dict[str, str]) -> dict:
+    script_path = ep / "scripts" / "plan_audio.py"
+    shots_path = ep / "qa" / "shots.json"
+    if not script_path.is_file():
+        return {
+            "passed": True,
+            "skipped": True,
+            "rc": 0,
+            "elapsed_ms": 0.0,
+            "elapsed_s": 0.0,
+            "bed_spans": 0,
+            "foley_cues": 0,
+            "suggested_accents": 0,
+            "reason": "scripts/plan_audio.py not present",
+            "error": "",
+        }
+    if not shots_path.is_file():
+        return {
+            "passed": True,
+            "skipped": True,
+            "rc": 0,
+            "elapsed_ms": 0.0,
+            "elapsed_s": 0.0,
+            "bed_spans": 0,
+            "foley_cues": 0,
+            "suggested_accents": 0,
+            "reason": "qa/shots.json not present",
+            "error": "",
+        }
+
+    rc, dt, out, err = run_cmd([py_exe, "scripts/plan_audio.py"], ep, env, timeout_s=30.0)
+    bed_spans = 0
+    foley_cues = 0
+    suggested_accents = 0
+    plan_path = ep / "qa" / "audio_plan_suggested.json"
+    if plan_path.is_file():
+        try:
+            pdata = json.loads(plan_path.read_text(encoding="utf-8"))
+            if isinstance(pdata, dict):
+                summary = pdata.get("summary") if isinstance(pdata.get("summary"), dict) else {}
+                bed_spans = int(summary.get("bed_spans") or len(pdata.get("beds") or []))
+                foley_cues = int(summary.get("foley_cues") or len(pdata.get("foley_cues") or []))
+                suggested_accents = int(
+                    summary.get("suggested_accents") or len(pdata.get("suggested_accents") or [])
+                )
+        except Exception:
+            pass
+    if foley_cues == 0:
+        m = re.search(r"(\d+)\s+physical\s+foley\s+cues", out, re.I)
+        if m:
+            foley_cues = int(m.group(1))
+    if bed_spans == 0:
+        m = re.search(r"(\d+)\s+bed\s+spans", out, re.I)
+        if m:
+            bed_spans = int(m.group(1))
+    return {
+        "passed": rc == 0,
+        "skipped": False,
+        "rc": rc,
+        "elapsed_ms": round(dt * 1000, 1),
+        "elapsed_s": round(dt, 3),
+        "bed_spans": bed_spans,
+        "foley_cues": foley_cues,
+        "suggested_accents": suggested_accents,
+        "summary": (out.strip().splitlines()[0][:160] if out.strip() else ""),
+        "error": (err.strip() or out.strip())[:200] if rc != 0 else "",
+    }
+
+
 def benchmark_long_script(
     ep_path: Path,
     suite_dir: Path,
@@ -724,6 +793,9 @@ def benchmark_long(
     rc, dt, out, err = run_cmd(["node", "scripts/lint.mjs", "shots"], sandbox, env)
     checks["lint_shots"] = parse_lint_result(sandbox, rc, dt, out, err)
 
+    if (sandbox / "scripts" / "plan_audio.py").is_file() and (sandbox / "qa" / "shots.json").is_file():
+        checks["plan_audio"] = run_plan_audio_check(sandbox, py_exe, env)
+
     rc, dt, out, err = run_cmd(["node", "scripts/qa.mjs", "layout"], sandbox, env)
     checks["qa_layout"] = parse_layout_result(sandbox, rc, dt, out, err)
 
@@ -759,6 +831,7 @@ def benchmark_long(
         checks["lint_shots"]["errors"]
         + checks["sv_doctor_g5"]["errors"]
         + (0 if checks.get("plan_assets", {"passed": True})["passed"] else 1)
+        + (0 if checks.get("plan_audio", {"passed": True})["passed"] else 1)
         + (0 if checks["qa_layout"]["passed"] else 1)
         + (0 if checks["qa_place"]["passed"] else 1)
         + (0 if checks.get("render_frames", {"passed": True})["passed"] else 1)
@@ -875,6 +948,16 @@ def render_scorecard(report: dict) -> str:
             f"{ls['elapsed_s']:.2f} s | {ls['errors']} | {ls['warnings']} | "
             f"strips={ls['strips']} |"
         )
+        if "plan_audio" in lc:
+            au = lc["plan_audio"]
+            if au.get("skipped"):
+                lines.append(f"| 16:9 Long · `plan_audio.py` | SKIP | — | 0 | 0 | {au.get('reason', 'skipped')} |")
+            else:
+                lines.append(
+                    f"| 16:9 Long · `plan_audio.py` | {'PASS' if au['passed'] else 'FAIL'} | "
+                    f"{au['elapsed_ms']:.0f} ms | {0 if au['passed'] else 1} | 0 | "
+                    f"foley_cues={au['foley_cues']}, beds={au['bed_spans']}, accents={au['suggested_accents']} |"
+                )
         lines.append(
             f"| 16:9 Long · `qa.mjs layout` | {'PASS' if ly['passed'] else 'FAIL'} | "
             f"{ly['elapsed_s']:.2f} s | {ly['overcrowded'] + ly['scale_err'] + ly['cutoff_err']} | 0 | "

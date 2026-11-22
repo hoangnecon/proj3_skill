@@ -128,6 +128,7 @@ export type ShotDef = {
   of?: (u: number, ts: number, t: number) => Record<string, unknown>; // escape hatch: computed options
   cam: [number, number, number]; // [centreX, centreY, zoom] in world px; zoom 1 = 1080 px wide
   cam2?: [number, number, number]; // end of the move (motivated moves only, see sv-22)
+  camKeys?: [number, number, number, TT][]; // multi-waypoint camera choreography [cx, cy, zoom, at] (overrides cam->cam2 when >= 2 waypoints)
   ease?: 'io' | 'out' | 'in' | 'lin';
   actors?: Actor[];
   over?: Over[];

@@ -1,7 +1,7 @@
 // Final render + delivery report (gate G7).
 //   node scripts/deliver.mjs            -> out/final.mp4, qa/deliver_report.json, qa/final_check.jpg (no phone copy: the user does not want one)
 // Refuses to run when the mix is stale (shots or voice changed after scripts/mix.py ran).
-import {cachedBundle} from './bundle_cache.mjs';
+import {cachedBundle, pruneStaleRemotionTmp} from './bundle_cache.mjs';
 import {openBrowser, renderMedia, selectComposition} from '@remotion/renderer';
 import {execFile, execFileSync} from 'node:child_process';
 import crypto from 'node:crypto';
@@ -30,18 +30,36 @@ if ((mr.inputs.timing ?? mr.inputs.shots) !== sha(mr.inputs.timing ? 'qa/timing.
 if (mr.inputs.voice !== sha('audio/voice.wav')) die('voice changed after the mix — re-run scripts/mix.py');
 
 fs.mkdirSync('out', {recursive: true});
-// Remotion writes every frame to the temp dir before encoding; JPEG q=95 cuts temp footprint by ~70% vs PNG.
-{
-  const need = (P.DURATION * 30 * (imgFmt === 'png' ? 0.6 : 0.18)) / 1024 + 1.2; // GB
-  const free = +execFileSync('df', ['-k', '/private/var/folders']).toString().trim().split('\n').pop().split(/\s+/)[3] / 1024 / 1024;
-  if (free < need) die(`only ${free.toFixed(1)} GB free, render needs ~${need.toFixed(1)} GB — free disk space first (ask the user before deleting their files)`);
-}
+// Prune orphaned Remotion temp dirs (> 1h old) before checking disk space so stale renders don't trigger false low-disk errors.
+const prunedTmp = pruneStaleRemotionTmp(60 * 60 * 1000);
+if (prunedTmp > 0) console.log(`pruned ${prunedTmp} stale Remotion temp dir(s)`);
+
+const readFreeGb = () => {
+  const probe = fs.existsSync('/private/var/folders') ? '/private/var/folders' : os.tmpdir();
+  try {
+    return +execFileSync('df', ['-k', probe]).toString().trim().split('\n').pop().split(/\s+/)[3] / 1024 / 1024;
+  } catch {
+    return +execFileSync('df', ['-k', os.tmpdir()]).toString().trim().split('\n').pop().split(/\s+/)[3] / 1024 / 1024;
+  }
+};
+const free = readFreeGb();
 const raw = 'out/_render.mp4';
 const final = 'out/final.mp4';
 const FPS = 30;
 const totalFrames = Math.max(1, Math.round(P.DURATION * FPS));
 const x264Preset = process.env.SV_X264_PRESET || 'veryfast';
-const targetBlockFrames = Math.max(1, +(process.env.SV_CHUNK_FRAMES || 1050));
+const envChunkFrames = process.env.SV_CHUNK_FRAMES !== undefined ? Number(process.env.SV_CHUNK_FRAMES) : NaN;
+let forceAdaptiveChunks = false;
+let targetBlockFrames = 1050;
+if (Number.isFinite(envChunkFrames) && envChunkFrames >= 1) {
+  targetBlockFrames = Math.floor(envChunkFrames);
+} else if (free < 4.5) {
+  targetBlockFrames = 450;
+  forceAdaptiveChunks = true;
+}
+if (forceAdaptiveChunks) {
+  console.log(`tight disk (${free.toFixed(1)} GB free < 4.5 GB) — adaptive safe chunking enabled (${targetBlockFrames}f/block)`);
+}
 let usedChunks = false;
 
 // Build contiguous per-shot frame ranges and group them into shot-aligned macro-blocks (~35s each).
@@ -116,10 +134,20 @@ if (process.env.SV_SKIP_RENDER && fresh) {
   const cachedCount = blocks.filter((_, bi) => isCached(bi)).length;
   const useChunks = blocks.length > 0 && process.env.SV_CHUNK_RENDER !== '0' && (
     (blocks.length > 1 && P.DURATION >= 240)
+    || forceAdaptiveChunks
     || process.env.SV_CHUNK_RENDER === '1'
     || (blocks.length > 1 && cachedCount >= Math.ceil(blocks.length * 0.5))
   );
   usedChunks = useChunks;
+  // Remotion writes every frame to the temp dir before encoding; JPEG q=95 cuts temp footprint by ~70% vs PNG.
+  // When chunked, peak temp footprint is only the largest single block, not the entire episode.
+  const maxBlockFrames = blocks.reduce((m, b) => Math.max(m, b.f1 - b.f0 + 1), 0);
+  const need = useChunks
+    ? (maxBlockFrames * (imgFmt === 'png' ? 0.6 : 0.18)) / 1024 + 0.6
+    : (P.DURATION * FPS * (imgFmt === 'png' ? 0.6 : 0.18)) / 1024 + 1.2; // GB
+  if (free < need) {
+    die(`only ${free.toFixed(1)} GB free, render needs ~${need.toFixed(1)} GB${useChunks ? ` (chunked, max block ${maxBlockFrames}f)` : ''} — free disk space first (ask the user before deleting their files)`);
+  }
   const concurrency = Math.max(1, +(process.env.SV_RENDER_CONCURRENCY ?? Math.max(4, Math.min(12, os.cpus().length - 1))));
 
   if (useChunks) {
@@ -217,6 +245,7 @@ const report = {
   render_seconds: +renderSec.toFixed(2),
   fps_effective: +(totalFrames / renderSec).toFixed(2),
   frame_format: imgFmt, x264_preset: x264Preset, chunked: usedChunks, macro_blocks: blocks.length,
+  adaptive_chunk_frames: targetBlockFrames,
   final_sha: sha(final), shots_sha: sha('qa/shots.json'),
 };
 fs.writeFileSync('qa/deliver_report.json', JSON.stringify(report, null, 1));

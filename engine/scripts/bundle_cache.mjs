@@ -3,9 +3,37 @@
 import {bundle} from '@remotion/bundler';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 const SRC_RE = /\.(ts|tsx|js|mjs|json|css|svg)$/;
+const REMOTION_TMP_PREFIXES = ['remotion-webpack-bundle-', 'react-motion-render'];
+
+/**
+ * Safely prune stale Remotion temp directories in os.tmpdir() older than maxAgeMs.
+ * Only touches directories starting with remotion-webpack-bundle- or react-motion-render;
+ * never deletes active/recent renders or any other files.
+ */
+export function pruneStaleRemotionTmp(maxAgeMs = 2 * 60 * 60 * 1000) {
+  let removed = 0;
+  try {
+    const tmpRoot = os.tmpdir();
+    const cutoff = Date.now() - maxAgeMs;
+    for (const entry of fs.readdirSync(tmpRoot, {withFileTypes: true})) {
+      if (!entry.isDirectory()) continue;
+      if (!REMOTION_TMP_PREFIXES.some((p) => entry.name.startsWith(p))) continue;
+      const full = path.join(tmpRoot, entry.name);
+      try {
+        const st = fs.statSync(full);
+        if (st.isDirectory() && st.mtimeMs < cutoff) {
+          fs.rmSync(full, {recursive: true, force: true});
+          removed++;
+        }
+      } catch {}
+    }
+  } catch {}
+  return removed;
+}
 
 const walk = (dir) => {
   if (!fs.existsSync(dir)) return [];
@@ -53,6 +81,8 @@ export async function cachedBundle(entryPoint = 'src/index.ts') {
     console.log('bundle: cache hit', srcHash);
     return cacheDir;
   }
+
+  pruneStaleRemotionTmp();
 
   fs.mkdirSync(cacheRoot, {recursive: true});
   if (fs.existsSync(cacheDir)) {

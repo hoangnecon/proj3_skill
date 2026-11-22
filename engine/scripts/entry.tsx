@@ -56,15 +56,19 @@ export const shotTable = () =>
         path: a.path ? a.path.map(([x, y, tt]) => [x, y, +abs(tt, s).toFixed(3)]) : null,
         view: a.view ?? null,
         z: a.z ?? 0, fg: !!a.fg, mount: a.mount ?? null,
+        arcH: a.arcH ?? 0, pushTarget: a.pushTarget ?? null, fx: a.fx ?? [],
       };
     });
     const keyEvents: {key: string; value: unknown; t: number}[] = [];
     for (const [k, tr] of Object.entries(s.keys ?? {})) for (let i = 1; i < tr.length; i++) keyEvents.push({key: k, value: tr[i][0], t: +abs(tr[i][1], s).toFixed(3)});
     return {
       i: s.idx, name: s.name, at: s.at, set: s.set, bed: SETS[s.set]?.bed ?? 'room', night: s.night ?? 0, tr: s.tr ?? 'cut',
-      t0: +s.t0.toFixed(3), t1: +s.t1.toFixed(3), cam: s.cam, cam2: s.cam2 ?? null, punch: s.punch ?? 0, shake: s.shake ?? 0,
+      t0: +s.t0.toFixed(3), t1: +s.t1.toFixed(3), cam: s.cam, cam2: s.cam2 ?? null,
+      camKeys: s.camKeys ? s.camKeys.map(([cx, cy, k, tt]) => [cx, cy, k, +abs(tt, s).toFixed(3)]) : null,
+      punch: s.punch ?? 0, shake: s.shake ?? 0,
       o: s.o ?? {}, keys: keyEvents, reaches: reaches.filter((c) => c >= s.t0 - 0.5 && c < s.t1 + 0.5), actors,
       over: (s.over ?? []).map((o) => ({k: o.k, text: o.text ?? '', t: +abs(o.at ?? 0, s).toFixed(3), x: o.x, y: o.y, world: !!o.world})),
       extras: (s.extras ?? []).map((x) => x.k),
+      extraEvents: (s.extras ?? []).map((x) => ({id: x.id ?? null, k: x.k, pose: x.pose ?? null, altitude: x.altitude ?? 0, hasPath: !!(x.path && x.path.length > 1)})),
     };
   });

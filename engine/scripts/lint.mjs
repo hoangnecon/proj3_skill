@@ -449,6 +449,11 @@ if (phase !== 'design') {
     }
     usedSets.add(s.set);
     for (const [k, tr] of Object.entries(s.keys ?? {})) tr.forEach(([, tt]) => visitTT(tt, `${tag}.keys.${k}`));
+    if (Array.isArray(s.camKeys)) {
+      for (const ck of s.camKeys) {
+        if (Array.isArray(ck)) visitTT(ck[3], `${tag}.camKeys`);
+      }
+    }
     for (const o of s.over ?? []) {
       visitTT(o.at, tag + '.over'); visitTT(o.until, tag + '.over');
       if (!OVER.has(o.k)) err('OV-01', `${tag}: overlay kind ${o.k}`);
@@ -496,7 +501,14 @@ if (phase !== 'design') {
   const keyVals = (v) => (Array.isArray(v) ? v.map((x) => String(x[0])) : v !== undefined && v !== null ? [String(v)] : []);
   const countChoreoEvents = (s, r) => {
     let n = 0;
-    if (r.cam2 && (Math.hypot((r.cam2[0] ?? 0) - (r.cam[0] ?? 0), (r.cam2[1] ?? 0) - (r.cam[1] ?? 0)) > 10 || Math.abs((r.cam2[2] ?? 1) - (r.cam[2] ?? 1)) > 0.03)) n += 1;
+    const camKeys = Array.isArray(r.camKeys) ? r.camKeys : (Array.isArray(s.camKeys) ? s.camKeys : null);
+    if (camKeys && camKeys.length >= 3) {
+      n += 2;
+    } else if (camKeys && camKeys.length === 2) {
+      n += 1;
+    } else if (r.cam2 && (Math.hypot((r.cam2[0] ?? 0) - (r.cam[0] ?? 0), (r.cam2[1] ?? 0) - (r.cam[1] ?? 0)) > 10 || Math.abs((r.cam2[2] ?? 1) - (r.cam[2] ?? 1)) > 0.03)) {
+      n += 1;
+    }
     n += Object.keys(s.keys ?? {}).length;
     if (s.of || s.punch) n += 1;
     for (const A of s.actors ?? []) {
@@ -539,20 +551,80 @@ if (phase !== 'design') {
     const holdWarnS = isLong16x9 ? 11.0 : 6.5;
     if (dur > holdWarnS && !waived('SH-15', r.name)) warn('SH-15', `${tag}: ${dur.toFixed(1)} s — long hold; is something moving/changing?`);
     const k0 = r.cam[2], k1 = r.cam2 ? r.cam2[2] : k0;
-    if (Math.min(k0, k1) < 0.5 || Math.max(k0, k1) > 4) err('CA-01', `${tag}: zoom ${k0}->${k1} outside 0.5–4`);
+    const resolvedCamKeys = Array.isArray(r.camKeys)
+      ? r.camKeys
+      : (Array.isArray(s.camKeys)
+        ? s.camKeys
+            .filter((ck) => Array.isArray(ck) && ck.length >= 4 && typeof ck[0] === 'number' && typeof ck[1] === 'number' && typeof ck[2] === 'number')
+            .map((ck) => {
+              try {
+                const tAbs = typeof ck[3] === 'number' ? r.t0 + ck[3] : P.tAt(ck[3]);
+                return [ck[0], ck[1], ck[2], tAbs];
+              } catch {
+                return [ck[0], ck[1], ck[2], NaN];
+              }
+            })
+        : []);
+    const validCamKeys = resolvedCamKeys.filter((ck) => Array.isArray(ck) && Number.isFinite(ck[0]) && Number.isFinite(ck[1]) && Number.isFinite(ck[2]));
+    const allCams = [r.cam, ...(r.cam2 ? [r.cam2] : []), ...validCamKeys.map((ck) => [ck[0], ck[1], ck[2]])];
+    const allZooms = allCams.map((c) => c[2]).filter((z) => Number.isFinite(z));
+    const minK = Math.min(...allZooms), maxK = Math.max(...allZooms);
+    if (minK < 0.5 || maxK > 4) err('CA-01', `${tag}: zoom ${minK}->${maxK} outside 0.5–4`);
     if (r.cam2 && dur < 1.0 && (Math.abs(r.cam2[0] - r.cam[0]) > 40 || Math.abs(k1 - k0) > 0.1)) warn('CA-02', `${tag}: camera move in a ${dur.toFixed(2)} s shot reads as a jolt`);
     const B = P.SETS[r.set]?.bounds;
-    if (B) for (const [cx, cy, k] of [r.cam, r.cam2 ?? r.cam]) {
+    if (B) for (const [cx, cy, k] of allCams) {
+      if (!(k > 0)) continue;
       const [x0, y0, x1, y1] = [cx - (W / 2) / k, cy - (H / 2) / k, cx + (W / 2) / k, cy + (H / 2) / k];
       if (x0 < B[0] - 1 || y0 < B[1] - 1 || x1 > B[2] + 1 || y1 > B[3] + 1)
         err('CA-05', `${tag}: camera [${cx}, ${cy}, ${k}] sees [${Math.round(x0)}, ${Math.round(y0)}, ${Math.round(x1)}, ${Math.round(y1)}] — outside the painted set bounds [${B.join(', ')}] (empty void on screen)`);
     }
     if (Math.max(k0, k1) / Math.min(k0, k1) > 2.2) warn('CA-03', `${tag}: zoom ratio ${(Math.max(k0, k1) / Math.min(k0, k1)).toFixed(1)}× inside one shot`);
+    // CA-08: Multi-Waypoint Camera Choreography Guard
+    if (s.camKeys !== undefined) {
+      let camKeysShapeOk = Array.isArray(s.camKeys) && s.camKeys.length >= 2;
+      if (!camKeysShapeOk) {
+        err('CA-08', `${tag}: camKeys must be an array with >= 2 waypoints of [cx, cy, k, tt]`);
+      } else {
+        for (let j = 0; j < s.camKeys.length; j++) {
+          const ck = s.camKeys[j];
+          const ok = Array.isArray(ck) && ck.length >= 4
+            && typeof ck[0] === 'number' && Number.isFinite(ck[0])
+            && typeof ck[1] === 'number' && Number.isFinite(ck[1])
+            && typeof ck[2] === 'number' && Number.isFinite(ck[2])
+            && (typeof ck[3] === 'number' ? Number.isFinite(ck[3]) : typeof ck[3] === 'string' && ck[3].length > 0);
+          if (!ok) {
+            camKeysShapeOk = false;
+            err('CA-08', `${tag}: camKeys[${j}] must be [cx, cy, k, tt] with finite numeric cx, cy, k and valid timestamp tt`);
+          }
+        }
+      }
+      if (camKeysShapeOk && resolvedCamKeys.length >= 2) {
+        for (let j = 0; j < resolvedCamKeys.length; j++) {
+          const [, , kj, tj] = resolvedCamKeys[j];
+          if (!Number.isFinite(tj)) continue;
+          if (tj < r.t0 - 0.15 || tj > r.t1 + 0.15) {
+            warn('CA-08', `${tag}: camKeys[${j}] timestamp ${tj.toFixed(2)} s falls outside shot window [${r.t0.toFixed(2)}..${r.t1.toFixed(2)}] s`);
+          }
+          if (j > 0) {
+            const [, , kPrev, tPrev] = resolvedCamKeys[j - 1];
+            if (!Number.isFinite(tPrev)) continue;
+            if (tj <= tPrev) {
+              err('CA-08', `${tag}: camKeys[${j}] timestamp ${tj.toFixed(2)} s must be strictly greater than camKeys[${j - 1}] (${tPrev.toFixed(2)} s)`);
+            } else if (kPrev > 0 && kj > 0) {
+              const zoomRatio = Math.max(kj, kPrev) / Math.min(kj, kPrev);
+              const dt = tj - tPrev;
+              if (zoomRatio > 1.9 && dt < 0.5 && !waived('CA-08', r.name)) {
+                warn('CA-08', `${tag}: camKeys[${j - 1}->${j}] whip-zoom ${kPrev.toFixed(2)}->${kj.toFixed(2)} (${zoomRatio.toFixed(2)}× in ${dt.toFixed(2)} s < 0.50 s) — lengthen transition or cut instead`);
+              }
+            }
+          }
+        }
+      }
+    }
     // LA-03: ban fake close-up via camera zoom on establishing/wide sets
     const setDef = P.SETS[r.set];
     if ((setDef?.shotScale === 'establishing' || setDef?.angle === 'wide') && !setDef?.insert) {
-      if ((r.cam[2] > 1.35 || (r.cam2 && r.cam2[2] > 1.45)) && !waived('LA-03', r.name)) {
-        const maxK = Math.max(r.cam[2], r.cam2 ? r.cam2[2] : r.cam[2]);
+      if ((allCams[0][2] > 1.35 || allCams.slice(1).some((c) => c[2] > 1.45)) && !waived('LA-03', r.name)) {
         err('LA-03', `${tag}: fake close-up via camera zoom (${maxK.toFixed(2)}×) on establishing/wide set '${r.set}' — draw a dedicated 'medium' or 'closeup' sub-scene plate instead`);
       }
     }
@@ -560,7 +632,7 @@ if (phase !== 'design') {
     if (!P.SETS[r.set]?.insert && r.set !== 'solid' && !rows.slice(0, i).some((q) => q.set === r.set) && Math.min(k0, k1) > 1.2 && !waived('CA-04', r.name))
       err('CA-04', `${tag}: first shot in '${r.set}' is not an establishing frame (zoom ${Math.min(k0, k1)} > 1.2)`);
     // something must change in every shot (actor motion, camera move, set state, talk, expression, overlay)
-    const lives = r.cam2 || (s.keys && Object.keys(s.keys).length) || (s.over ?? []).length || s.of || s.punch ||
+    const lives = r.cam2 || (Array.isArray(s.camKeys) && s.camKeys.length >= 2) || (s.keys && Object.keys(s.keys).length) || (s.over ?? []).length || s.of || s.punch ||
       (s.actors ?? []).some((A) => A.path || A.reach || A.talk || A.hop || A.shake || A.pant || A.ride || A.arcH || A.mount || A.pushTarget || (A.fx && A.fx.length) || A.wind || ['p', 'e', 'legs', 'arms', 'view'].some((k) => Array.isArray(A[k]))) ||
       (s.extras ?? []).some((E) => (E.path && E.path.length > 1) || Array.isArray(E.pose) || Array.isArray(E.expr));
     if (!lives && !waived('MO-08', r.name)) warn('MO-08', `${tag}: nothing moves or changes for ${dur.toFixed(1)} s — add a camera drift, an expression key or a gesture`);
