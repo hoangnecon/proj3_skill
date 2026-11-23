@@ -32,14 +32,14 @@ warn = warns.append
 
 # ---------------------------------------------------------------- 0. layout
 TOP = {"skills", "standards", "engine", "starter", "examples", "tools", "docs", ".claude-plugin"}
-TOP_FILES = {"README.md", "CHANGELOG.md", "CONVENTIONS.md", ".gitignore"}
+TOP_FILES = {"README.md", "CHANGELOG.md", "CONVENTIONS.md", ".gitignore", "plugin.json"}
 KINDS = {  # folder -> allowed file suffixes (relative path regex for exceptions)
     "skills": {".md"},
     "standards": {".json"},
     "engine": {".py", ".mjs", ".ts", ".tsx", ".json"},
     "starter": {".md", ".json", ".ts", ".tsx", ".gitignore"},
     "examples": {".json", ".ts", ".tsx", ".txt"},
-    "tools": {".py", ".sh"},
+    "tools": {".py", ".sh", ".ps1"},
     "docs": {".md", ".png", ".jpg"},
     ".claude-plugin": {".json"},
 }

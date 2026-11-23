@@ -1,0 +1,15 @@
+{
+  "name": "story-video-skills",
+  "displayName": "Story Video Skills",
+  "version": "5.7.0",
+  "description": "Gated production suite for 2-3 minute vertical Shorts and 9.5-16.0 minute 16:9 widescreen Vietnamese 2D story videos (Remotion, riso-ink, canonical New Nhim, pure 5.25 ups Hai Dang narration, 158 lint rules).",
+  "suggestedPrompts": [
+    "Pitch 5-10 Short premises with New Nhim for approval",
+    "Scaffold a new story-video episode and run doctor check",
+    "Write brief.md, beats.md, and script.json passing G1-G2"
+  ],
+  "author": {
+    "name": "PROJ3"
+  },
+  "repository": "https://github.com/hoangnecon/proj3_skill"
+}
