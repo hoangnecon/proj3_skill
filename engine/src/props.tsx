@@ -321,10 +321,109 @@ export const Cat: React.FC<{t: number; proud?: boolean}> = ({t, proud}) => (
   </g>
 );
 
-// ======================= REGISTRIES (names used in shotlist.ts) =======================
+// ======================= ANIMATED TOOLS & CUTAWAY HELPERS (v5.7) =======================
 type P2 = [number, number];
-/** front view: drawn between the body and the hands; h.l / h.r = hand centres */
-export const HAND_PROPS: Record<string, (h: {l: P2; r: P2}, t: number) => React.ReactNode> = {
+
+/** Articulated tailor/shadow scissors: u < 0 opens blades wide (anticipation), u > 0 snaps shut with glint. */
+export const ScissorsTool: React.FC<{u?: number; s?: number}> = ({u = 0, s = 1}) => {
+  const halfAng = u < 0 ? 12 + (-u) * 24 : u > 0 ? Math.max(1.5, 12 * (1 - u)) : 12;
+  return (
+    <g transform={`scale(${s})`}>
+      <g transform={`rotate(${-halfAng} 24 0)`}>
+        <S d="M18 -5L136 -14L120 3L18 4Z" f="steel" sw={4} />
+        <L d="M-16 -14L24 0" w={9} c="ink" />
+        <S d={E(-24, -18, 16, 12)} f="navy" sw={4} />
+        <S d={E(-24, -18, 7, 5)} f="paper" sw={3} />
+      </g>
+      <g transform={`rotate(${halfAng} 24 0)`}>
+        <S d="M18 5L136 14L120 -3L18 -4Z" f="steelDark" sw={4} />
+        <L d="M-16 14L24 0" w={9} c="ink" />
+        <S d={E(-24, 18, 16, 12)} f="navy" sw={4} />
+        <S d={E(-24, 18, 7, 5)} f="paper" sw={3} />
+      </g>
+      <S d={E(24, 0, 6, 6)} f="gold" sw={3} />
+      {u > 0.35 && <L d="M118 -26l16 52M102 0h48" w={4} c="yellow" />}
+    </g>
+  );
+};
+
+export const HandLantern: React.FC<{t?: number; c?: string}> = ({t = 0, c = 'orange'}) => (
+  <g transform={`rotate(${Math.sin(t * 2.8) * 5} 0 0)`}>
+    <L d="M0 0v22" w={5} c="goldDark" />
+    <S d={Rr(-22, 20, 44, 10, 4)} f="woodDark" sw={4} />
+    <ellipse cx={0} cy={56} rx={72} ry={66} fill="url(#glowY)" opacity={0.8} />
+    <S d="M-26 30C-38 48 -38 72 -24 88L24 88C38 72 38 48 26 30Z" f={c} sw={4} />
+    <S d={E(0, 59, 14, 20)} f="yellow" nl />
+    <L d="M-12 30C-18 50 -18 70 -12 88M12 30C18 50 18 70 12 88" w={3} c="woodDark" />
+    <S d={Rr(-20, 86, 40, 10, 4)} f="woodDark" sw={4} />
+  </g>
+);
+
+export type HandInsertProps = {
+  from?: 'right' | 'left' | 'top' | 'bottom';
+  x: number;
+  y: number;
+  u?: number;
+  cutU?: number;
+  tool?: 'scissors' | 'needle' | 'lantern' | 'knife' | 'pen' | 'grab' | 'point';
+  sleeve?: string;
+  skin?: string;
+  s?: number;
+  angle?: number;
+  t?: number;
+};
+
+// lint-ok: CH-10 close-up forearm+hand cutaway helper (no head/face)
+export const HandInsert: React.FC<HandInsertProps> = ({from = 'right', x, y, u = 1, cutU = 0, tool = 'scissors', sleeve = 'navy', skin = 'skin', s = 1, angle, t = 0}) => {
+  const cl = Math.max(0, Math.min(1, u));
+  const slide = (1 - cl) * 320;
+  const dirAngle = angle ?? (from === 'right' ? 162 : from === 'left' ? 18 : from === 'top' ? 96 : -84);
+  const dx = from === 'right' ? slide : from === 'left' ? -slide : 0;
+  const dy = from === 'top' ? -slide : from === 'bottom' ? slide : slide * 0.22;
+  const tipOff = tool === 'scissors' ? 128 : tool === 'knife' ? 110 : tool === 'needle' ? 76 : tool === 'pen' ? 68 : 34;
+  return (
+    <g transform={`translate(${x + dx} ${y + dy}) rotate(${dirAngle}) scale(${s}) translate(${-tipOff} 0)`}>
+      <S d="M-320 -34L-74 -26L-74 26L-320 38Z" f={sleeve} sw={5} />
+      <Sh d="M-320 6L-74 6L-74 26L-320 38Z" o={0.5} />
+      <S d={Rr(-82, -30, 24, 60, 8)} f="white" sw={4} />
+      <S d={E(-28, 0, 34, 28)} f={skin} sw={5} />
+      {tool === 'scissors' && <ScissorsTool u={cutU} s={1.05} />}
+      {tool === 'knife' && (
+        <g transform={`rotate(${cutU * 14} 0 0)`}>
+          <S d={Rr(-26, -9, 40, 18, 6)} f="woodDark" sw={4} />
+          <S d="M14 -10L116 -2L92 14L14 10Z" f="steel" sw={4} />
+        </g>
+      )}
+      {tool === 'needle' && (
+        <g transform={`translate(${cutU * 18} 0)`}>
+          <L d="M-40 16Q-90 46 -150 22" w={4} c="red" />
+          <L d="M-6 0L80 -4" w={5} c="steel" />
+          <S d={E(-4, 0, 5, 3)} f="gold" sw={2} />
+        </g>
+      )}
+      {tool === 'pen' && (
+        <g transform="rotate(18 0 0)">
+          <S d={Rr(-30, -7, 88, 14, 5)} f="yellow" sw={4} />
+          <S d="M58 -7L76 0L58 7Z" f="ink" sw={3} />
+        </g>
+      )}
+      {tool === 'lantern' && <HandLantern t={t} />}
+      {tool === 'point' ? (
+        <S d={Rr(-12, -11, 52, 20, 9)} f={skin} sw={4} />
+      ) : (
+        <>
+          <S d={E(-8, -14 - (cutU < 0 ? 4 : 0), 15, 10)} f={skin} sw={4} />
+          <S d={E(-4, 2, 16, 10)} f={skin} sw={4} />
+          <S d={E(-10, 16 + (cutU < 0 ? 4 : 0), 14, 9)} f={skin} sw={4} />
+        </>
+      )}
+    </g>
+  );
+};
+
+// ======================= REGISTRIES (names used in shotlist.ts) =======================
+/** front view: drawn between the body and the hands; h.l / h.r = hand centres; u = animated use pulse (-1..+1) */
+export const HAND_PROPS: Record<string, (h: {l: P2; r: P2}, t: number, u?: number) => React.ReactNode> = {
   clip: (h) => <g transform={`translate(${h.r[0] - 10} ${h.r[1] - 40}) rotate(-8) scale(0.8)`}><Clipboard /></g>,
   phone: (h) => <g transform={`translate(${h.r[0]} ${h.r[1] - 10})`}><Phone /></g>,
   book: (h) => <g transform={`translate(${(h.l[0] + h.r[0]) / 2} ${h.l[1] - 30}) scale(0.8)`}><Book c="teal" label="SỔ" /></g>,
@@ -335,15 +434,31 @@ export const HAND_PROPS: Record<string, (h: {l: P2; r: P2}, t: number) => React.
   wrench: (h, t) => <g transform={`translate(${h.r[0]} ${h.r[1]}) rotate(${-40 + Math.sin(t * 9) * 25})`}><L d="M0 0l0 -110" w={16} c="steelDark" /><S d="M-22 -110a22 22 0 1 1 44 0l-12 0l0 -12l-20 0l0 12Z" f="steel" sw={4} /></g>,
   incense: (h, t) => <g transform={`translate(${(h.l[0] + h.r[0]) / 2} ${h.l[1]})`}><Incense t={t} /></g>,
   seeds: (h) => <g transform={`translate(${h.l[0]} ${h.l[1]})`}><Seeds /></g>,
+  scissors: (h, _t, u = 0) => <g transform={`translate(${h.r[0]} ${h.r[1]}) rotate(28)`}><ScissorsTool u={u} s={0.92} /></g>,
+  lantern: (h, t) => <g transform={`translate(${h.r[0]} ${h.r[1]})`}><HandLantern t={t} /></g>,
+  flashlight: (h, _t, u = 0) => <g transform={`translate(${h.r[0]} ${h.r[1]}) rotate(16)`}>{u >= 0 && <polygon points="34,-10 220,-64 220,64 34,10" fill={PAL.yellow} opacity={0.28} />}<S d={Rr(-22, -12, 58, 24, 6)} f="steelDark" sw={4} /><S d={Rr(30, -15, 12, 30, 4)} f="yellow" sw={3} /></g>,
+  needle: (h, _t, u = 0) => <g><path d={`M${h.l[0]} ${h.l[1]}Q${(h.l[0] + h.r[0]) / 2} ${Math.max(h.l[1], h.r[1]) + 34 - u * 16} ${h.r[0]} ${h.r[1]}`} fill="none" stroke={PAL.red} strokeWidth={4} /><g transform={`translate(${h.r[0]} ${h.r[1]}) rotate(-24)`}><L d="M-8 0L58 0" w={5} c="steel" /></g></g>,
+  knife: (h, _t, u = 0) => <g transform={`translate(${h.r[0]} ${h.r[1]}) rotate(${18 + u * 16})`}><S d={Rr(-24, -8, 36, 16, 5)} f="woodDark" sw={4} /><S d="M12 -9L98 -2L80 12L12 9Z" f="steel" sw={4} /></g>,
+  pen: (h, _t, u = 0) => <g transform={`translate(${h.r[0]} ${h.r[1]}) rotate(${32 + u * 10})`}><S d={Rr(-24, -6, 68, 12, 4)} f="yellow" sw={4} /><S d="M44 -6L58 0L44 6Z" f="ink" sw={3} /></g>,
+  broom: (h, t, u = 0) => <g transform={`translate(${h.r[0]} ${h.r[1]}) rotate(${12 + Math.sin(t * 6) * 6 + u * 14})`}><L d="M0 -80L18 120" w={10} c="wood" /><S d="M-12 116L48 112L64 176L-24 180Z" f="gold" sw={4} /></g>,
+  magnifying: (h) => <g transform={`translate(${h.r[0]} ${h.r[1]}) rotate(-28)`}><L d="M0 0L44 0" w={10} c="woodDark" /><S d={E(74, 0, 30, 30)} f="glass" sw={5} /></g>,
 };
 /** side view: h.near = hand nearest the camera */
-export const SIDE_PROPS: Record<string, (h: {near: P2; far: P2}, t: number) => React.ReactNode> = {
+export const SIDE_PROPS: Record<string, (h: {near: P2; far: P2; nearAng?: number; farAng?: number}, t: number, u?: number) => React.ReactNode> = {
   toolbox: ({near: [x, y]}) => <g transform={`translate(${x} ${y})`}><L d="M-20 0v-10h40v10" w={6} /><S d="M-60 0h120v70h-120Z" f="red" /><L d="M-60 22h120" w={4} /></g>,
   trash: ({near: [x, y]}) => <g transform={`translate(${x} ${y + 76})`}><S d="M-50 0C-64 -44 -50 -92 -14 -100L-8 -120L8 -120L14 -100C50 -92 64 -44 50 0Z" f="ink" /></g>,
   cane: ({near: [x, y]}) => <L d={`M${x + 4} ${y}L${x + 30} ${y + 200}`} w={10} c="woodDark" />,
   box: ({near: [x, y]}) => <g transform={`translate(${x - 10} ${y - 30})`}><S d="M-60 -50h120v90h-120Z" f="wood" /><L d="M-60 -10h120" w={4} /></g>,
   bag: ({near: [x, y]}) => <g transform={`translate(${x} ${y})`}><S d="M-40 10h80l-8 90h-64Z" f="pink" /><L d="M-20 10q20 -40 40 0" w={5} /></g>,
   phone: ({near: [x, y]}) => <g transform={`translate(${x + 6} ${y - 6}) rotate(-10)`}><Phone /></g>,
+  scissors: ({near: [x, y], nearAng = 22}, _t, u = 0) => <g transform={`translate(${x} ${y}) rotate(${nearAng})`}><ScissorsTool u={u} s={0.95} /></g>,
+  lantern: ({near: [x, y]}, t) => <g transform={`translate(${x} ${y})`}><HandLantern t={t} /></g>,
+  flashlight: ({near: [x, y], nearAng = 10}, _t, u = 0) => <g transform={`translate(${x} ${y}) rotate(${nearAng})`}><g>{u >= 0 && <polygon points="34,-10 240,-68 240,68 34,10" fill={PAL.yellow} opacity={0.28} />}<S d={Rr(-22, -12, 58, 24, 6)} f="steelDark" sw={4} /><S d={Rr(30, -15, 12, 30, 4)} f="yellow" sw={3} /></g></g>,
+  needle: ({near, far, nearAng = 14}, _t, u = 0) => <g><path d={`M${far[0]} ${far[1]}Q${(far[0] + near[0]) / 2} ${Math.max(far[1], near[1]) + 32 - u * 16} ${near[0]} ${near[1]}`} fill="none" stroke={PAL.red} strokeWidth={4} /><g transform={`translate(${near[0]} ${near[1]}) rotate(${nearAng})`}><L d="M-8 0L58 0" w={5} c="steel" /></g></g>,
+  knife: ({near: [x, y], nearAng = 14}, _t, u = 0) => <g transform={`translate(${x} ${y}) rotate(${nearAng + u * 18})`}><S d={Rr(-24, -8, 36, 16, 5)} f="woodDark" sw={4} /><S d="M12 -9L98 -2L80 12L12 9Z" f="steel" sw={4} /></g>,
+  pen: ({near: [x, y], nearAng = 26}, _t, u = 0) => <g transform={`translate(${x} ${y}) rotate(${nearAng + u * 10})`}><S d={Rr(-24, -6, 68, 12, 4)} f="yellow" sw={4} /><S d="M44 -6L58 0L44 6Z" f="ink" sw={3} /></g>,
+  broom: ({near: [x, y]}, t, u = 0) => <g transform={`translate(${x} ${y}) rotate(${14 + Math.sin(t * 6) * 6 + u * 16})`}><L d="M0 -80L22 120" w={10} c="wood" /><S d="M-10 116L52 112L68 176L-22 180Z" f="gold" sw={4} /></g>,
+  magnifying: ({near: [x, y], nearAng = -18}) => <g transform={`translate(${x} ${y}) rotate(${nearAng - 24})`}><L d="M0 0L44 0" w={10} c="woodDark" /><S d={E(74, 0, 30, 30)} f="glass" sw={5} /></g>,
 };
 /** floor-standing props placed with ShotDef.extras */
 export const WORLD_PROPS: Record<string, (c: string | undefined, t: number) => React.ReactNode> = {

@@ -100,6 +100,7 @@ Never treat a 2D character or creature as a static cutout slid from `(x0, y0)` t
 | `3q` / `front` character glides stiffly | move via `Actor.path` (auto-drives `pathGaitPhase`/`pathGaitSpeed`) or switch to `view: 'side'` for long `> 30 px` walks (`MO-04`) |
 | Creature stands like a statue (`PR-09`) | on shots `> 2.2 s`, give every `kind: 'creature'` `SUBJECT` either a moving `path` (`>= 2` waypoints) or `>= 2` distinct keyed `pose` / `expr` beats |
 | Frozen creature mid-attack or static actor (`MO-18`) | follow through `pounce\|charge\|dive\|attack` within `<= 1.8 s` via lunge `path` or recovery pose; add actor `p`/`e`/`view`/`talk`/`path` beats every `<= 3.4 s` |
+| Invalid `SUBJECTS` pose/expr (`SH-10`/`SH-11`) or stalled `keys` ramp (`MO-19`) | use only declared `SUBJECTS[k].poses`/`exprs` (lint errors on unknown strings); remember `keys: {k: [[v0, 0], [v1, atTime, dur]]}` holds `v0` static UNTIL `atTime`, then ramps over `dur` — start `atTime` early (`<= 70%` of shot) so motion reads across the shot |
 | Mid-air walking / stretched jump arc (`MO-17`) | bind `arcH > 0` to a bounded `legs: [..., ['jump', t0], ['run'\|'walk', t1]]` window (`<= 2.2 s`) |
 | Flying creature occluded by mid props (`GE-20`) | set `altitude: 160..280` for `+1200` airspace sorting and clear foreground blockers (`<= 25%`) |
 | Hand pushes air / misses target (`MO-05`, `MO-09`, `MO-13`) | stand 120–180 px beside target at `fy` and lock hands with `pushTarget: [tx, ty]` or `reach` from `geo.ts` |

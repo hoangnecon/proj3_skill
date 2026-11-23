@@ -7,16 +7,19 @@
 //    (hair + top + topC combination not shared with any other look).
 //  • topC must not equal the dominant wall colour of the set where the character mostly appears.
 //  • extras may share a silhouette family but not an identical look.
-import type {Look} from '../chars';
+import {NHIM_LOOK, type Look} from '../chars';
 
 export type Role = 'principal' | 'support' | 'extra';
 
 export const CAST: Record<string, Look> = {
+  // nhim: {...NHIM_LOOK, name: 'nhim'}, // Canonical New Nhím (hair: 'spikyUp', hat: 'capBack', hatC: 'red')
   // baTu: {name: 'baTu', top: 'blouse', topC: 'pink', pattern: 'flowers', patC: 'yellow', pants: 'navy', shoes: 'white',
   //        hair: 'bun', hairC: 'hairGrey', glasses: 'round', earrings: true, w: 0.92, belly: 0.4},
 };
 
 /** one line per look: role + a Vietnamese description used on the cast sheet */
 export const CAST_ROLES: Record<string, {role: Role; vi: string}> = {
+  // nhim: {role: 'principal', vi: 'Nhím — nhân vật chính tóc gai dựng không mái, mũ lưỡi trai đỏ đội ngược'},
   // baTu: {role: 'principal', vi: 'Bà Tư tầng 3 — người kể chuyện nhà bên'},
 };
+void NHIM_LOOK;

@@ -65,7 +65,7 @@ const walk = (d) => fs.readdirSync(d, {withFileTypes: true}).flatMap((e) => e.is
 // every source kind the renders read (a .css/.svg/.mjs or a public/ image changed the picture but used to say "unchanged")
 const SRC_RE = /\.(tsx?|jsx?|mjs|json|css|svg)$/;
 const readAll = (fs_) => fs_.sort().map((f) => f + fs.readFileSync(f, 'utf8')).join('\n');
-const shared = sha(readAll(walk('src').filter((f) => SRC_RE.test(f) && !/episode[\\/](shotlist|sets)/.test(f) && !/src[\\/](sets|data)[\\/]/.test(f)))
+const shared = sha(readAll(walk('src').filter((f) => SRC_RE.test(f) && !/episode[\\/](shotlist|unit_|sets)/.test(f) && !/src[\\/](sets|data)[\\/]/.test(f)))
   + (fs.existsSync('public') ? walk('public').filter((f) => /\.(png|jpe?g|webp|svg)$/.test(f)).sort().map((f) => f + fs.statSync(f).size + ':' + fs.statSync(f).mtimeMs).join('\n') : ''));
 // a set plate is drawn by its render() AND the helpers beside it: hash the whole set source, not String(render)
 const setSrc = sha(readAll([...(fs.existsSync('src/sets') ? walk('src/sets') : []), ...(fs.existsSync('src/episode') ? walk('src/episode') : []).filter((f) => /episode[\\/]sets/.test(f))].filter((f) => SRC_RE.test(f))));

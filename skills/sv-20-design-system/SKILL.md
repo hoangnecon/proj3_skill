@@ -3,7 +3,7 @@ name: sv-20-design-system
 description: Design the cast, sets, and Hero Subjects of a story-video episode in the house "riso ink" style before any shot is written (v5.6) — colour tokens, line weights, halftone and glow rules, typography, character turnarounds, six-pass set building, Spatial Location Packs (cameraDir, shared landmarks, 3/4 elevated high-angle perspective via SE-18, dedicated closeup/POV plates, botanical silhouette variety via SE-19, SetDef.scaleMode normal or tiny and stateless background plates via SE-20, SE-15..20), living quadruped Hero Subjects (SubjectRenderOpts, temporal guards firstSeg/appearSegs/poseSegs via SH-23, anatomical scaleWithTinyActor and partialOf close-up subjects via LA-03, PR-06, PR-08..09), props and overlays. Use whenever creating or editing src/episode/cast.ts, src/episode/sets.tsx, src/episode/subjects.tsx, src/episode/geo.ts, or src/props.tsx for gate G4.
 ---
 
-# sv-20 · Design system — cast + sets (gate G4, `v5.6.0`)
+# sv-20 · Design system — cast + sets (gate G4, `v5.7.0`)
 
 You are designing the world the story happens in. The bar is set by the exemplar cast and sets that ship
 with every episode (`src/exemplar/`, from the suite's `examples/thang-may/`), rendered into `qa/design/*ex*`. Your episode must look like it
@@ -55,8 +55,10 @@ belongs in the same series and carry the same density of detail. Agents that ski
 - Every set: six passes, ≥ 60 shapes, ≥ 8 colours, ≥ 2 Vietnamese texts with one gag, ≥ 2 halftone, ≥ 1
   glow, `bounds` covering every camera, `scaleMode` when world scale shifts (`SE-20`), **stateless base plate** (never bake transient plot props, cat shadows, sticky tape, dropped glasses, or climax levers into static set art!), and subtle `o.t` life (`SE-12`).
 - Every principal: ≥ 3 traits, unique silhouette, an expression sheet that you looked at.
+- **Canonical New Nhím (`NHIM_LOOK`, enforced by `CH-11`):** Whenever Nhím is in `CAST` (`nhim`, `nhim*`), import `NHIM_LOOK` from `../chars` (`hair: 'spikyUp'` swept-up spiky tufts with no bangs + `hat: 'capBack'`, `hatC: 'red'` backwards red snapback cap — supported natively across all 4 rigs: `Person`, `Person3Q`, `PersonSide`, `PersonBack`). Waive only with `// lint-ok: CH-11 <reason>` when plot explicitly requires a bare head or costume hat.
 - Exemplar looks (`ex_*`) and sets (`ex-*`) are references, never cast in episode shots.
 - State changes (door open, light off) are set options driven by `keys` (defaulting off on the base plate), never baked static art or duplicate sets.
+- Dynamic display text (`Txt` on screens, clocks, signs): NEVER reuse a large numeric-timer `fontSize` (e.g., `s={66}` for `"00:01"`) for a longer dynamic status label (e.g., `"ĐÃ MỞ KHÓA"`) inside the same panel — derive `fontSize` from the actually rendered string (`renderedText.length <= 6 ? 66 : 30`) so status text never overflows its frame.
 - If you change a look, subject, or set after G4 passed, the gate goes STALE: re-render, re-review, re-pass.
 
 ## Common failure → fix

@@ -280,6 +280,30 @@ fs.mkdirSync(outDir, {recursive: true});
 const manifestPath = path.join(outDir, 'manifest.json');
 const prevManifest = readJson(manifestPath, null);
 
+const checksKeys = isLong16x9
+  ? ['acting', 'contact', 'overlap', 'set', 'text', 'caption', 'beat', 'model', 'framing', 'variety']
+  : ['acting', 'contact', 'overlap', 'set', 'text', 'caption', 'beat', 'model'];
+const reviewSchema = {
+  format: 'JSONL — one JSON object per line, committed via: node scripts/qa.mjs review --batch <file.jsonl>',
+  required_fields: ['i', 'shot', 'hash', 'blind_sha', 'builder', 'reviewer', 'saw_strip', 'saw_crop', 'looked', 'verdict', 'checks', 'note'],
+  checks_keys: checksKeys,
+  looked_rules: "Always include 'unit_contact' (or 'contact') and 'card'; include 'shot_strip' when images.shot_strip is non-null; include 'strips' when images.strips is non-empty; include 'crops' (and saw_crop: true) for every shot where is_hot is true.",
+  example_line: {
+    i: 0,
+    shot: 0,
+    hash: '<copy verbatim from shot.hash>',
+    blind_sha: '<copy verbatim from shot.blind_sha>',
+    builder: 'conductor',
+    reviewer: '<your unique reviewer id != builder>',
+    saw_strip: true,
+    saw_crop: false,
+    looked: ['unit_contact', 'card', 'shot_strip'],
+    verdict: 'ok',
+    checks: Object.fromEntries(checksKeys.map((k) => [k, 'ok — <concise visual observation>'])),
+    note: '<concise factual summary of what is visually seen>',
+  },
+};
+
 if (targetUnit) {
   const uid = String(targetUnit.id);
   const startSid = normSegId(targetUnit.seg_start);
@@ -313,6 +337,7 @@ if (targetUnit) {
     contact_pages: contactPages,
     segment_contacts: segmentContacts,
     hot_shots: unitShotsOut.filter((e) => e.is_hot).map((e) => e.shot),
+    review_schema: reviewSchema,
     shots: unitShotsOut,
     pages: contactPages.map((cp) => ({contact_page: cp, shots: byPage.get(cp)})),
   };
@@ -421,6 +446,7 @@ if (targetUnit) {
       contact_pages: contactPages,
       segment_contacts: segmentContacts,
       hot_shots: sl.filter((e) => e.is_hot).map((e) => e.shot),
+      review_schema: reviewSchema,
       pages,
     };
     fs.writeFileSync(path.join(outDir, `slice_${k + 1}.json`), JSON.stringify(payload, null, 1) + '\n');

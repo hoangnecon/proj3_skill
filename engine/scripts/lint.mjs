@@ -238,7 +238,7 @@ const segScaleMode = (() => {
 const isKidOrShrunkenActor = (a) => {
   const lk = P.CAST?.[a.look] ?? P.EX_LOOKS?.[a.look];
   if (!lk) return false;
-  if ((lk.h ?? 1) < 0.88 || lk.hair === 'kid' || (a.s ?? 1) <= 0.45) return true;
+  if ((lk.h ?? 1) < 0.88 || lk.hair === 'kid' || lk.hair === 'spikyUp' || (a.s ?? 1) <= 0.45) return true;
   const roleVi = P.CAST_ROLES?.[a.look]?.vi ?? '';
   return /\b(\d+\s*tuổi|học sinh|lớp trưởng|cậu bé|cô bé|tí hon)\b/i.test(roleVi);
 };
@@ -274,6 +274,20 @@ if (phase !== 'shots') {
     }
     const same = keys.find((o) => o !== k && JSON.stringify({...P.CAST[o], name: 0}) === JSON.stringify({...l, name: 0}));
     if (same) err('CH-08', `${k} is identical to ${same}`);
+    // CH-11: Canonical New Nhím look (locked v5.7: hair 'spikyUp' no bangs + red backwards snapback cap 'capBack')
+    if (/^nhim($|[A-Z_])/.test(k) && !/^nhimCu$/i.test(k)) {
+      const castTxt = fs.existsSync('src/episode/cast.ts') ? fs.readFileSync('src/episode/cast.ts', 'utf8') : '';
+      const ch11Waived = new RegExp(`lint-ok:\\s*CH-11\\b.*\\b${k}\\b|\\b${k}\\b[^\\n]*lint-ok:\\s*CH-11\\b`).test(castTxt)
+        || /lint-ok:\s*CH-11\b/.test(castTxt);
+      if (!ch11Waived) {
+        if (l.hair !== 'spikyUp') {
+          err('CH-11', `${k}: Nhím must use canonical hair: 'spikyUp' (got '${l.hair}') — import NHIM_LOOK from '../chars'`);
+        }
+        if (l.hat !== 'capBack' || (l.hatC ?? 'navy') !== 'red') {
+          warn('CH-11', `${k}: Nhím defaults to canonical hat: 'capBack', hatC: 'red' (got hat='${l.hat ?? 'none'}', hatC='${l.hatC ?? ''}') — waive with // lint-ok: CH-11 <reason> if plot requires bare head or another hat`);
+        }
+      }
+    }
   }
   const princ = keys.filter((k) => P.CAST_ROLES[k]?.role === 'principal');
   if (keys.length && !princ.length) err('CH-09', 'no principal in CAST_ROLES');
@@ -679,6 +693,37 @@ if (phase !== 'design') {
   const visitTT = (tt, where) => { if (typeof tt === 'string') anchors.push([tt, where]); };
   let rows = [];
   try { rows = P.shotTable(); } catch (e) { err('SH-01', 'shot table failed: ' + e.message); }
+  // Progressive SHOTS authoring support (matches qa.mjs): when SHOTS ends at a non-final episodic
+  // unit boundary U<k>, clamp the trailing shot's t1 to the next unit's segment start (- LEAD 0.06s)
+  // instead of stretching across the unauthored remainder of the episode audio.
+  let progressivePartialUnits = false;
+  if (Array.isArray(scriptMeta?.units) && scriptMeta.units.length > 0 && rows.length > 0) {
+    const normSid = (v) => {
+      const m = /^(s\d+[a-z]?)/i.exec(String(v ?? '').trim());
+      return m ? m[1].toLowerCase() : null;
+    };
+    const sIds = Array.isArray(scriptMeta?.segments)
+      ? scriptMeta.segments.map((s) => normSid(s?.id)).filter(Boolean)
+      : [];
+    const sMap = new Map(sIds.map((sid, idx) => [sid, idx]));
+    const inRange = (sid, a, b) =>
+      sid && a && b && sMap.has(sid) && sMap.has(a) && sMap.has(b) &&
+      sMap.get(sid) >= sMap.get(a) && sMap.get(sid) <= sMap.get(b);
+    const lastR = rows[rows.length - 1];
+    const lastSeg = normSid(lastR?.seg) ?? normSid(P.SHOTS?.[lastR?.i]?.at) ?? normSid(lastR?.at);
+    const uIdx = scriptMeta.units.findIndex((u) => u && inRange(lastSeg, normSid(u.seg_start), normSid(u.seg_end)));
+    if (uIdx >= 0 && uIdx < scriptMeta.units.length - 1) {
+      progressivePartialUnits = true;
+      const nextSeg = normSid(scriptMeta.units[uIdx + 1]?.seg_start);
+      const nextStart = nextSeg ? P.C?.seg_starts?.[nextSeg] : undefined;
+      if (typeof nextStart === 'number' && Number.isFinite(nextStart)) {
+        const clampedT1 = +(nextStart - 0.06).toFixed(3);
+        if (clampedT1 > lastR.t0 + 0.2 && lastR.t1 > clampedT1 + 0.5) {
+          lastR.t1 = clampedT1;
+        }
+      }
+    }
+  }
   const shots = P.SHOTS;
   if (!shots.length) err('SH-02', 'SHOTS is empty');
   if (shots[0] && shots[0].at !== 's1') err('SH-03', `first shot must start at 's1' (got ${shots[0].at})`);
@@ -732,6 +777,19 @@ if (phase !== 'design') {
     }
     for (const ex of s.extras ?? []) {
       const et = `${tag} extra ${ex.k}`;
+      const sDef = P.SUBJECTS?.[ex.k];
+      if (sDef && Array.isArray(sDef.poses) && sDef.poses.length > 0 && ex.pose !== undefined) {
+        const sPoses = Array.isArray(ex.pose) ? ex.pose.map((x) => x[0]) : [ex.pose];
+        for (const pv of sPoses) {
+          if (!sDef.poses.includes(pv)) err('SH-10', `${et}: subject pose '${pv}' not in SUBJECTS.${ex.k}.poses [${sDef.poses.join(', ')}]`);
+        }
+      }
+      if (sDef && Array.isArray(sDef.exprs) && sDef.exprs.length > 0 && ex.expr !== undefined) {
+        const sExprs = Array.isArray(ex.expr) ? ex.expr.map((x) => x[0]) : [ex.expr];
+        for (const ev of sExprs) {
+          if (!sDef.exprs.includes(ev)) err('SH-11', `${et}: subject expr '${ev}' not in SUBJECTS.${ex.k}.exprs [${sDef.exprs.join(', ')}]`);
+        }
+      }
       if (Array.isArray(ex.pose)) ex.pose.forEach(([, tt]) => visitTT(tt, `${et}.pose`));
       if (Array.isArray(ex.expr)) ex.expr.forEach(([, tt]) => visitTT(tt, `${et}.expr`));
       for (const w of ex.path ?? []) visitTT(w[2], `${et}.path`);
@@ -1263,6 +1321,23 @@ if (phase !== 'design') {
         }
         return NaN;
       };
+      // MO-19: Late-ramp set keys guard ([val, atTime, dur] holds previous value until atTime, then ramps)
+      if (s.keys && typeof s.keys === 'object' && dur >= 2.0 && !waived('MO-19', r.name)) {
+        const LATE_OK_KEYS = new Set(['flash', 'screenAlert', 'impact', 'spark']);
+        for (const [kName, kSpec] of Object.entries(s.keys)) {
+          if (LATE_OK_KEYS.has(kName)) continue;
+          if (!Array.isArray(kSpec) || kSpec.length !== 2) continue;
+          const [k0, k1] = kSpec;
+          if (!Array.isArray(k0) || !Array.isArray(k1) || k0[0] === k1[0]) continue;
+          const tStart = resolveShotTT(k1[1]);
+          if (!Number.isFinite(tStart)) continue;
+          const idleFrac = (tStart - r.t0) / dur;
+          if (idleFrac > 0.72) {
+            warn('MO-19', `${tag}: set key '${kName}' holds static for ${Math.round(idleFrac * 100)}% of the shot before starting its ramp at +${(tStart - r.t0).toFixed(2)}s — [val, atTime, dur] starts ramping AT atTime; trigger earlier so motion reads across the shot`);
+            markHot(r.i, 'MO-19');
+          }
+        }
+      }
       // 1. Frozen Creature Attack Guard (all formats)
       const ATTACK_POSES = new Set(['pounce', 'charge', 'dive', 'attack']);
       for (const ex of s.extras ?? []) {
@@ -1444,10 +1519,10 @@ if (phase !== 'design') {
     for (const [setId, count] of setCounts) {
       const ratio = (count / totalShots) * 100;
       const pct = Number(ratio.toFixed(1));
-      if (ratio > 18) {
+      if (ratio > 18 && !progressivePartialUnits) {
         err('SH-16', `set '${setId}' occupies ${pct}% of episode (${count}/${totalShots} shots; max 18%)`);
       } else if (ratio > 14) {
-        warn('SH-16', `set '${setId}' occupies ${pct}% of episode (${count}/${totalShots} shots; max 18%)`);
+        warn('SH-16', `set '${setId}' occupies ${pct}% of ${progressivePartialUnits ? 'authored units so far' : 'episode'} (${count}/${totalShots} shots; full-episode max 18%)`);
       }
     }
 

@@ -1,5 +1,21 @@
 # Changelog
 
+## `v5.7.0` — 2026-11-23 · Canonical New Nhím (`NHIM_LOOK` + `CH-11` across all 4 rigs), Windows/macOS Cross-Platform Toolchain, Spring/Bezier Math, GPU `GrainOverlay`, `<HandInsert>` Tools & Subject/Key Lint Hardening (**158 Lint Rules**)
+- **Canonical New Nhím (`chars.tsx`, `side.tsx`, `threeq.tsx`, `back.tsx`, `starter/src/episode/cast.ts`, `lint.mjs`, `sv-01`, `sv-20`):**
+  - Added `Hair` variants `'spiky'` and **`'spikyUp'`** (swept-up spiky tufts, no bangs) and `Hat` variant **`'capBack'`** (tilted red backwards snapback cap) across **all 4 character rigs** (`Person`, `Person3Q`, `PersonSide`, `PersonBack`).
+  - Exported ready-to-use **`NHIM_LOOK`** in `engine/src/chars.tsx`, wired into `starter/src/episode/cast.ts`, locked in `sv-01-series-bible` & `sv-20-design-system`, and guarded by design lint **`CH-11`** (rejects old Nhím hair `!== 'spikyUp'` and warns on missing `hat: 'capBack', hatC: 'red'` unless waived with `// lint-ok: CH-11 <reason>`).
+- **Cross-Platform Windows + macOS Toolchain (`tools/new_episode.py`, `tools/new_episode.ps1`, `tools/doctor.py`, `engine/scripts/load.mjs`, `deliver.mjs`):**
+  - Merged cross-platform Python/PowerShell episode assembler (NTFS Junctions on Windows, `--in-place` support, `doctor.py --fix-sea-g2p`), `load.mjs` (`pathToFileURL`, `PY_SYS`, `PY_VIENEU`, auto `FFmpeg` PATH discovery, full `remotion` math stubs), and `deliver.mjs` (`fs.statfsSync` free-space check, RAM-aware default concurrency, single shared `openBrowser` + `renderMedia({muted: true})`).
+- **Physics Math, Fast GPU Grain & Animated Hand Tools (`engine/src/math.ts`, `kit.tsx`, `props.tsx`):**
+  - Upgraded `math.ts` with analytical damped harmonic `springAt`, `cubicBezier` (`bezierOut`, `bezierIO`), logarithmic `perceptualScale`, and clamped `remap`.
+  - Memoized `Defs` and added cached `256×256` GPU `GrainOverlay` / `getGrainUri` in `kit.tsx`.
+  - Added `ScissorsTool`, `HandLantern`, `<HandInsert>` close-up cutaway helper, and animated `HAND_PROPS` / `SIDE_PROPS` (`scissors`, `lantern`, `flashlight`, `needle`, `knife`, `pen`, `broom`, `magnifying`) in `props.tsx`.
+- **Lint & Blind-QA Hardening (`engine/scripts/lint.mjs`, `blind_pack.mjs`, `sv-20`, `sv-21`):**
+  - Extended **`SH-10` / `SH-11`** to validate every `ShotDef.extras` `pose` and `expr` against `SUBJECTS[k].poses` / `SUBJECTS[k].exprs` (hard ERROR on unknown strings, preventing silent fallback poses).
+  - Added **`MO-19`** (Late-Ramp Set Keys Guard: warns + marks HOT when a 2-key animated set key holds static `> 72%` of the shot before starting its ramp at `atTime`).
+  - Embedded exact **`review_schema`** (`required_fields`, `checks_keys`, `looked_rules`, `example_line`) directly inside `qa/blind_review/unit_*.json` and `slice_*.json` in `blind_pack.mjs`.
+  - Documented dynamic `Txt` display-panel `fontSize` fitting in `sv-20-design-system/SKILL.md`.
+
 ## `v5.6.0` — 2026-11-22 · Sequential Episodic Unit-by-Unit Production (`U1 → U2 → … → Uk`, `SC-37`, `sv_gate.py pass-unit`), Pure `5.25 ups` Voice Integrity & Kid Hook (`SC-35..36`), Stateless Scale-Mode Sets (`SE-20`, `SH-22`), Temporal & Cross-Angle Creature Continuity (`SH-23`, `LA-03`, `PR-09`) & Distance-Locked Stop-Settle Gaits (**156 Lint Rules**)
 - **Pillar 1 — Distance-Locked Stop-Settle Gaits, `3q`/`Front` Auto-Gait, Stateless Scale-Mode Sets & Creature Continuity CI (`anim.ts`, `side.tsx`, `chars.tsx`, `threeq.tsx`, `Film.tsx`, `sets/types.ts`, `subjects.ts`, `lint.mjs`):**
   - **Locomotion Biomechanics (`Film.tsx`, `side.tsx`, `chars.tsx`, `threeq.tsx`, `anim.ts`):** Locked side-view walk/run `phase = m.dist / cyc` to distance traveled with clean stop-settle (`speed -> 0`, `arms -> 'down'` when `v === 0` — zero treadmill running in place), upgraded `footCycle` `run` (`38%` stance) with a rear-peaked `42 px` heel-kick swing recovery, and added automatic distance-locked gait (`pathGaitPhase` / `pathGaitSpeed`) on `Person3Q` and `Person` paths (zero ice-skating).

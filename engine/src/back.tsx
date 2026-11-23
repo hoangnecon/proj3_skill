@@ -579,6 +579,15 @@ const HeadBack: React.FC<{
       els.push(<L key="hl" d={`M${-r * 0.48} ${hy - r * 0.82}q${r * 0.28} ${-r * 0.14} ${r * 0.56} ${-r * 0.04}`} w={6} c="white" o={0.34} />);
       els.push(<Sh key="hsh" d={`M${r * 0.42} ${hy - r * 0.82}C${r * 0.96} ${hy - r * 0.36} ${r * 0.94} ${hy + r * 0.52} ${r * 0.36} ${hy + r * 0.74}C${r * 0.7} ${hy + r * 0.34} ${r * 0.74} ${hy - r * 0.3} ${r * 0.42} ${hy - r * 0.82}Z`} o={0.42} />);
       break;
+    case 'spiky':
+    case 'spikyUp':
+      // tóc Nhím nhìn từ phía sau: chỏm gai nhọn bùng đều hai bên đỉnh & gáy
+      hp(
+        `M${-r * 0.98} ${hy + r * 0.22}L${-r * 1.24} ${hy - r * 0.18}L${-r * 1.06} ${hy - r * 0.42}L${-r * 1.32} ${hy - r * 0.86}L${-r * 0.86} ${hy - r * 0.98}L${-r * 0.74} ${hy - r * 1.44}L${-r * 0.3} ${hy - r * 1.18}L0 ${hy - r * 1.56}L${r * 0.3} ${hy - r * 1.18}L${r * 0.74} ${hy - r * 1.44}L${r * 0.86} ${hy - r * 0.98}L${r * 1.32} ${hy - r * 0.86}L${r * 1.06} ${hy - r * 0.42}L${r * 1.24} ${hy - r * 0.18}L${r * 0.98} ${hy + r * 0.22}C${r * 0.84} ${hy + r * 0.6} ${r * 0.46} ${hy + r * 0.74} 0 ${hy + r * 0.74}C${-r * 0.46} ${hy + r * 0.74} ${-r * 0.84} ${hy + r * 0.6} ${-r * 0.98} ${hy + r * 0.22}Z`,
+        'hs',
+      );
+      els.push(<Sh key="hsh" d={`M${r * 0.42} ${hy - r * 0.82}C${r * 0.96} ${hy - r * 0.36} ${r * 0.94} ${hy + r * 0.52} ${r * 0.36} ${hy + r * 0.74}C${r * 0.7} ${hy + r * 0.34} ${r * 0.74} ${hy - r * 0.3} ${r * 0.42} ${hy - r * 0.82}Z`} o={0.42} />);
+      break;
     case 'side':
     case 'neat':
     default:
@@ -595,6 +604,10 @@ const HeadBack: React.FC<{
   if (hat === 'khanxep') {
     els.push(<S key="kx" d={`M${-r * 0.98} ${hy - r * 0.38}C${-r * 1.02} ${hy - r * 1.05} ${r * 1.02} ${hy - r * 1.05} ${r * 0.98} ${hy - r * 0.38}C${r * 0.6} ${hy - r * 0.24} ${-r * 0.6} ${hy - r * 0.24} ${-r * 0.98} ${hy - r * 0.38}Z`} f={hatC} />);
     for (let i = 0; i < 4; i++) els.push(<L key={'kxl' + i} d={`M${-r * 0.9} ${hy - r * (0.46 + i * 0.12)}Q0 ${hy - r * (0.36 + i * 0.12)} ${r * 0.9} ${hy - r * (0.46 + i * 0.12)}`} w={3} c="trim" o={0.5} />);
+  } else if (hat === 'capBack') {
+    // mũ đội ngược nhìn từ sau: vành lưỡi trai hướng thẳng về phía người xem
+    els.push(<S key="cap" d={`M${-r * 0.92} ${hy - r * 0.36}C${-r * 0.98} ${hy - r * 1.2} ${r * 0.98} ${hy - r * 1.2} ${r * 0.92} ${hy - r * 0.36}Z`} f={hatC} />);
+    els.push(<S key="capb" d={`M${-r * 0.94} ${hy - r * 0.38}Q0 ${hy - r * 0.14} ${r * 0.94} ${hy - r * 0.38}L${r * 0.84} ${hy - r * 0.16}Q0 ${hy + r * 0.08} ${-r * 0.84} ${hy - r * 0.16}Z`} f={hatC} />);
   } else if (hat === 'cap') {
     // mũ lưỡi trai nhìn sau: khoét nửa vòng tròn + quai chỉnh cỡ
     els.push(<S key="cap" d={`M${-r * 0.92} ${hy - r * 0.36}C${-r * 0.98} ${hy - r * 1.2} ${r * 0.98} ${hy - r * 1.2} ${r * 0.92} ${hy - r * 0.36}L${r * 0.34} ${hy - r * 0.36}A${r * 0.34} ${r * 0.28} 0 0 0 ${-r * 0.34} ${hy - r * 0.36}Z`} f={hatC} />);

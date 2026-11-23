@@ -12,7 +12,7 @@ description: The identity of the story-video series — format, narrator persona
 - Sound: voice Hải Đăng (northern male), the series theme music (`scripts/theme.py`) 15–18 dB under the voice, mixed by the `sv-42` standard, room ambience per location, small foley.
 
 ## Narrator & recurring hero
-"Tôi" — an ordinary resident living inside the story (a tenant, a neighbour, a student, the guard, the maintenance worker). Calm, tired, precise, deadpan: never explains the joke or laughs at it. Knows numbers, floor levels and names. Enters early (`s1`–`s7`) with a personal stake or handicap under the rule. For recurring or open-ended Short-Form series, anchor adventures around **Nhím** (`sv-10-script/references/premise-ideation.md`).
+"Tôi" — an ordinary resident living inside the story (a tenant, a neighbour, a student, the guard, the maintenance worker). Calm, tired, precise, deadpan: never explains the joke or laughs at it. Knows numbers, floor levels and names. Enters early (`s1`–`s7`) with a personal stake or handicap under the rule. For recurring or open-ended adventures, anchor around **Nhím** using the **canonical New Nhím look (`NHIM_LOOK` from `src/chars.tsx`, enforced by `CH-11`)**: swept-up spiky hair with no bangs (`hair: 'spikyUp'`), red backwards snapback cap (`hat: 'capBack'`, `hatC: 'red'`), gold shirt (`topC: 'gold'`, `topC2: 'goldDark'`), navy pants, orange shoes (`w: 0.88, h: 0.86, head: 1.0`).
 
 ## Audience & 23-Published-Hits DNA
 Core viewers are **kids & school-age students**. Calibration from 23 published channel hits (`sv-10-script/references/premise-ideation.md §2`):

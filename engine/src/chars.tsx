@@ -5,8 +5,8 @@ import {E, L, PAL, R, Rr, S, Sh, col, LINE, Smoke} from './kit';
 import {CartoonHand, HandKind, TaperLimb, curvedTorsoPath, hairWindOffset, livingIdle, talkGesture} from './anim';
 import {clamp} from './math';
 
-export type Hair = 'bald' | 'side' | 'bun' | 'curly' | 'short' | 'neat' | 'thin' | 'kid' | 'long';
-export type Hat = 'none' | 'khanxep' | 'cap' | 'chef' | 'helmet' | 'band';
+export type Hair = 'bald' | 'side' | 'bun' | 'curly' | 'short' | 'neat' | 'thin' | 'kid' | 'long' | 'spiky' | 'spikyUp';
+export type Hat = 'none' | 'khanxep' | 'cap' | 'capBack' | 'chef' | 'helmet' | 'band';
 export type Top = 'shirt' | 'polo' | 'tank' | 'suit' | 'uniform' | 'robe' | 'chef' | 'blouse' | 'aothe' | 'tee';
 
 export type Look = {
@@ -37,6 +37,23 @@ export type Look = {
   h?: number; // chiều cao thân (1 = chuẩn)
   head?: number; // cỡ đầu
   ghost?: boolean;
+};
+
+/** Canonical Nhím look (locked v5.7): swept-up spiky hair (no bangs) + red backwards snapback cap. */
+export const NHIM_LOOK: Look = {
+  name: 'nhim',
+  top: 'shirt',
+  topC: 'gold',
+  topC2: 'goldDark',
+  pants: 'navy',
+  shoes: 'orange',
+  hair: 'spikyUp',
+  hairC: 'ink',
+  hat: 'capBack',
+  hatC: 'red',
+  w: 0.88,
+  h: 0.86,
+  head: 1.0,
 };
 
 export type Arm = [number, number] | string | {x: number; y: number}; // [góc vai, góc khuỷu] độ (0 = buông, + = ra ngoài/lên) hoặc tên điểm đích IK: mouth, eye, chest, hip, head, over, ear, front
@@ -544,7 +561,15 @@ const Head: React.FC<{look: Look; hy: number; R: number; expr: Expr; talk: numbe
   const wdy = hw.dy;
   const els: React.ReactNode[] = [];
 
-  // tóc sau đầu
+  // tóc sau đầu & vành mũ ngược phía sau tai trái
+  const hat = look.hat ?? 'none';
+  const hatC = look.hatC ?? 'navy';
+  if (hat === 'capBack') {
+    els.push(
+      <S key="cb_brim" d={`M${-r * 0.86} ${hy - r * 0.28}C${-r * 1.44} ${hy + r * 0.06} ${-r * 1.44} ${hy + r * 0.74} ${-r * 1.02} ${hy + r * 0.82}C${-r * 0.76} ${hy + r * 0.86} ${-r * 0.76} ${hy + r * 0.36} ${-r * 0.82} ${hy + r * 0.1}Z`} f={hatC} />,
+      <S key="cb_brim_sh" d={`M${-r * 1.24} ${hy + r * 0.2}C${-r * 1.32} ${hy + r * 0.56} ${-r * 1.16} ${hy + r * 0.78} ${-r * 0.96} ${hy + r * 0.76}C${-r * 0.88} ${hy + r * 0.54} ${-r * 0.94} ${hy + r * 0.3} ${-r * 1.24} ${hy + r * 0.2}Z`} f="redDark" nl />,
+    );
+  }
   if (look.hair === 'bun') {
     els.push(
       <g key="bun" transform={`rotate(${(hw.rot * 0.45).toFixed(2)} 0 ${(hy - r * 0.72).toFixed(1)})`}>
@@ -611,6 +636,25 @@ const Head: React.FC<{look: Look; hy: number; R: number; expr: Expr; talk: numbe
         );
       }
       break;
+    case 'spiky':
+      hp(
+        hat === 'capBack'
+          ? `M${-r * 0.98} ${hy + r * 0.12}C${-r * 1.12} ${hy - r * 0.78} ${-r * 0.56} ${hy - r * 1.32} ${r * 0.12} ${hy - r * 1.12}L${r * 0.76} ${hy - r * 1.44}Q${r * 0.66} ${hy - r * 1.12} ${r * 0.84} ${hy - r * 1.06}L${r * 1.3} ${hy - r * 0.92}Q${r * 1.04} ${hy - r * 0.74} ${r * 1.06} ${hy - r * 0.6}L${r * 1.24} ${hy - r * 0.24}Q${r * 1.06} ${hy - r * 0.26} ${r * 0.98} ${hy + r * 0.14}L${r * 0.84} ${hy - r * 0.12}L${r * 0.74} ${hy - r * 0.38}L${r * 0.46} ${hy - r * 0.14}L${r * 0.24} ${hy - r * 0.42}L${-r * 0.04} ${hy - r * 0.1}L${-r * 0.22} ${hy - r * 0.4}L${-r * 0.54} ${hy - r * 0.14}L${-r * 0.68} ${hy - r * 0.44}L${-r * 0.84} ${hy - r * 0.12}Z`
+          : `M${-r * 0.98} ${hy + r * 0.14}Q${-r * 1.08} ${hy - r * 0.22} ${-r * 1.26} ${hy - r * 0.28}Q${-r * 1.06} ${hy - r * 0.56} ${-r * 1.08} ${hy - r * 0.66}L${-r * 1.32} ${hy - r * 0.94}Q${-r * 0.98} ${hy - r * 0.96} ${-r * 0.82} ${hy - r * 1.08}L${-r * 0.74} ${hy - r * 1.44}Q${-r * 0.44} ${hy - r * 1.18} ${-r * 0.24} ${hy - r * 1.22}L${r * 0.02} ${hy - r * 1.54}Q${r * 0.24} ${hy - r * 1.22} ${r * 0.44} ${hy - r * 1.2}L${r * 0.8} ${hy - r * 1.44}Q${r * 0.72} ${hy - r * 1.1} ${r * 0.86} ${hy - r * 1.04}L${r * 1.32} ${hy - r * 0.9}Q${r * 1.04} ${hy - r * 0.72} ${r * 1.06} ${hy - r * 0.58}L${r * 1.26} ${hy - r * 0.24}Q${r * 1.06} ${hy - r * 0.26} ${r * 0.98} ${hy + r * 0.14}L${r * 0.84} ${hy - r * 0.12}L${r * 0.74} ${hy - r * 0.38}L${r * 0.46} ${hy - r * 0.14}L${r * 0.24} ${hy - r * 0.42}L${-r * 0.04} ${hy - r * 0.1}L${-r * 0.22} ${hy - r * 0.4}L${-r * 0.54} ${hy - r * 0.14}L${-r * 0.68} ${hy - r * 0.44}L${-r * 0.84} ${hy - r * 0.12}Z`,
+        'h',
+      );
+      els.push(<L key="hl" d={`M${-r * 0.42} ${hy - r * 0.86}Q${r * 0.02} ${hy - r * 1.04} ${r * 0.44} ${hy - r * 0.92}`} w={5.5} c="white" o={0.28} />);
+      break;
+    case 'spikyUp':
+      // tóc Nhím KHÔNG để mái: trán thoáng cao, toàn bộ tóc mái dựng ngược thành chỏm gai nhọn bùng mọi hướng
+      hp(
+        hat === 'capBack'
+          ? `M${-r * 0.96} ${hy + r * 0.06}C${-r * 1.1} ${hy - r * 0.78} ${-r * 0.56} ${hy - r * 1.3} ${r * 0.04} ${hy - r * 1.12}L${r * 0.34} ${hy - r * 1.56}Q${r * 0.46} ${hy - r * 1.24} ${r * 0.62} ${hy - r * 1.2}L${r * 0.98} ${hy - r * 1.46}Q${r * 0.86} ${hy - r * 1.08} ${r * 0.96} ${hy - r * 0.98}L${r * 1.36} ${hy - r * 0.84}Q${r * 1.06} ${hy - r * 0.68} ${r * 1.06} ${hy - r * 0.52}L${r * 1.22} ${hy - r * 0.2}Q${r * 1.04} ${hy - r * 0.22} ${r * 0.96} ${hy + r * 0.08}C${r * 0.86} ${hy - r * 0.32} ${r * 0.64} ${hy - r * 0.58} ${r * 0.22} ${hy - r * 0.64}C${-r * 0.22} ${hy - r * 0.68} ${-r * 0.66} ${hy - r * 0.58} ${-r * 0.84} ${hy - r * 0.16}Z`
+          : `M${-r * 0.96} ${hy + r * 0.08}Q${-r * 1.06} ${hy - r * 0.22} ${-r * 1.24} ${hy - r * 0.24}Q${-r * 1.04} ${hy - r * 0.52} ${-r * 1.06} ${hy - r * 0.64}L${-r * 1.34} ${hy - r * 0.9}Q${-r * 0.96} ${hy - r * 0.94} ${-r * 0.82} ${hy - r * 1.06}L${-r * 0.82} ${hy - r * 1.48}Q${-r * 0.48} ${hy - r * 1.2} ${-r * 0.28} ${hy - r * 1.24}L${-r * 0.02} ${hy - r * 1.62}Q${r * 0.22} ${hy - r * 1.24} ${r * 0.42} ${hy - r * 1.22}L${r * 0.82} ${hy - r * 1.48}Q${r * 0.74} ${hy - r * 1.08} ${r * 0.88} ${hy - r * 1.02}L${r * 1.34} ${hy - r * 0.88}Q${r * 1.04} ${hy - r * 0.68} ${r * 1.06} ${hy - r * 0.54}L${r * 1.24} ${hy - r * 0.22}Q${r * 1.04} ${hy - r * 0.24} ${r * 0.96} ${hy + r * 0.08}C${r * 0.84} ${hy - r * 0.32} ${r * 0.56} ${hy - r * 0.62} 0 ${hy - r * 0.66}C${-r * 0.56} ${hy - r * 0.62} ${-r * 0.84} ${hy - r * 0.32} ${-r * 0.96} ${hy + r * 0.08}Z`,
+        'h',
+      );
+      els.push(<L key="hl" d={`M${-r * 0.36} ${hy - r * 0.92}Q${r * 0.04} ${hy - r * 1.1} ${r * 0.44} ${hy - r * 0.96}`} w={5.5} c="white" o={0.28} />);
+      break;
     case 'bun':
       hp(`${cap(0.12)}C${r * 0.82} ${hy - r * 0.42} ${r * 0.3} ${hy - r * 0.58} 0 ${hy - r * 0.6}C${-r * 0.3} ${hy - r * 0.58} ${-r * 0.82} ${hy - r * 0.42} ${-r * 1.0} ${hy + r * 0.12}Z`, 'h');
       break;
@@ -638,11 +682,19 @@ const Head: React.FC<{look: Look; hy: number; R: number; expr: Expr; talk: numbe
   }
 
   // mũ
-  const hat = look.hat ?? 'none';
-  const hatC = look.hatC ?? 'navy';
   if (hat === 'khanxep') {
     els.push(<S key="kx" d={`M${-r * 0.98} ${hy - r * 0.42}C${-r * 1.02} ${hy - r * 1.05} ${r * 1.02} ${hy - r * 1.05} ${r * 0.98} ${hy - r * 0.42}C${r * 0.6} ${hy - r * 0.3} ${-r * 0.6} ${hy - r * 0.3} ${-r * 0.98} ${hy - r * 0.42}Z`} f={hatC} />);
     for (let i = 0; i < 4; i++) els.push(<L key={'kxl' + i} d={`M${-r * 0.9} ${hy - r * (0.5 + i * 0.12)}Q0 ${hy - r * (0.42 + i * 0.12) - r * 0.08} ${r * 0.9} ${hy - r * (0.5 + i * 0.12)}`} w={3} c="trim" o={0.5} />);
+  } else if (hat === 'capBack') {
+    // mũ lưỡi trai đội ngược nghiêng trái (kiểu Nhím): chụp đỏ ôm đỉnh trái + khoét quai snapback 3 nút
+    els.push(
+      <S key="cb_dome" d={`M${-r * 1.02} ${hy - r * 0.02}C${-r * 1.24} ${hy - r * 0.84} ${-r * 0.5} ${hy - r * 1.54} ${r * 0.36} ${hy - r * 1.2}C${r * 0.08} ${hy - r * 1.02} ${-r * 0.48} ${hy - r * 0.82} ${-r * 0.92} ${hy - r * 0.24}Z`} f={hatC} />,
+      <S key="cb_cut" d={`M${-r * 0.34} ${hy - r * 1.14}C${-r * 0.2} ${hy - r * 1.38} ${r * 0.14} ${hy - r * 1.38} ${r * 0.26} ${hy - r * 1.18}L${-r * 0.26} ${hy - r * 1.04}Z`} f="ink" sw={4} />,
+      <S key="cb_strap" d={`M${-r * 0.32} ${hy - r * 1.1}L${r * 0.24} ${hy - r * 1.22}L${r * 0.27} ${hy - r * 1.11}L${-r * 0.29} ${hy - r * 0.99}Z`} f={hatC} sw={3.5} />,
+      <circle key="cb_d1" cx={-r * 0.1} cy={hy - r * 1.09} r={3.2} fill={PAL.ink} />,
+      <circle key="cb_d2" cx={r * 0.02} cy={hy - r * 1.12} r={3.2} fill={PAL.ink} />,
+      <circle key="cb_d3" cx={r * 0.14} cy={hy - r * 1.14} r={3.2} fill={PAL.ink} />,
+    );
   } else if (hat === 'cap') {
     els.push(<S key="cap" d={`M${-r * 0.9} ${hy - r * 0.45}C${-r * 0.95} ${hy - r * 1.2} ${r * 0.95} ${hy - r * 1.2} ${r * 0.9} ${hy - r * 0.45}Z`} f={hatC} />);
     els.push(<S key="capb" d={`M${-r * 0.95} ${hy - r * 0.45}h${r * 1.9}l${-r * 0.1} ${r * 0.16}h${-r * 1.7}Z`} f="ink" />);

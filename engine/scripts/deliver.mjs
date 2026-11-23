@@ -9,9 +9,10 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import {promisify} from 'node:util';
-import {loadProject, writeTables} from './load.mjs';
+import {loadProject, writeTables, PY_SYS, PY_VIENEU, ensureFfmpegInPath} from './load.mjs';
 import {makeShotHash} from './deps.mjs';
 
+ensureFfmpegInPath();
 const execFileAsync = promisify(execFile);
 const tStartDeliver = Date.now();
 const imgFmt = process.env.SV_FRAME_FORMAT === 'png' ? 'png' : 'jpeg';
@@ -35,11 +36,15 @@ const prunedTmp = pruneStaleRemotionTmp(60 * 60 * 1000);
 if (prunedTmp > 0) console.log(`pruned ${prunedTmp} stale Remotion temp dir(s)`);
 
 const readFreeGb = () => {
-  const probe = fs.existsSync('/private/var/folders') ? '/private/var/folders' : os.tmpdir();
+  const probeGb = (dir) => {
+    const st = fs.statfsSync(dir);
+    return (Number(st.bavail) * Number(st.bsize)) / 1024 ** 3;
+  };
   try {
-    return +execFileSync('df', ['-k', probe]).toString().trim().split('\n').pop().split(/\s+/)[3] / 1024 / 1024;
+    return Math.min(probeGb(os.tmpdir()), probeGb(path.resolve('out')));
   } catch {
-    return +execFileSync('df', ['-k', os.tmpdir()]).toString().trim().split('\n').pop().split(/\s+/)[3] / 1024 / 1024;
+    const probe = fs.existsSync('/private/var/folders') ? '/private/var/folders' : os.tmpdir();
+    return +execFileSync('df', ['-k', probe]).toString().trim().split('\n').pop().split(/\s+/)[3] / 1024 / 1024;
   }
 };
 const free = readFreeGb();
@@ -148,7 +153,10 @@ if (process.env.SV_SKIP_RENDER && fresh) {
   if (free < need) {
     die(`only ${free.toFixed(1)} GB free, render needs ~${need.toFixed(1)} GB${useChunks ? ` (chunked, max block ${maxBlockFrames}f)` : ''} — free disk space first (ask the user before deleting their files)`);
   }
-  const concurrency = Math.max(1, +(process.env.SV_RENDER_CONCURRENCY ?? Math.max(4, Math.min(12, os.cpus().length - 1))));
+  const totalGb = os.totalmem() / 1024 ** 3;
+  const freeRamGb = os.freemem() / 1024 ** 3;
+  const defaultConc = totalGb <= 16 || freeRamGb < 4.5 ? 3 : Math.max(4, Math.min(12, os.cpus().length - 1));
+  const concurrency = Math.max(1, +(process.env.SV_RENDER_CONCURRENCY ?? process.env.SV_RENDER_CONC ?? defaultConc));
 
   if (useChunks) {
     const missing = blocks.map((_, bi) => bi).filter((bi) => !isCached(bi));
@@ -201,28 +209,35 @@ if (process.env.SV_SKIP_RENDER && fresh) {
     console.log('ok (macro-block concat)', raw);
   } else {
     const serveUrl = await cachedBundle('src/index.ts');
-    const comp = await selectComposition({serveUrl, id: 'Film', chromiumOptions: {gl: 'angle'}});
-    let last = 0, lastLogMs = Date.now();
-    await renderMedia({
-      serveUrl,
-      composition: comp,
-      codec: 'h264',
-      crf: 21,
-      x264Preset,
-      outputLocation: raw,
-      chromiumOptions: {gl: 'angle'},
-      ...imgOpts,
-      concurrency,
-      onProgress: ({progress}) => {
-        const now = Date.now();
-        if (progress - last > 0.1 || now - lastLogMs >= 15000) {
-          last = progress;
-          lastLogMs = now;
-          process.stdout.write(`\rrender ${(progress * 100).toFixed(0)}%`);
-        }
-      },
-    });
-    console.log('\nok', raw);
+    const browser = await openBrowser('chrome', {chromiumOptions: {gl: 'angle'}});
+    try {
+      const comp = await selectComposition({serveUrl, id: 'Film', puppeteerInstance: browser, chromiumOptions: {gl: 'angle'}});
+      let last = 0, lastLogMs = Date.now();
+      await renderMedia({
+        serveUrl,
+        composition: comp,
+        codec: 'h264',
+        crf: 21,
+        x264Preset,
+        muted: true,
+        outputLocation: raw,
+        puppeteerInstance: browser,
+        chromiumOptions: {gl: 'angle'},
+        ...imgOpts,
+        concurrency,
+        onProgress: ({progress}) => {
+          const now = Date.now();
+          if (progress - last > 0.1 || now - lastLogMs >= 15000) {
+            last = progress;
+            lastLogMs = now;
+            process.stdout.write(`\rrender ${(progress * 100).toFixed(0)}%`);
+          }
+        },
+      });
+      console.log('\nok', raw);
+    } finally {
+      await browser.close({silent: true}).catch(() => {});
+    }
   }
 }
 // Remotion's AAC keeps the 2048-sample encoder priming without an edit list -> sound plays ~43 ms late.
@@ -250,7 +265,7 @@ const report = {
 };
 fs.writeFileSync('qa/deliver_report.json', JSON.stringify(report, null, 1));
 // audio inside the delivered files: loudness drift after AAC, true peak, A/V length, sync (sv-42-mix-master)
-const PY = process.env.SV_PYTHON || process.env.SV_PY || (fs.existsSync('/Users/Shared/Tools/VieNeu-TTS/.venv/bin/python') ? '/Users/Shared/Tools/VieNeu-TTS/.venv/bin/python' : 'python3');
+const PY = process.env.SV_PYTHON || PY_VIENEU;
 if (fs.existsSync('qa/video_audio.json')) fs.unlinkSync('qa/video_audio.json');
 for (const f of [final]) {
   try { execFileSync(PY, ['scripts/audio_qa.py', '--video', f], {stdio: 'inherit'}); }
@@ -265,5 +280,5 @@ const cells = await Promise.all(Array.from({length: 12}, async (_, i) => {
   return {img: f, label: t.toFixed(1) + 's', sub: ''};
 }));
 fs.writeFileSync('qa/_f/tile.json', JSON.stringify({out: 'qa/final_check.jpg', cols: report.width > report.height ? 4 : 6, w: report.width > report.height ? 380 : 300, fmt: 'jpg', title: `FINAL · ${report.duration}s · ${report.width}x${report.height} · ${report.fps} fps`, cells}));
-execFileSync(PY, ['scripts/tile.py', 'qa/_f/tile.json'], {stdio: 'inherit'});
+execFileSync(PY_SYS, ['scripts/tile.py', 'qa/_f/tile.json'], {stdio: 'inherit'});
 console.log(JSON.stringify(report));

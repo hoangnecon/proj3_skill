@@ -75,8 +75,8 @@ const makeGrainSpeckles = (seed: number, count = 72): GrainSpeck[] => {
 };
 const DEFAULT_GRAIN_SPECKLES = makeGrainSpeckles(1, 72);
 
-/** defs dùng chung toàn phim (đặt một lần trong mỗi svg gốc) */
-export const Defs: React.FC<{seed?: number}> = ({seed = 1}) => {
+/** defs dùng chung toàn phim (đặt một lần trong mỗi svg gốc, memo hoá để không render lại mỗi frame) */
+export const Defs: React.FC<{seed?: number}> = React.memo(({seed = 1}) => {
   const speckles = seed === 1 ? DEFAULT_GRAIN_SPECKLES : makeGrainSpeckles(seed, 72);
   return (
     <defs>
@@ -150,7 +150,65 @@ export const Defs: React.FC<{seed?: number}> = ({seed = 1}) => {
       </radialGradient>
     </defs>
   );
+});
+
+const GRAIN_CACHE = new Map<number, string>();
+/** Pre-baked 256x256 seamless Risograph ink grain tile (replaces per-frame 2M-px CPU feTurbulence) */
+export const getGrainUri = (seed = 1): string => {
+  if (typeof document === 'undefined') return '';
+  const hit = GRAIN_CACHE.get(seed);
+  if (hit !== undefined) return hit;
+  const N = 256;
+  const cv = document.createElement('canvas');
+  cv.width = N;
+  cv.height = N;
+  const ctx = cv.getContext('2d');
+  if (!ctx) return '';
+  const img = ctx.createImageData(N, N);
+  const d = img.data;
+  const hash = (x: number, y: number, s: number) => {
+    let h = Math.imul(x & 255, 374761393) ^ Math.imul(y & 255, 668265263) ^ Math.imul(s, 1274126177);
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+  };
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const o1 = (hash(x, y, seed) + hash(x + 1, y, seed) + hash(x, y + 1, seed) + hash(x + 1, y + 1, seed)) * 0.25;
+      const o2 = hash(x, y, seed + 97);
+      const aTurb = 0.5 + (o1 - 0.5) * 0.65 + (o2 - 0.5) * 0.35;
+      const i = (y * N + x) * 4;
+      d[i] = 31;
+      d[i + 1] = 46;
+      d[i + 2] = 110;
+      d[i + 3] = Math.max(0, Math.min(40, Math.round(aTurb * 0.14 * 255)));
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const uri = cv.toDataURL('image/png');
+  GRAIN_CACHE.set(seed, uri);
+  return uri;
 };
+
+/** GPU-composited static Risograph grain overlay (normal alpha source-over: zero backdrop readback) */
+export const GrainOverlay: React.FC<{seed?: number; height?: number | string}> = React.memo(({seed = 1, height = '100%'}) => {
+  const uri = getGrainUri(seed);
+  if (!uri) return null;
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        width: '100%',
+        height,
+        backgroundImage: `url(${uri})`,
+        backgroundRepeat: 'repeat',
+        backgroundSize: '256px 256px',
+        pointerEvents: 'none',
+      }}
+    />
+  );
+});
 
 /** khói hương: một dải cong lượn theo thời gian */
 export const Smoke: React.FC<{x: number; y: number; t: number; h?: number; w?: number; o?: number; ph?: number}> = ({x, y, t, h = 220, w = 6, o = 0.75, ph = 0}) => {

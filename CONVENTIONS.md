@@ -1,4 +1,4 @@
-# Conventions (`v5.6.0`)
+# Conventions (`v5.7.0`)
 
 Enforced by `tools/validate_skills.py`.
 
