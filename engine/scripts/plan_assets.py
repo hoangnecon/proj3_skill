@@ -46,12 +46,12 @@ TARGETS_LONG_16X9 = {
 TARGETS_SHORT_9X16 = {
     "format": "9:16",
     "length_mode": "short_9x16",
-    "min_cast": 3,
-    "min_sets": 4,
-    "target_sets": 5,
-    "min_angles": 2,
-    "min_locations_with_subscenes": 1,
-    "min_subscenes_per_primary_loc": 1,
+    "min_cast": 7,
+    "min_sets": 12,
+    "target_sets": 18,
+    "min_angles": 1,
+    "min_locations_with_subscenes": 6,
+    "min_subscenes_per_primary_loc": 3,
     "target_shots_range": [50, 75],
     "target_sla_min": 15,
 }
@@ -1259,7 +1259,12 @@ def expand_subscene_matrix(
             item.pop("_order", None)
         return matrix
 
-    # Lean 9:16 Short matrix (4-5 plates, backward-compatible with cameraDir + landmarks attached)
+    # 9:16 Short Front-On Connected Spatial Sub-Scene Matrix (v5.8.1):
+    # Front-on ONLY (no OTS / rotated camera angles). Target ~6 primary locations x 3 drawn front-on
+    # plates (Main + SubA transit/connector + SubB adjacent/inner zone = ~18 plates).
+    # CRITICAL: Sub-scenes are CONNECTED ADJACENT SPATIAL ZONES (stairs, corridor, path, archway,
+    # inner chamber, alcove) that characters walk through with 100% architectural continuity to the
+    # main plate — NEVER zoomed/cropped corners cut out of the main plate.
     for loc in locations:
         add_plate(
             loc,
@@ -1267,49 +1272,23 @@ def expand_subscene_matrix(
             shot_scale="establishing",
             angle="wide",
             camera_dir="front",
-            purpose="Master establishing plate — geography, sightlines & depth zones",
+            purpose="Main front-on establishing plate — primary location facade/center showing doorways, stairs & connecting exits (no OTS)",
         )
 
-    med_specs = [
-        ("Ots", "medium", "ots", "left", "Two-shot / over-the-shoulder staging plate"),
-        ("Reverse", "medium", "reverse", "reverse", "Reverse-angle dialogue / action reaction plate"),
-        ("Medium", "medium", "low", "low", "Low-angle midground heroic/threat scale plate"),
-        ("MediumWide", "medium", "wide", "front", "Lateral tracking / running midground plate"),
+    sub_specs = [
+        ("SubA", "medium", "wide", "front", "Connected spatial sub-scene A (tiểu cảnh nối tiếp: cầu thang / hành lang / đường dẫn / cổng vào) — adjacent transit zone matching main plate architecture (NEVER a cropped corner)"),
+        ("SubB", "medium", "wide", "front", "Connected spatial sub-scene B (tiểu cảnh nối tiếp: gian trong / bệ đá / hốc trú / không gian sau cửa) — distinct interior/adjacent room beyond the main plate's doorway/exit with 100% material & landmark continuity"),
+        ("SubC", "medium", "wide", "front", "Connected spatial sub-scene C (tiểu cảnh nối tiếp phụ) — additional connected passage or adjacent zone along the character's route"),
     ]
-    med_idx = 0
     for loc in ordered_priority:
-        multi_locs = sum(1 for sc in loc_scales.values() if len(sc) >= 2)
-        if len(matrix) >= min_sets and len(used_angles) >= min_angles and multi_locs >= min_multi_locs:
-            break
-        suf, sc, ang, cdir, purp = med_specs[med_idx % len(med_specs)]
-        add_plate(loc, suffix=suf, shot_scale=sc, angle=ang, camera_dir=cdir, purpose=purp)
-        med_idx += 1
+        for suf, sc, ang, cdir, purp in sub_specs[:2]:
+            add_plate(loc, suffix=suf, shot_scale=sc, angle=ang, camera_dir=cdir, purpose=purp)
 
-    cu_specs = [
-        ("Closeup", "closeup", "closeup", "detail", "Dedicated drawn close-up plate for dialogue/reaction/prop"),
-        ("Low", "closeup", "low", "low", "Worm-eye / giant-scale contrast close-up plate"),
-        ("Pov", "closeup", "pov", "detail", "First-person POV / hero-prop interaction plate"),
-    ]
-    cu_idx = 0
-    for loc in ordered_priority:
-        multi_locs = sum(1 for sc in loc_scales.values() if len(sc) >= 2)
-        if len(matrix) >= min_sets and len(used_angles) >= min_angles and multi_locs >= min_multi_locs:
-            break
-        suf, sc, ang, cdir, purp = cu_specs[cu_idx % len(cu_specs)]
-        add_plate(loc, suffix=suf, shot_scale=sc, angle=ang, camera_dir=cdir, purpose=purp)
-        cu_idx += 1
-
-    extra_specs = [
-        ("ReverseDetail", "medium", "reverse", "reverse", "Secondary reverse-angle action plate"),
-        ("OtsAlt", "medium", "ots", "right", "Alternate over-the-shoulder staging plate"),
-        ("PovDetail", "closeup", "pov", "detail", "Dedicated detail/POV plate for climax beat"),
-        ("HighWide", "establishing", "high", "right", "3/4 elevated overview angle for spatial staging (SE-18)"),
-    ]
     ex_idx = 0
-    while len(matrix) < min_sets or len(used_angles) < min_angles:
+    while len(matrix) < min_sets:
         loc = ordered_priority[ex_idx % len(ordered_priority)]
-        suf, sc, ang, cdir, purp = extra_specs[ex_idx % len(extra_specs)]
-        add_plate(loc, suffix=suf, shot_scale=sc, angle=ang, camera_dir=cdir, purpose=purp)
+        suf, sc, ang, cdir, purp = sub_specs[2]
+        add_plate(loc, suffix=f"{suf}{ex_idx + 1}", shot_scale=sc, angle=ang, camera_dir=cdir, purpose=purp)
         ex_idx += 1
 
     for item in matrix:

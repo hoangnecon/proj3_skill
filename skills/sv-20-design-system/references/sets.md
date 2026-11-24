@@ -229,6 +229,7 @@ Signage language is Vietnamese. Phone numbers, prices, opening hours and rules a
 - Detail placed OFF the plate frame to pass the shape count (lint SE-13 measures the rendered plate).
 - One element covering another's text (a calendar over the gag notice), text spilling past its plate,
   furniture hanging on the wall instead of standing on the floor.
+- **Cropped-corner sub-scenes in 9:16 Shorts (`v5.8.1`):** NEVER build `SubA`/`SubB`/`SubC` by cutting 2–3 zoomed corners out of the same main wide plate and redrawing them inconsistently. Every Short sub-scene MUST be a **connected adjacent spatial zone** on the character's movement path (e.g., stairs, corridor, tunnel, threshold/doorway, inner room, bridge deck, lookout ledge, shelter alcove) drawn **front-on** with **100% architectural & material continuity** to the main plate's visible doorways/stairs/landmarks.
 
 ## 11. G4 review checklist (sets part)
 

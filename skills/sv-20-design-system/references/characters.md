@@ -53,13 +53,13 @@ Principals use `s` 0.9–1.15 in shots; background people 0.7–0.9 placed furth
 | Field | Values | Notes |
 |---|---|---|
 | `name` | must equal the CAST key | lint CH-02 |
-| `top` | `shirt` `polo` `tank` `suit` `uniform` `robe` `chef` `blouse` `aothe` `tee` | garment silhouette |
+| `top` | `shirt` `polo` `tank` `suit` `uniform` `robe` `chef` `blouse` `aothe` `tee` `furCoat` | garment silhouette |
 | `topC` / `topC2` | PAL token | main colour / collar, tie, trim |
 | `pattern` + `patC` | `dots` `stripes` `flowers` + token | one patterned top per 3 characters at most |
 | `pants`, `shoes` | token | shoes default ink |
-| `hair` | `bald` `side` `bun` `curly` `short` `neat` `thin` `kid` `long` | |
+| `hair` | `bald` `side` `bun` `curly` `short` `neat` `thin` `kid` `long` `spiky` `spikyUp` | |
 | `hairC` | token, default `hair` (navy) | `hairGrey` / `white` = age |
-| `hat` + `hatC` | `none` `khanxep` `cap` `chef` `helmet` `band` | strongest silhouette breaker |
+| `hat` + `hatC` | `none` `khanxep` `cap` `capBack` `chef` `helmet` `band` `furHat` `furHatTilted` `beanieTilted` | strongest silhouette breaker (`furHatTilted`: cocked winter fur hat with ear-flap tassels & front cuff crest; `beanieTilted`: cocked chunky knit wool beanie with ribbed folded cuff, `gold` woven patch & `paper` yarn pom-pom; both let `spikyUp` tufts peek on the lifted side) |
 | `glasses` | `round` `square` `sun` | |
 | `mustache`, `beard` (`goatee` `long`), `beardC`, `brows` | | age and attitude |
 | `lips`, `earrings`, `chain` | booleans | |

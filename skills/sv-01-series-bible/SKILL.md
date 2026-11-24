@@ -21,7 +21,7 @@ Core viewers are **kids & school-age students**. Calibration from 23 published c
 - **Series / Open-Ended Potential:** build expandable worlds around recurring hero **Nhím** where appropriate.
 
 ## Story engine & three archetypes
-One weird, topsy-turvy rule enters ordinary northern Vietnamese life and is treated with total seriousness. Pick **one** of three archetypes in `brief.md` (`## Archetype`) before outlining:
+One weird, mysterious, or topsy-turvy rule governs the world and is treated with total seriousness. **Tone (`v5.8.0`):** curiosity, mystery, uncanny intrigue, and moderate emotional stakes are first-class — episodes do **NOT** have to be funny or comedic; avoid repetitive mechanical slapstick gags and prioritize a compelling, intriguing story a 10-year-old grasps cleanly (World Setup -> Hero's Faction & Other Factions -> Story & Twist). Pick **one** of three archetypes in `brief.md` (`## Archetype`) before outlining:
 
 1. **`Personal Rule-Trap`** *(default for survival, sensory/physical anomalies, relational binds, and personal quirks)*:
    - An uncanny rule hits everyday life, locking the narrator (`Còn tôi?`) into a humiliating or disabling handicap by Act 1, then trapping them in a ticking **Double-Bind** in Act 2 that only a lateral hack from *inside* the rule's own physics can break.

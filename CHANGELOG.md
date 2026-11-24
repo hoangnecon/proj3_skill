@@ -1,5 +1,20 @@
 # Changelog
 
+## `v5.8.1` — 2026-11-24 · RSI: Connected Spatial Sub-Scenes for 9:16 Shorts (Zero Cropped Corners), Tribal Mongolian Fur & Tilted Beanie Rigs (`furCoat`, `furHat`, `furHatTilted`, `beanieTilted`) & Always-On Anti-Bypass Rules
+- **Connected Spatial Sub-Scenes (`skills/sv-20-design-system/SKILL.md`, `references/sets.md`, `engine/scripts/plan_assets.py`):**
+  - Clarified and enforced that 9:16 Short sub-scenes (`SubA`, `SubB`, `SubC`) MUST be **distinct connected adjacent spatial zones** along the character's physical movement route (e.g. exterior doorway/facade $\rightarrow$ connecting stairs/corridor/path/archway $\rightarrow$ inner chamber/ledge/alcove) drawn front-on with **100% architectural, material, and landmark continuity** to the main plate — explicitly banning patchy cropped/zoomed corners cut out of a single wide plate.
+- **Tribal Winter / Mongolian Fur & Tilted Beanie Rigs (`engine/src/{chars,threeq,side,back}.tsx`, `references/characters.md`):**
+  - Added `'furCoat'` (Mongolian *deel* wrap-over lapel with bone toggles, fluffy scalloped fur collar & hem, braided sash with clasp), `'furHat'` (Mongolian *malgai* fur hat with fluffy brim, finial/tassel, and ear flaps), `'furHatTilted'` (cocked fluffy winter fur cap), and `'beanieTilted'` (cocked ribbed knit beanie with folded cuff, gold woven tag, and yarn pom-pom — revealing Nhím's `spikyUp` hair on the lifted side) natively across all 4 character rigs.
+- **Always-On Plugin Rules (`rules/AGENTS.md`):**
+  - Added mandatory non-bypass rules for primary agent, subagents, and swarm workers (strict gate order, mandatory visual inspection, separation of duties between Builders and Reviewers, and Windows toolchain env setup).
+
+## `v5.8.0` — 2026-11-24 · RSI: 9:16 Short Front-On Sub-Scene Standard (6 Primary Locations × 3 Front-On Tiểu Cảnh, Zero OTS, ≥ 7 Cast w/ Extras) & Mystery/Curiosity World-First Story DNA
+- **9:16 Short Set & Cast Architecture (`engine/scripts/plan_assets.py`, `skills/sv-20-design-system/SKILL.md`):**
+  - Updated `TARGETS_SHORT_9X16` to require **≥ 7 cast looks** (principals + supports + ≥ 2 extras) and **12–18 front-on plates** (~6 primary locations × 3 front-on sub-scenes: main + tiểu cảnh A/B/C, **zero `ots`/rotated camera angles** in 9:16 Shorts).
+  - Replaced `Ots`/`Reverse`/`Low` Short plate generation in `expand_subscene_matrix` with front-on sub-scene plates (`SubA`, `SubB`, `SubC`) so Shorts cut across distinct drawn sub-environments instead of zooming a single wide wall.
+- **Mystery / Curiosity World-First Storytelling DNA (`skills/sv-01-series-bible/SKILL.md`, `skills/sv-10-script/SKILL.md`):**
+  - Removed forced-comedy bias: curiosity, mystery, uncanny intrigue, and moderate emotional stakes are now first-class alongside dry wit, following a clear 10-year-old World-First → Hero Faction & Other Factions → Story & Twist arc while keeping the pure `5.25 ups` Hải Đăng voice standard untouched.
+
 ## `v5.7.0` — 2026-11-23 · Canonical New Nhím (`NHIM_LOOK` + `CH-11` across all 4 rigs), Windows/macOS Cross-Platform Toolchain, Spring/Bezier Math, GPU `GrainOverlay`, `<HandInsert>` Tools & Subject/Key Lint Hardening (**158 Lint Rules**)
 - **Canonical New Nhím (`chars.tsx`, `side.tsx`, `threeq.tsx`, `back.tsx`, `starter/src/episode/cast.ts`, `lint.mjs`, `sv-01`, `sv-20`):**
   - Added `Hair` variants `'spiky'` and **`'spikyUp'`** (swept-up spiky tufts, no bangs) and `Hat` variant **`'capBack'`** (tilted red backwards snapback cap) across **all 4 character rigs** (`Person`, `Person3Q`, `PersonSide`, `PersonBack`).

@@ -3,7 +3,7 @@
 import React from 'react';
 import {E, L, PAL, R, Rr, S, Sh, col, LINE, Smoke} from './kit';
 import {TaperLimb, curvedTorsoPath, hairWindOffset, livingIdle, talkGesture} from './anim';
-import type {Arm, Look, Pose} from './chars';
+import {furBandD, furCollarD, furSashNodes, type Arm, type Look, type Pose} from './chars';
 
 const rad = (d: number) => (d * Math.PI) / 180;
 
@@ -129,7 +129,7 @@ export const PersonBack: React.FC<BackProps> = ({
   const rp = armPts(1, pose.ra);
   const hands: Hands = {l: lp[2], r: rp[2]};
   const sleeveC = look.top === 'tank' ? skin : g ? 'ghostDeep' : look.topC;
-  const fullSleeve = ['suit', 'uniform', 'robe', 'chef', 'aothe', 'blouse'].includes(look.top);
+  const fullSleeve = ['suit', 'uniform', 'robe', 'chef', 'aothe', 'blouse', 'furCoat'].includes(look.top);
 
   // Tay đưa ra trước ngực/mặt sẽ khuất sau lưng khi nhìn từ phía sau
   const isOccluded = (p: [number, number][]) =>
@@ -292,7 +292,7 @@ export const PersonBack: React.FC<BackProps> = ({
   }
 
   // --- thân nhìn từ sau với đường cong cột sống hữu cơ ---
-  const long = look.top === 'robe' || look.top === 'aothe' || g;
+  const long = look.top === 'robe' || look.top === 'aothe' || look.top === 'furCoat' || g;
   const hemY = long ? (g ? bY + 40 : -40) : bY + 26;
   const hemW = long ? ww + 36 : ww + 4;
   const torso = curvedTorsoPath(-sw, sw, -hemW, hemW, sY, hemY, bendX, 0);
@@ -347,6 +347,19 @@ export const PersonBack: React.FC<BackProps> = ({
     backDet.push(<S key="bk1" d={`M-6 ${bY - 20}L-26 ${bY + 32}L-6 ${bY + 26}Z`} f={c2} />);
     backDet.push(<S key="bk2" d={`M6 ${bY - 20}L28 ${bY + 30}L8 ${bY + 26}Z`} f={c2} />);
     backDet.push(<S key="bk0" d={Rr(-14, bY - 42, 28, 26, 8)} f={c2} />);
+  } else if (look.top === 'furCoat') {
+    const fc = look.topC2 ?? 'gold';
+    const colW = sw * 0.74;
+    backDet.push(<S key="fc" d={furCollarD(sx0 - colW, sx0 + colW, sx0, sY - 8, sY - 20, 32, 5)} f="paper" sw={4.5} />);
+    backDet.push(<L key="fct" d={`M${(sx0 - colW * 0.5).toFixed(1)} ${sY + 2}q8 5 16 0M${(sx0 + colW * 0.3).toFixed(1)} ${sY + 2}q8 5 16 0`} w={3} o={0.34} />);
+    backDet.push(<L key="sm" d={`M${sx0} ${sY + 12}L0 ${hemY - 24}`} w={3.5} o={0.35} />);
+    const beltL = -(sw + hemW) * 0.5 - 3;
+    const beltR = (sw + hemW) * 0.5 + 3;
+    backDet.push(...furSashNodes('fs', beltL, beltR, null, bY, fc));
+    backDet.push(<S key="bk1" d={`M-6 ${bY - 18}L-24 ${bY + 30}L-6 ${bY + 24}Z`} f={fc} />);
+    backDet.push(<S key="bk2" d={`M6 ${bY - 18}L26 ${bY + 28}L8 ${bY + 24}Z`} f={fc} />);
+    backDet.push(<S key="bk0" d={Rr(-14, bY - 44, 28, 28, 8)} f={fc} />);
+    backDet.push(<S key="fh" d={furBandD(-hemW - 5, hemW + 5, hemY - 26, 34, 7, 6)} f="paper" sw={4.5} />);
   } else if (look.top === 'aothe') {
     backDet.push(<S key="n" d={Rr(sx0 - 30, sY - 30, 60, 20, 8)} f={c2} />);
     backDet.push(<L key="sm" d={`M${sx0} ${sY - 10}L0 ${hemY - 12}`} w={3.5} o={0.35} />);
@@ -581,9 +594,11 @@ const HeadBack: React.FC<{
       break;
     case 'spiky':
     case 'spikyUp':
-      // tóc Nhím nhìn từ phía sau: chỏm gai nhọn bùng đều hai bên đỉnh & gáy
+      // tóc Nhím nhìn từ phía sau: chỏm gai nhọn bùng đều hai bên đỉnh & gáy (khi đội mũ chéo, gai bên trái vểnh lộ dưới vành nâng)
       hp(
-        `M${-r * 0.98} ${hy + r * 0.22}L${-r * 1.24} ${hy - r * 0.18}L${-r * 1.06} ${hy - r * 0.42}L${-r * 1.32} ${hy - r * 0.86}L${-r * 0.86} ${hy - r * 0.98}L${-r * 0.74} ${hy - r * 1.44}L${-r * 0.3} ${hy - r * 1.18}L0 ${hy - r * 1.56}L${r * 0.3} ${hy - r * 1.18}L${r * 0.74} ${hy - r * 1.44}L${r * 0.86} ${hy - r * 0.98}L${r * 1.32} ${hy - r * 0.86}L${r * 1.06} ${hy - r * 0.42}L${r * 1.24} ${hy - r * 0.18}L${r * 0.98} ${hy + r * 0.22}C${r * 0.84} ${hy + r * 0.6} ${r * 0.46} ${hy + r * 0.74} 0 ${hy + r * 0.74}C${-r * 0.46} ${hy + r * 0.74} ${-r * 0.84} ${hy + r * 0.6} ${-r * 0.98} ${hy + r * 0.22}Z`,
+        look.hat === 'furHatTilted' || look.hat === 'beanieTilted'
+          ? `M${-r * 0.98} ${hy + r * 0.22}L${-r * 1.24} ${hy - r * 0.18}L${-r * 1.06} ${hy - r * 0.42}L${-r * 1.32} ${hy - r * 0.86}L${-r * 0.86} ${hy - r * 0.98}L${-r * 0.74} ${hy - r * 1.44}L${-r * 0.3} ${hy - r * 1.18}L${-r * 0.06} ${hy - r * 1.42}C${r * 0.54} ${hy - r * 1.22} ${r * 1.08} ${hy - r * 0.72} ${r * 0.98} ${hy + r * 0.22}C${r * 0.84} ${hy + r * 0.6} ${r * 0.46} ${hy + r * 0.74} 0 ${hy + r * 0.74}C${-r * 0.46} ${hy + r * 0.74} ${-r * 0.84} ${hy + r * 0.6} ${-r * 0.98} ${hy + r * 0.22}Z`
+          : `M${-r * 0.98} ${hy + r * 0.22}L${-r * 1.24} ${hy - r * 0.18}L${-r * 1.06} ${hy - r * 0.42}L${-r * 1.32} ${hy - r * 0.86}L${-r * 0.86} ${hy - r * 0.98}L${-r * 0.74} ${hy - r * 1.44}L${-r * 0.3} ${hy - r * 1.18}L0 ${hy - r * 1.56}L${r * 0.3} ${hy - r * 1.18}L${r * 0.74} ${hy - r * 1.44}L${r * 0.86} ${hy - r * 0.98}L${r * 1.32} ${hy - r * 0.86}L${r * 1.06} ${hy - r * 0.42}L${r * 1.24} ${hy - r * 0.18}L${r * 0.98} ${hy + r * 0.22}C${r * 0.84} ${hy + r * 0.6} ${r * 0.46} ${hy + r * 0.74} 0 ${hy + r * 0.74}C${-r * 0.46} ${hy + r * 0.74} ${-r * 0.84} ${hy + r * 0.6} ${-r * 0.98} ${hy + r * 0.22}Z`,
         'hs',
       );
       els.push(<Sh key="hsh" d={`M${r * 0.42} ${hy - r * 0.82}C${r * 0.96} ${hy - r * 0.36} ${r * 0.94} ${hy + r * 0.52} ${r * 0.36} ${hy + r * 0.74}C${r * 0.7} ${hy + r * 0.34} ${r * 0.74} ${hy - r * 0.3} ${r * 0.42} ${hy - r * 0.82}Z`} o={0.42} />);
@@ -626,6 +641,74 @@ const HeadBack: React.FC<{
     els.push(<S key="bdt1" d={`M-6 ${hy - r * 0.42}L${(-22 + rbX).toFixed(1)} ${(hy - r * 0.04 + rbY).toFixed(1)}L${(-4 + rbX * 0.7).toFixed(1)} ${(hy - r * 0.1 + rbY * 0.7).toFixed(1)}Z`} f={hatC} />);
     els.push(<S key="bdt2" d={`M6 ${hy - r * 0.42}L${(24 + rbX).toFixed(1)} ${(hy - r * 0.06 + rbY).toFixed(1)}L${(6 + rbX * 0.7).toFixed(1)} ${(hy - r * 0.1 + rbY * 0.7).toFixed(1)}Z`} f={hatC} />);
     els.push(<S key="bdk" d={E(0, hy - r * 0.46, 12, 11)} f={hatC} />);
+  } else if (hat === 'furHat') {
+    for (const sg of [-1, 1]) {
+      els.push(
+        <S key={'fhe' + sg} d={`M${(sg * r * 0.86).toFixed(1)} ${(hy - r * 0.44).toFixed(1)}C${(sg * r * 1.2).toFixed(1)} ${(hy - r * 0.08).toFixed(1)} ${(sg * r * 1.18).toFixed(1)} ${(hy + r * 0.36).toFixed(1)} ${(sg * r * 1.04).toFixed(1)} ${(hy + r * 0.56).toFixed(1)}C${(sg * r * 0.86).toFixed(1)} ${(hy + r * 0.52).toFixed(1)} ${(sg * r * 0.84).toFixed(1)} ${(hy + r * 0.14).toFixed(1)} ${(sg * r * 0.84).toFixed(1)} ${(hy - r * 0.44).toFixed(1)}Z`} f={hatC} />,
+        <S key={'fhp' + sg} d={E(sg * r * 1.0, hy + r * 0.46, r * 0.14, r * 0.17)} f="paper" sw={4} />,
+      );
+    }
+    els.push(
+      <S key="fhc" d={`M${(-r * 0.96).toFixed(1)} ${(hy - r * 0.54).toFixed(1)}C${(-r * 0.98).toFixed(1)} ${(hy - r * 1.2).toFixed(1)} ${(-r * 0.36).toFixed(1)} ${(hy - r * 1.46).toFixed(1)} 0 ${(hy - r * 1.5).toFixed(1)}C${(r * 0.36).toFixed(1)} ${(hy - r * 1.46).toFixed(1)} ${(r * 0.98).toFixed(1)} ${(hy - r * 1.2).toFixed(1)} ${(r * 0.96).toFixed(1)} ${(hy - r * 0.54).toFixed(1)}Z`} f={hatC} />,
+      <Sh key="fhsh" d={`M${(r * 0.28).toFixed(1)} ${(hy - r * 1.38).toFixed(1)}C${(r * 0.88).toFixed(1)} ${(hy - r * 1.16).toFixed(1)} ${(r * 0.96).toFixed(1)} ${(hy - r * 0.7).toFixed(1)} ${(r * 0.94).toFixed(1)} ${(hy - r * 0.54).toFixed(1)}L${(r * 0.42).toFixed(1)} ${(hy - r * 0.54).toFixed(1)}C${(r * 0.52).toFixed(1)} ${(hy - r * 0.88).toFixed(1)} ${(r * 0.46).toFixed(1)} ${(hy - r * 1.18).toFixed(1)} ${(r * 0.28).toFixed(1)} ${(hy - r * 1.38).toFixed(1)}Z`} o={0.36} />,
+      <L key="fhs1" d={`M0 ${(hy - r * 1.46).toFixed(1)}Q${(-r * 0.34).toFixed(1)} ${(hy - r * 1.08).toFixed(1)} ${(-r * 0.42).toFixed(1)} ${(hy - r * 0.62).toFixed(1)}`} w={3.5} o={0.35} />,
+      <L key="fhs2" d={`M0 ${(hy - r * 1.46).toFixed(1)}Q${(r * 0.34).toFixed(1)} ${(hy - r * 1.08).toFixed(1)} ${(r * 0.42).toFixed(1)} ${(hy - r * 0.62).toFixed(1)}`} w={3.5} o={0.35} />,
+      <S key="fht" d={`M0 ${(hy - r * 1.52).toFixed(1)}Q${(r * 0.24).toFixed(1)} ${(hy - r * 1.54).toFixed(1)} ${(r * 0.3).toFixed(1)} ${(hy - r * 1.32).toFixed(1)}Q${(r * 0.14).toFixed(1)} ${(hy - r * 1.36).toFixed(1)} 0 ${(hy - r * 1.46).toFixed(1)}Z`} f={hatC === 'redDark' || hatC === 'red' ? 'gold' : 'red'} sw={3.5} />,
+      <S key="fhf" d={E(0, hy - r * 1.52, r * 0.1, r * 0.09)} f="gold" sw={4} />,
+      <S key="fhb" d={furBandD(-r * 1.02, r * 1.02, hy - r * 0.64, r * 0.28, 6, r * 0.05)} f="paper" sw={4.5} />,
+      <L key="fhbt" d={`M${(-r * 0.46).toFixed(1)} ${(hy - r * 0.48).toFixed(1)}q8 4 16 0M${(r * 0.26).toFixed(1)} ${(hy - r * 0.48).toFixed(1)}q8 4 16 0`} w={3} o={0.32} />,
+    );
+  } else if (hat === 'furHatTilted') {
+    // nhìn từ phía sau: nghiêng +14° (khớp góc chéo -14° ở chính diện)
+    const ftC = look.hatC ?? 'red';
+    els.push(
+      <g key="fht_grp" transform={`rotate(14 ${(r * 0.04).toFixed(1)} ${(hy - r * 0.74).toFixed(1)})`}>
+        <S key="fhteL" d={`M${(-r * 0.86).toFixed(1)} ${(hy - r * 0.56).toFixed(1)}C${(-r * 1.18).toFixed(1)} ${(hy - r * 0.22).toFixed(1)} ${(-r * 1.18).toFixed(1)} ${(hy + r * 0.16).toFixed(1)} ${(-r * 1.02).toFixed(1)} ${(hy + r * 0.34).toFixed(1)}C${(-r * 0.86).toFixed(1)} ${(hy + r * 0.32).toFixed(1)} ${(-r * 0.8).toFixed(1)} ${(hy - r * 0.02).toFixed(1)} ${(-r * 0.78).toFixed(1)} ${(hy - r * 0.52).toFixed(1)}Z`} f={ftC} />
+        <S key="fhtpL" d={E(-r * 0.99, hy + r * 0.26, r * 0.14, r * 0.15)} f="paper" sw={4} />
+        <L key="fhtcLo" d={`M${(-r * 1.0).toFixed(1)} ${(hy + r * 0.39).toFixed(1)}Q${(-r * 1.06).toFixed(1)} ${(hy + r * 0.54).toFixed(1)} ${(-r * 1.08).toFixed(1)} ${(hy + r * 0.64).toFixed(1)}`} w={6.5} c="ink" />
+        <L key="fhtcL" d={`M${(-r * 1.0).toFixed(1)} ${(hy + r * 0.39).toFixed(1)}Q${(-r * 1.06).toFixed(1)} ${(hy + r * 0.54).toFixed(1)} ${(-r * 1.08).toFixed(1)} ${(hy + r * 0.64).toFixed(1)}`} w={3} c="gold" />
+        <S key="fhtbL" d={E(-r * 1.09, hy + r * 0.68, r * 0.085, r * 0.085)} f="gold" sw={3.5} />
+        <S key="fhteR" d={`M${(r * 0.98).toFixed(1)} ${(hy - r * 0.56).toFixed(1)}C${(r * 1.24).toFixed(1)} ${(hy - r * 0.18).toFixed(1)} ${(r * 1.24).toFixed(1)} ${(hy + r * 0.24).toFixed(1)} ${(r * 1.08).toFixed(1)} ${(hy + r * 0.44).toFixed(1)}C${(r * 0.9).toFixed(1)} ${(hy + r * 0.42).toFixed(1)} ${(r * 0.84).toFixed(1)} ${(hy + r * 0.06).toFixed(1)} ${(r * 0.84).toFixed(1)} ${(hy - r * 0.52).toFixed(1)}Z`} f={ftC} />
+        <S key="fhtpR" d={E(r * 1.05, hy + r * 0.36, r * 0.16, r * 0.17)} f="paper" sw={4} />
+        <L key="fhtcRo" d={`M${(r * 1.05).toFixed(1)} ${(hy + r * 0.5).toFixed(1)}Q${(r * 0.98).toFixed(1)} ${(hy + r * 0.66).toFixed(1)} ${(r * 0.95).toFixed(1)} ${(hy + r * 0.78).toFixed(1)}`} w={6.5} c="ink" />
+        <L key="fhtcR" d={`M${(r * 1.05).toFixed(1)} ${(hy + r * 0.5).toFixed(1)}Q${(r * 0.98).toFixed(1)} ${(hy + r * 0.66).toFixed(1)} ${(r * 0.95).toFixed(1)} ${(hy + r * 0.78).toFixed(1)}`} w={3} c="gold" />
+        <S key="fhtbR" d={E(r * 0.94, hy + r * 0.82, r * 0.09, r * 0.09)} f="gold" sw={3.5} />
+        <S key="fhtc" d={`M${(-r * 0.98).toFixed(1)} ${(hy - r * 0.66).toFixed(1)}C${(-r * 1.04).toFixed(1)} ${(hy - r * 1.26).toFixed(1)} ${(-r * 0.44).toFixed(1)} ${(hy - r * 1.50).toFixed(1)} 0 ${(hy - r * 1.52).toFixed(1)}C${(r * 0.44).toFixed(1)} ${(hy - r * 1.50).toFixed(1)} ${(r * 1.06).toFixed(1)} ${(hy - r * 1.28).toFixed(1)} ${(r * 1.0).toFixed(1)} ${(hy - r * 0.66).toFixed(1)}Z`} f={ftC} />
+        <Sh key="fhtsh" d={`M${(r * 0.28).toFixed(1)} ${(hy - r * 1.44).toFixed(1)}C${(r * 0.9).toFixed(1)} ${(hy - r * 1.22).toFixed(1)} ${(r * 1.0).toFixed(1)} ${(hy - r * 0.8).toFixed(1)} ${(r * 0.98).toFixed(1)} ${(hy - r * 0.66).toFixed(1)}L${(r * 0.44).toFixed(1)} ${(hy - r * 0.66).toFixed(1)}C${(r * 0.56).toFixed(1)} ${(hy - r * 0.96).toFixed(1)} ${(r * 0.48).toFixed(1)} ${(hy - r * 1.24).toFixed(1)} ${(r * 0.28).toFixed(1)} ${(hy - r * 1.44).toFixed(1)}Z`} o={0.36} />
+        <L key="fhts1" d={`M0 ${(hy - r * 1.48).toFixed(1)}Q${(-r * 0.36).toFixed(1)} ${(hy - r * 1.12).toFixed(1)} ${(-r * 0.44).toFixed(1)} ${(hy - r * 0.72).toFixed(1)}`} w={3.5} o={0.35} />
+        <L key="fhts2" d={`M0 ${(hy - r * 1.48).toFixed(1)}Q${(r * 0.36).toFixed(1)} ${(hy - r * 1.12).toFixed(1)} ${(r * 0.44).toFixed(1)} ${(hy - r * 0.72).toFixed(1)}`} w={3.5} o={0.35} />
+        <L key="fhthl" d={`M${(-r * 0.62).toFixed(1)} ${(hy - r * 1.16).toFixed(1)}Q${(-r * 0.36).toFixed(1)} ${(hy - r * 1.38).toFixed(1)} ${(-r * 0.08).toFixed(1)} ${(hy - r * 1.4).toFixed(1)}`} w={4.5} c="white" o={0.28} />
+        <S key="fhtpom" d={E(0, hy - r * 1.54, r * 0.16, r * 0.13)} f="paper" sw={4} />
+        <S key="fhtring" d={E(0, hy - r * 1.46, r * 0.06, r * 0.05)} f="gold" sw={3} />
+        <S key="fhtb" d={furBandD(-r * 1.04, r * 1.06, hy - r * 0.84, r * 0.34, 6, r * 0.04)} f="paper" sw={4.5} />
+        <L key="fhtbt" d={`M${(-r * 0.48).toFixed(1)} ${(hy - r * 0.66).toFixed(1)}q8 4 16 0M${(r * 0.28).toFixed(1)} ${(hy - r * 0.66).toFixed(1)}q8 4 16 0`} w={3} o={0.32} />
+      </g>,
+    );
+  } else if (hat === 'beanieTilted') {
+    // nhìn từ phía sau: nghiêng +14° (khớp góc chéo -14° ở chính diện)
+    const btC = look.hatC ?? 'red';
+    els.push(
+      <g key="bnt_grp" transform={`rotate(14 ${(r * 0.04).toFixed(1)} ${(hy - r * 0.74).toFixed(1)})`}>
+        <S key="bntc" d={`M${(-r * 0.98).toFixed(1)} ${(hy - r * 0.66).toFixed(1)}C${(-r * 1.04).toFixed(1)} ${(hy - r * 1.24).toFixed(1)} ${(-r * 0.48).toFixed(1)} ${(hy - r * 1.48).toFixed(1)} 0 ${(hy - r * 1.48).toFixed(1)}C${(r * 0.48).toFixed(1)} ${(hy - r * 1.48).toFixed(1)} ${(r * 1.04).toFixed(1)} ${(hy - r * 1.24).toFixed(1)} ${(r * 0.98).toFixed(1)} ${(hy - r * 0.66).toFixed(1)}Z`} f={btC} />
+        <Sh key="bntsh" d={`M${(r * 0.28).toFixed(1)} ${(hy - r * 1.42).toFixed(1)}C${(r * 0.9).toFixed(1)} ${(hy - r * 1.2).toFixed(1)} ${(r * 1.0).toFixed(1)} ${(hy - r * 0.8).toFixed(1)} ${(r * 0.98).toFixed(1)} ${(hy - r * 0.66).toFixed(1)}L${(r * 0.44).toFixed(1)} ${(hy - r * 0.66).toFixed(1)}C${(r * 0.56).toFixed(1)} ${(hy - r * 0.96).toFixed(1)} ${(r * 0.48).toFixed(1)} ${(hy - r * 1.24).toFixed(1)} ${(r * 0.28).toFixed(1)} ${(hy - r * 1.42).toFixed(1)}Z`} o={0.36} />
+        {[
+          [-0.06, -0.50, -0.62],
+          [-0.02, -0.22, -0.24],
+          [0.02, 0.22, 0.24],
+          [0.06, 0.50, 0.62],
+        ].map(([x0, xq, x1], i) => (
+          <L key={'bnts' + i} d={`M${(r * x0).toFixed(1)} ${(hy - r * 1.44).toFixed(1)}Q${(r * xq).toFixed(1)} ${(hy - r * 1.16).toFixed(1)} ${(r * x1).toFixed(1)} ${(hy - r * 0.80).toFixed(1)}`} w={3} o={0.32} />
+        ))}
+        <L key="bnthl" d={`M${(-r * 0.62).toFixed(1)} ${(hy - r * 1.14).toFixed(1)}Q${(-r * 0.36).toFixed(1)} ${(hy - r * 1.36).toFixed(1)} ${(-r * 0.08).toFixed(1)} ${(hy - r * 1.38).toFixed(1)}`} w={4.5} c="white" o={0.28} />
+        <S key="bntpom" d={E(0, hy - r * 1.54, r * 0.17, r * 0.15)} f="paper" sw={4.2} />
+        <L key="bntpomt" d={`M${(-r * 0.08).toFixed(1)} ${(hy - r * 1.56).toFixed(1)}q${(r * 0.06).toFixed(1)} ${(-r * 0.05).toFixed(1)} ${(r * 0.11).toFixed(1)} 0M${(-r * 0.03).toFixed(1)} ${(hy - r * 1.48).toFixed(1)}q${(r * 0.06).toFixed(1)} ${(r * 0.04).toFixed(1)} ${(r * 0.11).toFixed(1)} 0`} w={2.5} o={0.35} />
+        <S key="bntb" d={Rr(-r * 1.03, hy - r * 0.84, r * 2.06, r * 0.32, r * 0.14)} f={btC} sw={4.5} />
+        <Sh key="bntbsh" d={Rr(r * 0.50, hy - r * 0.82, r * 0.50, r * 0.28, r * 0.10)} o={0.32} />
+        {[-0.84, -0.60, -0.36, -0.12, 0.12, 0.36, 0.60, 0.84].map((rx, i) => (
+          <L key={'bntr' + i} d={`M${(r * rx).toFixed(1)} ${(hy - r * 0.80).toFixed(1)}V${(hy - r * 0.56).toFixed(1)}`} w={3} o={0.45} />
+        ))}
+      </g>,
+    );
   }
 
   const tx = gx + shShift;
