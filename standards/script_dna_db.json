@@ -1,0 +1,194 @@
+{
+  "_doc": "Corpus-calibrated Storytelling & Prose DNA database (41 folders in SCRIPT_YOUTUBE: 28 ref_short_vn + 6 long_form_16x9, audited 2026-11-24). Single source of truth for script_lint.py (SC-38..43) and sv-10-script authoring. Shared across episodes; do not edit per episode.",
+  "version": "1.0",
+  "corpus_provenance": {
+    "source": "G:\\My Drive\\SCRIPT_YOUTUBE",
+    "audited_date": "2026-11-24",
+    "total_folders": 41,
+    "ref_short_vn_n": 28,
+    "ref_short_mp4_n": 25,
+    "ref_audio_pause_sample_n": 11,
+    "long_form_16x9_n": 6
+  },
+  "short_9x16": {
+    "words": {
+      "target": [500, 620],
+      "pass": [450, 660],
+      "hard": [420, 700],
+      "ref_median": 595,
+      "ref_iqr": [470.5, 684.0]
+    },
+    "duration_s": {
+      "target": [130, 145],
+      "pass": [105, 160],
+      "hard": [95, 170],
+      "ref_median": 144.2
+    },
+    "effective_wps": {
+      "target": [4.25, 4.55],
+      "pass": [4.0, 4.65],
+      "seg_peak_max": 4.85,
+      "climactic_beat_max": 4.35,
+      "ref_median": 4.59
+    },
+    "prose_breathability": {
+      "sent_mean_max_warn": 8.8,
+      "sent_mean_max_err": 9.5,
+      "sent_max_warn": 18,
+      "sent_max_err": 20,
+      "sent_p90_max_warn": 14.5,
+      "short_le6_pct_min_err": 28.0,
+      "short_le6_pct_min_warn": 35.0,
+      "clause_mean_max_warn": 6.0,
+      "clause_mean_max_err": 6.5,
+      "clause_max_warn": 13,
+      "consecutive_long_ge15_max": 2,
+      "words_per_seg_warn": 26,
+      "words_per_seg_err": 34
+    },
+    "dialogue_and_voice": {
+      "min_direct_quotes_warn": 3,
+      "target_direct_quotes": [4, 8],
+      "max_words_per_quote_warn": 14,
+      "min_dramatic_pauses_ge_045s": 3,
+      "dramatic_pause_threshold_s": 0.45,
+      "target_audio_pause_ratio": [0.19, 0.24],
+      "ref_audio_pause_median_rms": 0.196
+    },
+    "scope_economy": {
+      "max_named_active_chars_target": 3,
+      "max_named_active_chars_warn": 4,
+      "max_named_active_chars_err": 5,
+      "max_core_locations_warn": 4,
+      "max_core_locations_err": 5,
+      "max_plot_props_warn": 4,
+      "max_plot_props_err": 5,
+      "max_storylines": 1,
+      "max_world_rules": 1,
+      "max_twist_words_target": 25,
+      "_note": "Scope economy limits CORE named roles & CORE story locations in brief.md so the plot never rambles; in G4 design, each core location still expands into 3-4 front-on connected spatial sub-scenes (v5.8.1)."
+    },
+    "beat_cadence": {
+      "hook_s1_max_words": 18,
+      "hook_s1_s2_max_words": 32,
+      "personal_stakes_offset_warn_pct": 0.28,
+      "act1_ceiling_warn_pct": 0.35,
+      "act1_ceiling_err_pct": 0.40,
+      "button_max_words": 12,
+      "six_beat_budget_pct": {
+        "hook": [0.03, 0.06],
+        "rule_demo_montage": [0.10, 0.18],
+        "outlier_and_bond": [0.14, 0.22],
+        "crisis_escalation_ladder": [0.22, 0.32],
+        "rule_internal_turn": [0.15, 0.25],
+        "callback_button": [0.03, 0.08]
+      }
+    },
+    "tone_distribution_ref": {
+      "heartwarming_emotional_fable": 0.556,
+      "uncanny_mystery_cliffhanger": 0.278,
+      "deadpan_satire_bittersweet": 0.111,
+      "clever_heist": 0.056,
+      "pure_comedy_only": 0.0
+    },
+    "anti_patterns": {
+      "ai_melodrama_phrases": [
+        "bùng cao rực rỡ",
+        "cuộn trào",
+        "vụt sáng trong đầu",
+        "cắn răng đốt nốt",
+        "mắt bỗng đỏ hoe",
+        "bóng tối ép sát",
+        "hơi ấm cuộn trào",
+        "đẩy lùi bão tuyết",
+        "sóng gió ập đến",
+        "trái tim như thắt lại",
+        "nghẹn ngào không nói nên lời"
+      ],
+      "elder_lecture_patterns": [
+        "già làng nói",
+        "già làng kể",
+        "già làng bảo",
+        "trưởng lão bảo",
+        "trưởng lão nói",
+        "trưởng lão giải thích",
+        "ông lão giảng"
+      ],
+      "indirect_emotion_summary_patterns": [
+        "bà bảo không nhớ",
+        "lẩm bẩm không quen",
+        "bật cười, bảo",
+        "cười khẩy bảo",
+        "giải thích nhanh"
+      ],
+      "late_backstory_dump_markers": [
+        "mười mùa đông trước",
+        "mười năm trước đó",
+        "vì thế nên tối nào",
+        "nên tối nào .* chỉ dám"
+      ]
+    },
+    "gold_exemplars": [
+      {
+        "id": "diem-hoi-sinh",
+        "words": 411,
+        "dur_s": 89.6,
+        "wps": 4.59,
+        "w_sent": 8.74,
+        "dna_lesson": "Ultra-lean 2-char dyad, 14w redefinition twist, silent wait beat"
+      },
+      {
+        "id": "thanh-kiem-roi-suot-sau-nam",
+        "words": 458,
+        "dur_s": 98.7,
+        "wps": 4.64,
+        "w_sent": 7.05,
+        "le6_pct": 55.4,
+        "dna_lesson": "Staccato climax compression, 21w scale-flip twist"
+      },
+      {
+        "id": "sieu-nang-luc-cua-ban",
+        "words": 679,
+        "dur_s": 144.2,
+        "wps": 4.71,
+        "w_sent": 7.22,
+        "le6_pct": 52.1,
+        "dna_lesson": "Stealth comic plant ('tay dài' for cookies -> across ocean), 13 crisp quotes"
+      },
+      {
+        "id": "ai-dang-go-cua-mat-troi",
+        "words": 688,
+        "dur_s": 151.8,
+        "wps": 4.53,
+        "w_sent": 7.40,
+        "pause_rms": 0.226,
+        "dna_lesson": "9 pauses >=0.4s, concrete visual props, chilling 19w cliffhanger button"
+      },
+      {
+        "id": "gio-nuoc-mat",
+        "words": 662,
+        "dur_s": 158.3,
+        "wps": 4.18,
+        "w_sent": 8.95,
+        "pause_rms": 0.238,
+        "dna_lesson": "42 breath pauses >=0.4s, zero proper names (kinship roles only), deadpan -> gut-punch"
+      }
+    ]
+  },
+  "long_16x9": {
+    "words": {
+      "pass": [1700, 3800],
+      "ref_median": 2423,
+      "ref_range": [1737, 2614]
+    },
+    "prose_breathability": {
+      "sent_mean_max_warn": 8.5,
+      "short_le6_pct_min_warn": 35.0,
+      "clause_mean_max_warn": 6.4
+    },
+    "scope_economy": {
+      "max_main_cast": 4,
+      "rule": "Expand via 3-5 escalating confrontations on ONE spine, never parallel subplots"
+    }
+  }
+}

@@ -1,19 +1,22 @@
 # Script craft
 
-## 1. Benchmarks (house standard + 548-script survey)
-House pacing (`standards/pacing.json` v2.0) uses the lively per-sentence `Hải Đăng` rhythm (`5.25` syllable-units/s, `pitch 1.02`):
+## 1. Benchmarks (house standard v3.0 + 41-folder `SCRIPT_YOUTUBE` DNA corpus)
+House pacing (`standards/pacing.json` v3.0 + `standards/script_dna_db.json` v1.0) uses the **Native 1.0× `Hải Đăng`** breathable rhythm (`4.70` syllable-units/s, `pitch 1.00`, `0.24 s` intra-sentence gaps, `0.30 s` default segment pause, `20–24%` audio pause share — see `references/script-dna-playbook.md`):
 
-| Measure | House / Survey Benchmark | Required (`script_lint.py`) |
+| Measure | Corpus DNA Benchmark (`n=28` ref Shorts) | Required (`script_lint.py` v5.9.0) |
 |---|---|---|
-| Segments | 22–40 (reference 30) | 22–40 (`SC-04`) |
-| Words & Duration | 620–860 spoken words, 125–170 s | 620–860 words, 125–170 s (`SC-05`) |
-| Words per segment | 18–26 mean | ≤ 45 (`SC-06`) |
-| Sentence rhythm | mean 7.2–10.0 words, SD ≥ 4.0 | SD ≥ 3.0 (`SC-07`), none > 24 words (`SC-08`) |
-| Short punch sentences (≤ 5w) | Top 10% VoidCast uses 25–35 per clip | ≥ 6 hard floor, target ≥ 10 (`SC-09`) |
-| First segment (`s1`) | 10–16 words (world-rule upfront) | ≤ 20 words (`SC-14`) |
-| Act-1 ceiling & Pivot | `"Còn tôi?"` ~20%, Crisis ~38% | Act 1 ≤ 42% (`SC-21`), narrator by `s7` / < 40% (`SC-25`) |
+| Segments | 24–32 (median ~27) | 20–36 (`SC-04`) |
+| Words & Duration | 500–620 sweet spot (median 595w), 120–150 s | 450–660 words, 105–160 s (`SC-05`) |
+| Words per segment | 16–24 mean | ≤ 34 err / > 26 warn (`SC-06`) |
+| Sentence breathability | mean 7.83w, `43.5%` ≤ 6w, clause 5.61w | mean ≤ 9.5w (warn > 8.8), ≤ 6w ≥ 28% (warn < 35%), clause ≤ 6.5w (`SC-38`), SD ≥ 3.0 (`SC-07`), none > 20w (`SC-08`) |
+| Short punch sentences (≤ 5w) | 10–18 per Short | ≥ 6 hard floor, target ≥ 10 (`SC-09`) |
+| Direct quotes & anti-melodrama | median 6.5 quotes, plain concrete verbs | ≥ 3 direct quotes (non-deadpan), zero indirect emotion summaries / AI melodrama (`SC-39`) |
+| Scope economy (`brief.md`) | 2–3 active chars, 2–3 core locs, 1–3 props | < 5 chars, < 5 core locs, < 5 plot props (`SC-40`) |
+| First segment (`s1`) & Hook | 10–15 words (world-rule upfront) | `s1` ≤ 18w (`SC-14`), `s1+s2` ≤ 42w, personal stakes ≤ 25% (`SC-43`) |
+| Dramatic breath & peak WPS | ≥ 3 pauses ≥ 0.45 s, climactic beat ≤ 4.35 wps | seg peak ≤ 4.85 wps, ≥ 3 dramatic pauses (`SC-41`) |
+| Act-1 ceiling & Pivot | `"Còn tôi?"` ~18–22%, Crisis ~38% | Act 1 ≤ 42% (`SC-21`), narrator by `s7` / < 40% (`SC-25`) |
 | Middle protagonist agency | Active hero/family in 35%–70% | ≥ 25% of middle segments (`SC-20`) |
-| Closing button | VoidCast median 7 words | ≤ 12 words (`SC-24`), zero morals/magic-denial |
+| Closing button | Corpus median 7 words | ≤ 12 words (`SC-24`), zero morals/elder lectures (`SC-42`) |
 
 Survey context (`docs/world-rule-survey-2026-11-16.md`): across 548 scripts and 28 channels, **Pure Rule-Trap** episodes beat external-monster twists by **6.0×** median views (`2.90M` vs `483K`), and story-button endings beat stated morals by **30×** in Vietnamese (`3.73M` vs `121K`).
 
@@ -68,9 +71,9 @@ Every beat in `brief.md` (`## Spine`) and `beats.md` (`## Spine` + `## Plant & P
 - First person `"tôi"`, calm, slightly tired, observant.
 - Northern vocabulary (`vào, bố, mẹ, lợn, thìa, cốc, bát, đắt, gọi, bảo, hôm đấy, thế, nhỉ, à, chứ`). Never southern (`SC-10`: `tui, hông, nhen, vô nhà, ly nước, dìa, mần, ổng, bả, xài, muỗng, heo`).
 - Numbers written in full Vietnamese words in spoken text (`SC-15`: `"mười bảy"`, `"chín linh hai"`, `"mười lăm giây"`).
-- Bilingual & expressive phrasing (`voice_standard.json` v2.0):
+- Bilingual & expressive phrasing (`voice_standard.json` v3.0):
   - Foreign proper nouns/loanwords (`Graham`, `Henderson`, `London`) are declared in `"english": [...]` at the top of `script.json` (or wrapped in `<en>...</en>` in `tts_text`; `SC-16` checks balanced `<en>` tags and `SC-10` excludes them from dialect checks).
-  - Ellipsis (`...` / `…`) is allowed (`no_ellipsis: false` — internal pauses `> 0.32s` are trimmed automatically to `0.16s` in `voice.py`).
+  - Ellipsis (`...` / `…`) and em-dashes (`—` / `–`) are allowed (`no_ellipsis: false` — internal pauses `> 0.55s` are trimmed gently to `0.25s` in `voice.py`, and both receive `clause_pad_s = 0.08s`).
   - VieNeu V3 Turbo's 3 native inline emotion tags (`[cười]`, `[thở dài]`, `[hắng giọng]` / `[chuckle]`, `[sigh]`, `[clear throat]`) are allowed (`SC-17`) and stripped automatically from burned-in captions.
 
 ## 5. Writing for pictures
@@ -78,28 +81,28 @@ Every segment is a picture change; every noun must be drawable in `sv-20` flat 2
 
 ## 6. script.json format
 ```json
-{"title": "Tiêu đề tập", "voice": "Hải Đăng", "pause_after": 0.18,
+{"title": "Tiêu đề tập", "voice": "Hải Đăng", "pause_after": 0.30,
  "english": ["Graham", "Henderson"],
  "segments": [
-  {"id": "s1", "text": "Ở xóm này, …", "pause_after": 0.3},
+  {"id": "s1", "text": "Ở xóm này, …", "pause_after": 0.35},
   {"id": "s8", "text": "Tôi gặp Graham.", "tts_text": "Tôi gặp <en>Graham</en>."},
   {"id": "s21", "text": "Em biết… Nhưng Mơ chỉ lên bảy một lần.",
    "sentences": [
     {"tts_text": "Em biết…"},
-    {"tts_text": "[thở dài] Nhưng Mơ chỉ lên bảy một lần.", "wps": 4.5, "pause_after": 0.3}
-   ], "pause_after": 0.45}
+    {"tts_text": "[thở dài] Nhưng Mơ chỉ lên bảy một lần.", "wps": 4.35, "pause_after": 0.32}
+   ], "pause_after": 0.55}
  ]}
 ```
 - IDs `s1, s2, ...` strictly ordered (`SC-03`); insert revisions as `s3b` rather than renumbering.
-- `pause_after` default `0.18` s (`0.08`–`0.70` s, `SC-18`); `0.3` after a punch; `0.45` before `Turn`.
+- `pause_after` default `0.30` s (`0.12`–`1.20` s, `SC-18`); `0.35–0.45` after a punch; `0.50–0.65` on `≥ 3` dramatic turns (`SC-41`).
 - Optional `"english"` (top-level or per-segment) auto-wraps whole-word matches in `<en>...</en>` for VieNeu V3 Turbo while keeping `text` captions clean.
-- Optional `"wps"` or `"sentences": [...]` fine-tunes speed, `pause_after`, `tts_text`, or `seed` on individual sentences without affecting the rest of the episode.
+- Optional `"wps"` or `"sentences": [...]` fine-tunes speed (`4.20–4.45` on climactic turns, `SC-41`), `pause_after`, `tts_text`, or `seed` on individual sentences without affecting the rest of the episode.
 
 ## 7. Process
-1. `premise-ideation.md` Reverse-Design → fill `brief.md` → get user approval (`G1`).
+1. `premise-ideation.md` Reverse-Design + `script-dna-playbook.md` Scope Economy (`≤ 3–4` core chars, `≤ 3–4` core locs, `≤ 3–4` props) → fill `brief.md` → get user approval (`G1`).
 2. Fill `beats.md` (`## Spine` with `[sX]` tags, `## Plant & Payoff`, sections, `## Segment map`) → write `script.json`.
-3. `python3 scripts/script_lint.py` → fix every `SC-01..26` error, inspect warnings.
-4. Read the entire script aloud mentally at ~4.4 words/s; cut any slack beat that fails the delete-test.
+3. `python3 scripts/script_lint.py` → fix every `SC-01..27`, `SC-35`, `SC-38..43` error, inspect warnings.
+4. Read the entire script aloud mentally at ~4.4 words/s (`4.70 ups` native Hải Đăng with breathable pauses); cut any slack beat that fails the delete-test.
 5. Complete all 14 rubric items in `gates/G2.review.md` → send full segment text + estimated duration to the user → `python3 scripts/sv_gate.py pass G2`.
 
 ## 8. G2 rubric (14 checks — answer each specifically in `gates/G2.review.md`)

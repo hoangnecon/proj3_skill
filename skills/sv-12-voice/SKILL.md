@@ -1,44 +1,44 @@
 ---
 name: sv-12-voice
-description: Record the narration of a story-video episode with the house voice Hải Đăng (VieNeu V3 Turbo preset, northern male, no cloning, pure v2.0 per-sentence 5.25 ups rhythm at 1.02 pitch across both 9:16 Shorts and 10–16 minute 16:9 Long-Form, bilingual en tags, ellipsis and emotion tags) — one take per sentence with deterministic seeds, per-sentence pause trimming and WSOLA tempo/pitch control, SC-35 voice-integrity guard (zero artificial speed warping), whisper word alignment, words.json/cues.json — and pass gate G3. Use whenever script.json changed, narration sounds wrong, flat, too fast or slow on a sentence, a word or English name is misread, or word anchors are missing.
+description: Record the narration of a story-video episode with the house voice Hải Đăng (VieNeu V3 Turbo preset, northern male, no cloning, corpus-calibrated v3.0 native 1.0x 4.70 ups rhythm at 1.00 pitch with natural 20–24% breathing pauses across both 9:16 Shorts and 16:9 Long-Form, bilingual en tags, ellipsis, em-dash, and emotion tags) — one take per sentence with deterministic seeds, gentle pause trimming, SC-35 voice-integrity guard, whisper word alignment, words.json/cues.json — and pass gate G3. Use whenever script.json changed, narration sounds wrong, flat, too fast or slow on a sentence, a word or English name is misread, or word anchors are missing.
 ---
 
-# sv-12 · Voice (gate G3)
+# sv-12 · Voice (gate G3 · `v3.0` Native 1.0× Breathing Standard)
 
-Why this exists: a flat uniform speedup (`1.25×` / `atempo` on a whole segment) or overriding `target_ups` above `5.45` warps VieNeu-TTS into sounding artificially pitched-up, rushed, and hard for kids to follow. House standard `v2.0` synthesizes **sentence by sentence** with the `Hải Đăng` preset (`t=0.7, top_k=25, top_p=0.95, use_ref_codes=True`), trims internal pauses (`> 0.32 s → 0.16 s`), and brings each sentence cleanly to the **pure `5.25` syllable-units/s** profile at **`pitch_ratio = 1.02`** across **ALL** formats (`9:16` Shorts AND `9.5–16.0 min` `16:9` Long-Form `"length": "long_16x9"` — never distort voice speed/pitch to squeeze runtime; `10–15 min` long-form is natural!) via built-in FFmpeg WSOLA (`asetrate + aresample + atempo` — 100% offline, zero external dependencies).
+Why this exists: forcing VieNeu-TTS up to `5.25` ups via WSOLA (`1.14–1.42×` acceleration) while chopping pauses `> 0.32 s → 0.16 s` pushed audio pause breathing down to `15.8%` (0th percentile of our 41-folder `SCRIPT_YOUTUBE` corpus) and made episodes sound breathless and rushed. House standard **`v3.0` (Option B1)** synthesizes **sentence by sentence** with the `Hải Đăng` preset (`t=0.7, top_k=25, top_p=0.95, use_ref_codes=True`) at its **natural native 1.0× speed (`target_ups: 4.70`, `phonation_ups: 4.90`, `blend_raw: 0.65`, `pitch_ratio: 1.00`, `tempo_clamp: [0.95, 1.08]`)**, preserving natural human cadence and **20–24% real audio breathing room** (`inside_pause_threshold_s: 0.55 s → 0.25 s`, `sentence_gap_s: 0.24 s`, `clause_pad_s: 0.08 s` including Vietnamese em-dashes `—`/`–`, `default_pause_after_s: 0.30 s` up to `1.20 s` for dramatic silent visual holds) across **ALL** formats.
 
 ## Read first
-`references/standard.md` — how `v2.0` per-sentence rhythm, bilingual `<en>...</en>`, emotion tags, and quality checks work.
+`references/standard.md` — how per-sentence rhythm, bilingual `<en>...</en>`, emotion tags, and quality checks work.
 
 ## The standard lives in two files (shared, versioned; never edit per episode)
 | File | Holds |
 |---|---|
-| `standards/voice_standard.json` | engine settings, pure per-sentence rhythm (`5.25` ups, `pitch 1.02`, `0.32s→0.16s` trim, `0.16s` sentence gap) shared across **every** format, bilingual/tag text rules, line & episode checks, Hải Đăng profile |
-| `standards/pacing.json` | shared voice targets (`overall_wps [4.6, 5.5]`, `default_pause_after_s 0.18`, `pause_share [2%, 9%]`), `9:16` Short budget (`125–170 s`, `620–860` words, `22–40` segments), and `16:9` `episode_long_16x9` budget (`540–960 s` target `720 s`, `2,600–4,900` words, `95–225` segments across `4–9` episodic `units` `SC-37`) |
+| `standards/voice_standard.json` | engine settings, v3.0 native 1.0× rhythm (`4.70` ups, `pitch 1.00`, `blend_raw 0.65`, `tempo_clamp [0.95, 1.08]`, `0.55s→0.25s` trim, `0.24s` sentence gap, `0.08s` clause pad incl. `—`/`–`, `max_hole_s ≤ 0.75 s`), bilingual/tag text rules, line & episode checks, Hải Đăng profile (`4.70` ups, `155.4 Hz`) |
+| `standards/pacing.json` | shared voice targets (`overall_wps [4.0, 4.65]`, `default_pause_after_s 0.30`, `pause_after_s [0.12, 1.20]`, `pause_share [8%, 20%]`), `9:16` Short budget (`105–160 s` target `135 s`, `450–660` words sweet spot `500–620w`, `20–36` segments), and `16:9` `episode_long_16x9` budget (`380–960 s` target `600 s`, `1,700–3,800` words, `70–225` segments across `4–9` episodic `units` `SC-37`) |
 
 | Engine & Rhythm setting | 9:16 Short (`default`) | 16:9 Long-Form (`"length": "long_16x9"`) |
 |---|---|---|
 | voice & sampling | `"Hải Đăng"` preset (`use_ref_codes: true`, no cloning; `t=0.7 / top_k=25 / top_p=0.95 / rep=1.2`) | Identical `"Hải Đăng"` preset & sampling (`voice_standard.json` untouched) |
-| per-sentence rhythm | Pure `target_ups: 5.25` (`phonation 5.62`, `blend_raw 0.20`), `pitch_ratio: 1.02` | **Identical pure `target_ups: 5.25`** (`_effective_rhythm` always returns `STD["rhythm"]` — zero overrides) |
-| pause trimming & gaps | internal `> 0.32 s → 0.16 s`, `sentence_gap_s: 0.16 s`, `default_pause_after_s: 0.18 s` | Identical (`> 0.32 s → 0.16 s`, `sentence_gap_s: 0.16 s`, `default_pause_after_s: 0.18 s`, `mean pause_after` `[0.11, 0.32] s`) |
-| voice integrity (`SC-35`) | `script.wps` in `[4.95, 5.35]`, segment/sentence `wps` in `[4.80, 5.45]`, `≤ 10%` custom `wps` | **Strict `SC-35` + `SC-36..37`:** ban `wps > 5.45` or `< 4.80` (`90–100%` at default `5.25` ups); briskness comes from short kid sentences (`≤ 18w` hook, mean `≤ 15.5w`, zero textbook jargon `SC-36`), validated unit-by-unit (`SC-37`) |
-| takes & retries | 1 take/sentence with deterministic `seed_for`; retries on failed check (max 3) | Identical; `line_checks` compares default segments against pure `5.25` ups (`±18%`) |
+| per-sentence rhythm | Native 1.0× `target_ups: 4.70` (`phonation 4.90`, `blend_raw 0.65`, `pitch_ratio: 1.00`, `tempo_clamp [0.95, 1.08]`) | **Identical native 1.0× `target_ups: 4.70`** (zero overrides) |
+| pause trimming & gaps | internal `> 0.55 s → 0.25 s`, `sentence_gap_s: 0.24 s`, `default_pause_after_s: 0.30 s` (up to `1.20 s` on twists/silent beats) | Identical (`mean pause_after` `[0.16, 0.55] s`, `pause_share` `[8%, 20%]`) |
+| voice integrity (`SC-35`) | `script.wps` in `[4.45, 4.90]`, segment/sentence `wps` in `[4.15, 5.05]`, `≤ 10%` custom `wps` | **Strict `SC-35` + `SC-36..37`:** ban artificial speedups (`90–100%` at default `4.70` ups); pacing comes from staccato sentences (`SC-38`) and pauses (`SC-41`) |
+| takes & retries | 1 take/sentence with deterministic `seed_for`; retries on failed check (max 3) | Identical; `line_checks` compares default segments against `4.70` ups (`-22% / +20%`) |
 
-| Per-segment check (vs pure `5.25` ups, `158.5 Hz`, centroid `1315 Hz` — or gentle `[4.80, 5.45]` `wps`) | Range |
+| Per-segment check (vs native `4.70` ups, `155.4 Hz`, centroid `1295 Hz`) | Range |
 |---|---|
 | `asr_similarity` (`faster-whisper` small, accent-free, markup stripped) | `≥ 0.85` |
-| `rate_vs_profile` | `±18 %` |
+| `rate_vs_profile` | `-22 % … +20 %` |
 | `f0_vs_profile_st` | `±2.2` semitones |
 | `timbre_vs_profile` | `±20 %` |
-| `max_hole_s` (unintended silence inside a segment) | `≤ 0.45 s` |
+| `max_hole_s` (unintended silence inside a segment) | `≤ 0.75 s` |
 
-Episode checks: `f0_spread_st ≤ 1.1`, `rate_cv ≤ 0.10` (over default-rate segments), `timbre_cv ≤ 0.12`, `retry_share ≤ 0.25`, `between_words_db ≤ −50` (noise and reverb tails between words, measured through the same voice chain the mix uses — G6 gets the same number, ±0.15 dB on 6 episodes, so **target `between_words_db ≤ -51.5 dB` (`1.5 dB` safety margin under `-50.0 dB`) at G3** so `±0.15 dB` G6 mix variance never causes a late G6 bounce; `voice.py` names the worst segments for `--only`); pacing: `overall_wps` `4.6–5.5` and `pause_share` `2–9 %` on **both** formats (`9:16` Short `voice_s` `125–170 s`, `22–40` segments; `long_16x9` `voice_s` `540–960 s` target `720 s`, `95–225` segments).
+Episode checks: `f0_spread_st ≤ 1.1`, `rate_cv ≤ 0.14` (preserving natural human phrasing variance), `timbre_cv ≤ 0.12`, `retry_share ≤ 0.25`, `between_words_db ≤ −50` (target `≤ -51.5 dB` at G3); pacing: `overall_wps` `4.0–4.65` and `pause_share` `8–20 %` on **both** formats (`9:16` Short `voice_s` `105–160 s`, `20–36` segments; `long_16x9` `voice_s` `380–960 s` target `600 s`, `70–225` segments).
 
 ## Text, Bilingual & Expressive Tag Rules (`SC-15..17` + `voice.py`)
 - **Numbers in words** in spoken text (`"mười tỷ đồng"`, never `"10.000.000.000"`).
 - **Bilingual (`<en>...</en>`):** Declare English names/terms in `"english": ["Graham", "Henderson", "London"]` at the top of `script.json` (auto-wrapped as `<en>Graham</en>` for VieNeu English G2P) or write `<en>...</en>` directly in `tts_text`. English multi-syllable vowel clusters are counted automatically so English names are never rushed, and `<en>` tags are stripped from `words.json` captions.
-- **Ellipsis (`...` / `…`) is allowed:** VieNeu renders natural trailing/hesitant intonation while `rhythm_trim` cuts any pause `> 0.32 s` down to `0.16 s`, preventing dead holes.
-- **Native VieNeu emotion tags are allowed:** `[cười]`, `[thở dài]`, `[hắng giọng]` (and `[chuckle]`, `[sigh]`, `[clear throat]`) map to `<|emotion_1..3|>`. `voice.py` budgets `0.38 s` per cue so spoken words stay at `5.25` ups and strips tags from burned-in captions (`words.json`). Unsupported `[...]` tags are rejected (`SC-17`).
+- **Ellipsis (`...` / `…`) & em-dashes (`—` / `–`) are allowed:** VieNeu renders natural hesitant intonation while `clause_pad_s` (`0.08 s`) budgets clean breathing on commas, semicolons, colons, ellipses, and em-dashes, and `rhythm_trim` cuts only holes `> 0.55 s` down to `0.25 s`.
+- **Native VieNeu emotion tags are allowed:** `[cười]`, `[thở dài]`, `[hắng giọng]` (and `[chuckle]`, `[sigh]`, `[clear throat]`) map to `<|emotion_1..3|>`. `voice.py` budgets `0.38 s` per cue and strips tags from burned-in captions (`words.json`). Unsupported `[...]` tags are rejected (`SC-17`).
 
 ## Per-Sentence Fine-Tuning (`script.json`)
 When a rare emotional turn (`≤ 10%` of segments per `SC-35`; never outside `[4.80, 5.45]` ups!) needs slightly gentler weight, a tighter/longer pause, a custom pronunciation, or a specific seed, tune that exact sentence in `script.json`:

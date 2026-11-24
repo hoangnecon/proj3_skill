@@ -1,7 +1,7 @@
 {
   "name": "story-video-skills",
-  "version": "5.8.1",
-  "description": "Gated production suite for 2-3 minute vertical Shorts and opt-in 9.5-16.0 minute 16:9 widescreen Long-Form Vietnamese 2D story videos (Remotion, riso-ink illustration, pure Hai Dang 5.25 ups narration): series bible, 10yo kid-storytelling script with episodic units, pure voice integrity, Spatial Location Packs with scaleMode/stateless plates and living quadruped Hero Subjects, distance-locked studio 2D motion, unit-by-unit QA and sequential episodic gates G5.U1..Uk + G1-G7 with 156 lint rules.",
+  "version": "5.9.0",
+  "description": "Gated production suite for 1.75-2.65 minute vertical Shorts and opt-in 6.5-15.0 minute 16:9 widescreen Long-Form Vietnamese 2D story videos (Remotion, riso-ink illustration, corpus-calibrated Script DNA DB, native 1.0x 4.70 ups Hai Dang narration with 20-24% pause breathing): series bible, 10yo storytelling script (SC-38..43 anti-ramble/breathability), Connected Spatial Sub-Scenes, distance-locked studio 2D motion, blind QA and gates G1-G7 with 164 lint rules.",
   "author": {
     "name": "PROJ3"
   },

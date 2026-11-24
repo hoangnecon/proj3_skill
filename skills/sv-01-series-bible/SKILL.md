@@ -6,10 +6,10 @@ description: The identity of the story-video series — format, narrator persona
 # sv-01 · Series bible
 
 ## Format
-- Vertical 1080×1920, 2–3 minutes (house standard 125–170 s, 620–860 words at 5.25 ups), one narrator, captions burned in.
+- Vertical 1080×1920, 1.75–2.65 minutes (`standards/pacing.json` v3.0: **450–660 words** sweet spot `500–620w`, **105–160 s** target `135 s` at native 1.0× **4.70 ups** Hải Đăng with `20–24%` real audio breathing pauses, `2.3–3.8 s/shot` + `2–4` silent visual holds), one narrator, captions burned in.
 - Flat "riso ink" 2D illustration (`sv-20` tokens): ink-navy outlines, halftone dots, paper grain,
   Be Vietnam Pro type. Animated in Remotion, every shot anchored to a word.
-- Sound: voice Hải Đăng (northern male), the series theme music (`scripts/theme.py`) 15–18 dB under the voice, mixed by the `sv-42` standard, room ambience per location, small foley.
+- Sound: voice Hải Đăng (northern male, native 1.0× pace — zero artificial WSOLA speedup), the series theme music (`scripts/theme.py`) 15–18 dB under the voice, mixed by the `sv-42` standard, room ambience per location, small foley.
 
 ## Narrator & recurring hero
 "Tôi" — an ordinary resident living inside the story (a tenant, a neighbour, a student, the guard, the maintenance worker). Calm, tired, precise, deadpan: never explains the joke or laughs at it. Knows numbers, floor levels and names. Enters early (`s1`–`s7`) with a personal stake or handicap under the rule. For recurring or open-ended adventures, anchor around **Nhím** using the **canonical New Nhím look (`NHIM_LOOK` from `src/chars.tsx`, enforced by `CH-11`)**: swept-up spiky hair with no bangs (`hair: 'spikyUp'`), red backwards snapback cap (`hat: 'capBack'`, `hatC: 'red'`), gold shirt (`topC: 'gold'`, `topC2: 'goldDark'`), navy pants, orange shoes (`w: 0.88, h: 0.86, head: 1.0`).

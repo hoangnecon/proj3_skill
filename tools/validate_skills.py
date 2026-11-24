@@ -31,7 +31,7 @@ err = errors.append
 warn = warns.append
 
 # ---------------------------------------------------------------- 0. layout
-TOP = {"skills", "standards", "engine", "starter", "examples", "tools", "docs", ".claude-plugin"}
+TOP = {"skills", "standards", "engine", "starter", "examples", "tools", "docs", ".claude-plugin", "rules"}
 TOP_FILES = {"README.md", "CHANGELOG.md", "CONVENTIONS.md", ".gitignore", "plugin.json"}
 KINDS = {  # folder -> allowed file suffixes (relative path regex for exceptions)
     "skills": {".md"},
@@ -42,6 +42,7 @@ KINDS = {  # folder -> allowed file suffixes (relative path regex for exceptions
     "tools": {".py", ".sh", ".ps1"},
     "docs": {".md", ".png", ".jpg"},
     ".claude-plugin": {".json"},
+    "rules": {".md"},
 }
 try:
     tracked = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True).stdout.split("\n")

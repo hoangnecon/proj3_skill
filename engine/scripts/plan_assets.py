@@ -46,13 +46,13 @@ TARGETS_LONG_16X9 = {
 TARGETS_SHORT_9X16 = {
     "format": "9:16",
     "length_mode": "short_9x16",
-    "min_cast": 7,
+    "min_cast": 4,
     "min_sets": 12,
-    "target_sets": 18,
+    "target_sets": 15,
     "min_angles": 1,
-    "min_locations_with_subscenes": 6,
+    "min_locations_with_subscenes": 3,
     "min_subscenes_per_primary_loc": 3,
-    "target_shots_range": [50, 75],
+    "target_shots_range": [38, 60],
     "target_sla_min": 15,
 }
 

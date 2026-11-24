@@ -222,14 +222,14 @@ def style_sentence(
     pitch_override: float | None = None,
     rhythm: dict | None = None,
 ):
-    """Áp nhịp nhanh theo từng câu (offline 5.25 ups chuẩn Hải Đăng + pitch 1.02 qua FFmpeg WSOLA)."""
+    """Áp nhịp theo từng câu (v3.0 native 1.0x Hải Đăng 4.70 ups + pitch 1.00 qua FFmpeg WSOLA)."""
     R = rhythm or STD["rhythm"]
     tr = rhythm_trim(raw_wav, R["inside_pause_threshold_s"], R["inside_pause_target_s"])
     raw_dur = max(len(tr) / SR, 0.08)
     u = syllable_units(sent_tts)
     n_emo = count_emotions(sent_tts)
     clean_inner = re.sub(r"[.!?…]+$", "", strip_markup(re.sub(r"\.{3,}", "…", sent_tts)).strip())
-    n_clauses = len(re.findall(r"[,;:…]", clean_inner))
+    n_clauses = len(re.findall(r"[,;:…—–]", clean_inner))
     short_pad = R["short_sentence_pad_s"] if u <= 4 else 0.0
 
     req_ups = float(wps_override) if wps_override is not None else float(R["target_ups"])

@@ -7,7 +7,7 @@ description: Break a narrated story-video episode into word-anchored shots (v5.6
 
 The narration is the clock. Every shot starts on a word (`at: 's4@bấm'`), every action lands on a word,
 and cut rhythm follows `standards/pacing.json`:
-- **9:16 Shorts (`shots`):** `2.0–3.0 s` mean (`20–28 shots/min`, `p10 ≥ 1.2 s`, `max 6.5 s`, ~1 shot per `2.2 s` — *Thang máy* has 67 shots in 153 s).
+- **9:16 Shorts (`shots`, `v5.9.0`):** `2.3–3.8 s` mean (`16–26 shots/min`, `p10 ≥ 1.3 s`, `max 7.0 s`, ~`40–58` shots per 2.25-min Short, aligned with our 41-folder `SCRIPT_YOUTUBE` median `50 shots` / `2.98 s/shot` + `2–4` deliberate silent visual hold beats `0.5–1.2 s` at hooks, twists, and buttons).
 - **16:9 Long-Form (`shots_long_16x9`, `v5.6.0`):** `2.8–6.2 s` mean (`9.5–21.0 shots/min`, `p10 ≥ 1.3 s`, `max 9.5 s`, `SH-15` warns `> 8.0 s`), **built and gate-locked sequentially Unit-by-Unit (`U1 → U2 → … → Uk`, ~20–32 shots per unit, `SC-37`)** — alternating **`1.8–3.2 s` reaction close-ups, POV inserts & OTS cuts** with **`4.0–6.2 s` dynamic tracking/action shots** (`SH-20`, `SH-21`, `SH-22`, `SH-23`, `LA-03`, `PR-09`, `MO-16..18`).
 An agent that batch-dumps 160 unverified shots at once, camps in dollhouse-wide shots, shrinks a giant creature in close-ups, or leaks normal/tiny sets or creatures out of story order has failed this skill.
 

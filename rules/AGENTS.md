@@ -10,7 +10,7 @@ Suite root on this machine: `C:/Users/Admin/.gemini/config/plugins/story-video-s
 2. **Long-Form mode**: If the task is a 16:9 widescreen / 9.5–16 min Long-Form episode (or uses `"units"`), ALSO read `C:/Users/Admin/.gemini/config/plugins/story-video-skills/skills/sv-02-long-form/SKILL.md` before Gate `G1`.
 3. **Phase skills are mandatory**: Before executing any phase, read the full `SKILL.md` (and any referenced docs it requires) for that phase:
    - `G1`–`G2` (Brief & Script): `sv-01-series-bible`, `sv-10-script`
-   - `G3` (Voice — Hải Đăng 5.25 ups): `sv-12-voice`
+   - `G3` (Voice — Hải Đăng native 1.0× `4.70 ups` breathing standard `v3.0`): `sv-12-voice`
    - `G4` (Cast, Sets, Hero Subjects, Props): `sv-20-design-system`
    - `G5` (Motion, Shots & Camera): `sv-21-motion`, `sv-22-shots-camera`
    - `G6` (Audio & Mix/Master): `sv-40-audio`, `sv-42-mix-master`

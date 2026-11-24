@@ -1,8 +1,8 @@
 """Script checks for gate G2. Writes qa/script_lint.json; exit 1 on any error.
 Run: python3 scripts/script_lint.py
-Calibrated on standards/pacing.json v2.0 (22-40 segments, 620-860 spoken words, 125-170 s at 5.25 ups Hải Đăng),
-standards/voice_standard.json v2.0 (bilingual <en>...</en>, '...'/'…' and emotion tags allowed),
-and the 548-script World-Rule Shorts survey (SC-20..26). See sv-10-script/references/craft.md.
+Calibrated on standards/pacing.json v3.0 (20-36 segments, 450-660 spoken words, 105-160 s at native 1.0x 4.70 ups Hải Đăng),
+standards/voice_standard.json v3.0 (bilingual <en>...</en>, '...'/'…'/'—' and emotion tags allowed, natural 20-24% pauses),
+and standards/script_dna_db.json v1.0 (41-folder SCRIPT_YOUTUBE DNA corpus: SC-38..43). See sv-10-script/references/script-dna-playbook.md.
 """
 import json
 import re
@@ -94,6 +94,14 @@ if _len in ("long", "long_16x9"):
 VS_FULL = json.loads((ROOT / "standards/voice_standard.json").read_text())
 VS = VS_FULL["text"]
 RH = dict(VS_FULL["rhythm"])
+_dna_path = ROOT / "standards/script_dna_db.json"
+DNA_DB = json.loads(_dna_path.read_text(encoding="utf-8")) if _dna_path.exists() else {}
+DNA_S = DNA_DB.get("short_9x16", {})
+DNA_PROSE = DNA_S.get("prose_breathability", {})
+DNA_DLG = DNA_S.get("dialogue_and_voice", {})
+DNA_SCOPE = DNA_S.get("scope_economy", {})
+DNA_BEAT = DNA_S.get("beat_cadence", {})
+DNA_ANTI = DNA_S.get("anti_patterns", {})
 allowed_tags = {x.lower() for x in VS.get("allowed_tags", [])}
 
 def seg_spoken_string(s: dict) -> str:
@@ -108,11 +116,14 @@ dflt = script.get("pause_after", PA["voice"]["default_pause_after_s"])
 pause = sum(float(s.get("pause_after", dflt)) for s in segs[:-1])
 script_wps = script.get("wps")
 
-# Estimate episode voice seconds using the pure v2.0 per-sentence rhythm budget (5.25 ups Hải Đăng)
+# Estimate episode voice seconds using the v3.0 per-sentence rhythm budget (native 1.0x 4.70 ups Hải Đăng)
 est_speak = 0.0
+seg_est_wps: dict[str, float] = {}
 for s in segs:
     eng = list(global_english) + list(s.get("english", []))
     seg_default_wps = s.get("wps", script_wps)
+    seg_u = 0.0
+    seg_t = 0.0
     if s.get("sentences"):
         raw_sents = s["sentences"]
         for j, st in enumerate(raw_sents):
@@ -120,13 +131,20 @@ for s in segs:
             st_wps = (st.get("wps", seg_default_wps) if isinstance(st, dict) else seg_default_wps) or RH["target_ups"]
             n_emo = sum(1 for tg in TAG_RE.findall(st_txt) if tg.strip().lower() in allowed_tags)
             gap_j = (float(st.get("pause_after", RH["sentence_gap_s"])) if isinstance(st, dict) else float(RH["sentence_gap_s"])) if j + 1 < len(raw_sents) else 0.0
-            est_speak += syllable_units(st_txt) / float(st_wps) + n_emo * float(RH["emotion_cue_s"]) + gap_j
+            su = syllable_units(st_txt)
+            seg_u += su
+            seg_t += su / float(st_wps) + n_emo * float(RH["emotion_cue_s"]) + gap_j
     else:
         sp_txt = seg_spoken_string(s)
         sp_wps = float(seg_default_wps if seg_default_wps is not None else RH["target_ups"])
         s_parts = [x for x in SENT_SPLIT_RE.split(re.sub(r"\.{3,}", "…", sp_txt.strip())) if x.strip()]
         n_emo = sum(1 for tg in TAG_RE.findall(sp_txt) if tg.strip().lower() in allowed_tags)
-        est_speak += syllable_units(sp_txt) / sp_wps + n_emo * float(RH["emotion_cue_s"]) + max(0, len(s_parts) - 1) * float(RH["sentence_gap_s"])
+        su = syllable_units(sp_txt)
+        seg_u += su
+        seg_t += su / sp_wps + n_emo * float(RH["emotion_cue_s"]) + max(0, len(s_parts) - 1) * float(RH["sentence_gap_s"])
+    est_speak += seg_t
+    seg_pa = float(s.get("pause_after", dflt))
+    seg_est_wps[s["id"]] = seg_u / max(seg_t + seg_pa * 0.5, 0.25)
 est = est_speak + pause
 
 lo, hi = PA["episode"]["segments"]
@@ -166,10 +184,15 @@ for s in segs:
         if bad_t:
             err("SC-17", f"{s['id']}: unsupported emotion tag(s) {bad_t} — allowed: {sorted(allowed_tags)}")
 
+_is_short = _len not in ("long", "long_16x9")
+_seg_w_err = int(DNA_PROSE.get("words_per_seg_err", 34)) if _is_short else 45
+_seg_w_warn = int(DNA_PROSE.get("words_per_seg_warn", 26)) if _is_short else 45
 for s in segs:
     n = len(strip_markup(s["text"]).split())
-    if n > 45:
-        err("SC-06", f"{s['id']}: {n} words in one segment (max 45) — split it, each segment is a picture change")
+    if n > _seg_w_err:
+        err("SC-06", f"{s['id']}: {n} words in one segment (max {_seg_w_err}) — split it, each segment is a picture change")
+    elif _is_short and n > _seg_w_warn:
+        warn("SC-06", f"{s['id']}: {n} words in one segment (> {_seg_w_warn} target for breathable Shorts) — consider splitting")
     if n < 2:
         warn("SC-06", f"{s['id']}: only {n} words")
 
@@ -181,15 +204,21 @@ sentences = [
     if x.strip()
 ]
 lens = [len(x.split()) for x in sentences if x.split()]
+_sent_max_err = int(DNA_PROSE.get("sent_max_err", 20)) if _is_short else 24
+_sent_max_warn = int(DNA_PROSE.get("sent_max_warn", 18)) if _is_short else 24
 if lens:
     mean, sd = statistics.mean(lens), statistics.pstdev(lens)
     if sd < 3.0:
         err("SC-07", f"sentence length SD {sd:.1f} < 3.0 — monotone rhythm; mix short punches with long build-ups (reference 4.3)")
     if not 6 <= mean <= 13:
-        warn("SC-07", f"mean sentence length {mean:.1f} words (reference 9.4)")
-    long = [x for x in sentences if len(x.split()) > 24]
+        warn("SC-07", f"mean sentence length {mean:.1f} words (reference 7.8)")
+    long = [x for x in sentences if len(x.split()) > _sent_max_err]
     for x in long:
-        err("SC-08", f"sentence of {len(x.split())} words (> 24): \"{x[:60]}...\"")
+        err("SC-08", f"sentence of {len(x.split())} words (> {_sent_max_err}): \"{x[:60]}...\"")
+    if _is_short:
+        for x in sentences:
+            if _sent_max_warn < len(x.split()) <= _sent_max_err:
+                warn("SC-08", f"sentence of {len(x.split())} words (> {_sent_max_warn} target for breathable Shorts): \"{x[:60]}...\"")
     shorts = [x for x in sentences if len(x.split()) <= 5]
     if len(shorts) < 6:
         err("SC-09", f"only {len(shorts)} short sentences (<= 5 words; minimum 6, target >= 10) — punch lines need room to land")
@@ -387,17 +416,20 @@ if _len == "long_16x9" and segs:
             f"Emotional Triad thin/missing register(s): {', '.join(thin_regs)} — weave >= 3 beats in each of Cute/Funny, Spooky-Fun, and Curious",
         )
 
-# SC-35: Pure 5.25 ups Voice Integrity — Ban Artificial Speed Warping!
+# SC-35: Native 1.0x Voice Integrity (v3.0 target_ups 4.70) — Ban Artificial Speed Warping!
+_base_ups = float(RH.get("target_ups", 4.70))
+_top_lo, _top_hi = round(_base_ups - 0.25, 2), round(_base_ups + 0.20, 2)
+_seg_lo, _seg_hi = round(_base_ups - 0.55, 2), round(_base_ups + 0.35, 2)
 if script_wps is not None:
     try:
         top_wps_val = float(script_wps)
-        if not (4.95 <= top_wps_val <= 5.35):
+        if not (_top_lo <= top_wps_val <= _top_hi):
             err(
                 "SC-35",
-                f"top-level script 'wps' is {script_wps} (outside [4.95, 5.35]) — keep the pure 5.25 ups Hải Đăng voice standard",
+                f"top-level script 'wps' is {script_wps} (outside [{_top_lo}, {_top_hi}]) — keep the native 1.0x {_base_ups} ups Hải Đăng voice standard",
             )
     except (TypeError, ValueError):
-        err("SC-35", f"top-level script 'wps' ({script_wps!r}) must be numeric in [4.95, 5.35]")
+        err("SC-35", f"top-level script 'wps' ({script_wps!r}) must be numeric in [{_top_lo}, {_top_hi}]")
 
 if segs:
     custom_wps_segs = 0
@@ -407,40 +439,40 @@ if segs:
             seg_has_custom_wps = True
             try:
                 v = float(s["wps"])
-                if not (4.80 <= v <= 5.45):
+                if not (_seg_lo <= v <= _seg_hi):
                     err(
                         "SC-35",
-                        f"{s['id']}: custom 'wps' {v} outside [4.80, 5.45] — never warp VieNeu-TTS faster than 5.45 or slower than 4.80 ups",
+                        f"{s['id']}: custom 'wps' {v} outside [{_seg_lo}, {_seg_hi}] — never warp VieNeu-TTS faster than {_seg_hi} or slower than {_seg_lo} ups",
                     )
             except (TypeError, ValueError):
-                err("SC-35", f"{s['id']}: custom 'wps' ({s['wps']!r}) must be numeric in [4.80, 5.45]")
+                err("SC-35", f"{s['id']}: custom 'wps' ({s['wps']!r}) must be numeric in [{_seg_lo}, {_seg_hi}]")
         for j, st in enumerate(s.get("sentences", []), 1):
             if isinstance(st, dict) and st.get("wps") is not None:
                 seg_has_custom_wps = True
                 try:
                     v = float(st["wps"])
-                    if not (4.80 <= v <= 5.45):
+                    if not (_seg_lo <= v <= _seg_hi):
                         err(
                             "SC-35",
-                            f"{s['id']}.{j}: custom sentence 'wps' {v} outside [4.80, 5.45] — never warp VieNeu-TTS faster than 5.45 or slower than 4.80 ups",
+                            f"{s['id']}.{j}: custom sentence 'wps' {v} outside [{_seg_lo}, {_seg_hi}] — never warp VieNeu-TTS faster than {_seg_hi} or slower than {_seg_lo} ups",
                         )
                 except (TypeError, ValueError):
-                    err("SC-35", f"{s['id']}.{j}: custom sentence 'wps' ({st['wps']!r}) must be numeric in [4.80, 5.45]")
+                    err("SC-35", f"{s['id']}.{j}: custom sentence 'wps' ({st['wps']!r}) must be numeric in [{_seg_lo}, {_seg_hi}]")
         if seg_has_custom_wps:
             custom_wps_segs += 1
 
     if custom_wps_segs / len(segs) > 0.10:
         warn(
             "SC-35",
-            f"{custom_wps_segs}/{len(segs)} segments ({custom_wps_segs / len(segs):.0%} > 10%) set custom 'wps' overrides — keep 90-100% of segments at the pure 5.25 ups default; briskness comes from short clear sentences and action beats, not speeding up audio",
+            f"{custom_wps_segs}/{len(segs)} segments ({custom_wps_segs / len(segs):.0%} > 10%) set custom 'wps' overrides — keep 90-100% of segments at the native {_base_ups} ups default; pacing comes from crisp short sentences and pauses, not warping audio",
         )
 
     pa_list = [float(s.get("pause_after", dflt)) for s in segs]
     mean_pa = sum(pa_list) / len(pa_list)
-    if mean_pa > 0.32 or mean_pa < 0.11:
+    if mean_pa > 0.55 or mean_pa < 0.16:
         err(
             "SC-35",
-            f"mean pause_after is {mean_pa:.2f}s (outside [0.11, 0.32]s; house default is 0.18s)",
+            f"mean pause_after is {mean_pa:.2f}s (outside [0.16, 0.55]s; house default is {PA['voice']['default_pause_after_s']}s)",
         )
 
 # SC-36: Crystal-Clear Spoken Hook & Plain Kid-Friendly Sentences (long_16x9)
@@ -849,8 +881,167 @@ for s in segs:
     if len(hits) >= 2 or (hits and len(raw_sents) == 1):
         notes.append(f"SC-28 {s['id']}: {len(hits)} very short / sound-only sentence(s) {hits[:4]} — if a take fails on them, "
                       f"a tts_text that joins them with commas keeps the on-screen text and saves the retries")
-if len(first.split()) > 20:
-    err("SC-14", f"s1 is {len(first.split())} words — the hook must land in the first ~4 s (<= 20 words)")
+_hook_max_w = int(DNA_BEAT.get("hook_s1_max_words", 18)) if _is_short else 20
+if len(first.split()) > _hook_max_w:
+    err("SC-14", f"s1 is {len(first.split())} words — the hook must land cleanly (<= {_hook_max_w} words)")
+
+# ---- Corpus DNA Breathability, Anti-Ramble & Pacing Guards (v5.9.0: SC-38..43, standards/script_dna_db.json) ----
+if segs and lens:
+    # SC-38: Prose Breathability & Clause Density
+    short_le6_pct = 100.0 * sum(1 for n in lens if n <= 6) / len(lens)
+    clauses = [
+        c.strip()
+        for x in sentences
+        for c in re.split(r"[,;:…—–]+", x)
+        if c.strip()
+    ]
+    clause_lens = [len(c.split()) for c in clauses if c.split()]
+    clause_mean = statistics.mean(clause_lens) if clause_lens else 0.0
+    max_consec_long = 0
+    cur_long = 0
+    for n in lens:
+        if n >= 15:
+            cur_long += 1
+            max_consec_long = max(max_consec_long, cur_long)
+        else:
+            cur_long = 0
+
+    if _is_short:
+        sm_err = float(DNA_PROSE.get("sent_mean_max_err", 9.5))
+        sm_warn = float(DNA_PROSE.get("sent_mean_max_warn", 8.8))
+        le6_err = float(DNA_PROSE.get("short_le6_pct_min_err", 28.0))
+        le6_warn = float(DNA_PROSE.get("short_le6_pct_min_warn", 35.0))
+        cm_err = float(DNA_PROSE.get("clause_mean_max_err", 6.5))
+        cm_warn = float(DNA_PROSE.get("clause_mean_max_warn", 6.0))
+        consec_max = int(DNA_PROSE.get("consecutive_long_ge15_max", 2))
+        if mean > sm_err:
+            err("SC-38", f"mean sentence length {mean:.2f}w > {sm_err} (ref median 7.83w) — break dense sentences into staccato beats")
+        elif mean > sm_warn:
+            warn("SC-38", f"mean sentence length {mean:.2f}w > {sm_warn} target (ref median 7.83w)")
+        if short_le6_pct < le6_err:
+            err("SC-38", f"only {short_le6_pct:.1f}% sentences <= 6w (< {le6_err}% min; ref median 43.5%) — add punchy 2-6w drops for breathability")
+        elif short_le6_pct < le6_warn:
+            warn("SC-38", f"{short_le6_pct:.1f}% sentences <= 6w (< {le6_warn}% target; ref median 43.5%)")
+        if clause_mean > cm_err:
+            err("SC-38", f"mean clause length {clause_mean:.2f}w > {cm_err} (ref median 5.61w) — trim packed clauses")
+        elif clause_mean > cm_warn:
+            warn("SC-38", f"mean clause length {clause_mean:.2f}w > {cm_warn} target (ref median 5.61w)")
+        if max_consec_long > consec_max:
+            warn("SC-38", f"{max_consec_long} consecutive long sentences (>= 15w; max {consec_max}) — drop in a short punch sentence")
+    else:
+        lf_prose = DNA_DB.get("long_16x9", {}).get("prose_breathability", {})
+        if mean > float(lf_prose.get("sent_mean_max_warn", 8.5)):
+            warn("SC-38", f"long-form mean sentence length {mean:.2f}w > {lf_prose.get('sent_mean_max_warn', 8.5)} (ref long-form 7.75w)")
+        if short_le6_pct < float(lf_prose.get("short_le6_pct_min_warn", 35.0)):
+            warn("SC-38", f"long-form short sentences <= 6w is {short_le6_pct:.1f}% (< {lf_prose.get('short_le6_pct_min_warn', 35.0)}%; ref 44.7%)")
+
+    # SC-39: Short Live Dialogue, Anti-Indirect-Summary & Anti-AI-Melodrama
+    full_clean_txt = " ".join(strip_markup(s["text"]) for s in segs)
+    full_lower = full_clean_txt.lower()
+    if _is_short:
+        quote_matches = re.findall(r"“[^”]+”|\"[^\"]+\"", full_clean_txt)
+        min_quotes = int(DNA_DLG.get("min_direct_quotes_warn", 3))
+        is_deadpan = bool(re.search(r"deadpan\s+satire|systemic\s+satire", brief, re.I))
+        if len(quote_matches) < min_quotes and not is_deadpan:
+            warn("SC-39", f"only {len(quote_matches)} direct dialogue quote(s) on Short (ref median 6.5, target >= {min_quotes}) — turn indirect summaries into crisp spoken lines (<= 12w)")
+        ind_hits = [p for p in DNA_ANTI.get("indirect_emotion_summary_patterns", []) if re.search(p, full_lower, re.I)]
+        melo_hits = [p for p in DNA_ANTI.get("ai_melodrama_phrases", []) if re.search(p, full_lower, re.I)]
+        if len(melo_hits) >= 4:
+            err("SC-39", f"{len(melo_hits)} AI melodrama clichés ({', '.join(melo_hits[:4])}) — rewrite with plain concrete verbs")
+        elif melo_hits:
+            warn("SC-39", f"AI melodrama phrase(s) ({', '.join(melo_hits[:4])}) — prefer crisp deadpan concrete wording")
+        if ind_hits:
+            warn("SC-39", f"indirect emotional summary ({', '.join(ind_hits[:3])}) — replace with direct spoken dialogue")
+
+    # SC-40: Short Scope Economy (Core Named Characters, Core Locations & Plot Props Ceiling)
+    if _is_short and brief_path.exists():
+        def _count_brief_bullets(heading_re: str) -> int:
+            hm = re.search(rf"^##\s+(?:{heading_re})\b(.*?)(?=^##\s+|\Z)", brief, re.M | re.S | re.I)
+            if not hm:
+                return 0
+            body = hm.group(1)
+            return sum(
+                1 for ln in body.splitlines()
+                if re.match(r"^\s*[-*•]\s+\S", ln)
+                or re.match(r"^\s*\d+[.)]\s+\S", ln)
+                or re.match(r"^\s*\|\s*(?!---|#|tên|name|nhân vật|bối cảnh|đạo cụ|id\b)[^|]+\|", ln, re.I)
+            )
+
+        n_chars = _count_brief_bullets(r"Characters|Cast|Nhân vật")
+        n_locs = _count_brief_bullets(r"Locations|Sets|Bối cảnh")
+        n_props = _count_brief_bullets(r"Props|Đạo cụ")
+        c_err, c_warn = int(DNA_SCOPE.get("max_named_active_chars_err", 5)), int(DNA_SCOPE.get("max_named_active_chars_warn", 4))
+        l_err, l_warn = int(DNA_SCOPE.get("max_core_locations_err", 5)), int(DNA_SCOPE.get("max_core_locations_warn", 4))
+        p_err, p_warn = int(DNA_SCOPE.get("max_plot_props_err", 5)), int(DNA_SCOPE.get("max_plot_props_warn", 4))
+        if n_chars >= c_err:
+            err("SC-40", f"brief.md lists {n_chars} characters (>= {c_err} ceiling for 9:16 Short; ref 2-3 active chars) — cut 1-line cameos to stop rambling")
+        elif n_chars >= c_warn:
+            warn("SC-40", f"brief.md lists {n_chars} characters (target 2-3 core active chars for tight Short focus)")
+        if n_locs >= l_err:
+            err("SC-40", f"brief.md lists {n_locs} core locations (>= {l_err} ceiling for 9:16 Short; keep <= 3-4 core locations in script, then expand each into 3-4 connected sub-scenes in G4)")
+        elif n_locs >= l_warn:
+            warn("SC-40", f"brief.md lists {n_locs} core locations (target <= 3 core locations in script)")
+        if n_props >= p_err:
+            err("SC-40", f"brief.md lists {n_props} plot props (>= {p_err} ceiling for 9:16 Short; ref 1-3 core props)")
+        elif n_props >= p_warn:
+            warn("SC-40", f"brief.md lists {n_props} plot props (target 1-3 core props)")
+
+    # SC-41: Peak Segment WPS Cap & Dramatic Breath Pause Budget
+    eff_cfg = DNA_S.get("effective_wps", {})
+    peak_max = float(eff_cfg.get("seg_peak_max", 4.85))
+    clim_max = float(eff_cfg.get("climactic_beat_max", 4.35))
+    dram_thr = float(DNA_DLG.get("dramatic_pause_threshold_s", 0.45))
+    min_dram = int(DNA_DLG.get("min_dramatic_pauses_ge_045s", 3))
+    beat_by_sid = {sid: bt for sid, bt in (map_rows if beats else [])}
+    if _is_short:
+        for sid, swps in seg_est_wps.items():
+            bt = beat_by_sid.get(sid.lower(), "")
+            is_clim = sid == ids[0] or bool(re.search(r"\b(hook|payoff|hack|turn|button)\b", bt, re.I))
+            if swps > peak_max:
+                err("SC-41", f"{sid}: estimated {swps:.2f} eff. wps (> {peak_max} ceiling) — shorten words or add pause_after")
+            elif is_clim and swps > clim_max:
+                warn("SC-41", f"{sid} ({bt or 'hook'}): estimated {swps:.2f} eff. wps (> {clim_max} target on Hook/Payoff/Turn) — slow down with short sentences & pause_after >= 0.45s")
+        n_dram_pauses = sum(1 for s in segs if float(s.get("pause_after", dflt)) >= dram_thr)
+        if n_dram_pauses < min_dram:
+            warn("SC-41", f"only {n_dram_pauses} dramatic pause(s) >= {dram_thr:.2f}s (target >= {min_dram}: after Hook, before suspense failure, after Twist/Payoff, before Button)")
+
+    # SC-42: One-Spine / Anti-Elder-Lecture / Anti-Late-Backstory-Dump
+    if _is_short and len(segs) >= 10:
+        act1_end = max(1, int(len(segs) * 0.45))
+        act1_txt = " ".join(strip_markup(s["text"]) for s in segs[:act1_end]).lower()
+        for pat in DNA_ANTI.get("elder_lecture_patterns", []):
+            if re.search(pat, act1_txt, re.I):
+                warn("SC-42", f"Act-1 authority/elder lecture detected ('{pat}') — disguise the loophole as a casual everyday habit/quote (Stealth Plant)")
+                break
+        late_start = max(1, int(len(segs) * 0.75))
+        late_txt = " ".join(strip_markup(s["text"]) for s in segs[late_start:-1]).lower()
+        for pat in DNA_ANTI.get("late_backstory_dump_markers", []):
+            if re.search(pat, late_txt, re.I):
+                err("SC-42", f"late backstory dump marker ('{pat}') in final 25% — trust Show & Withhold instead of explaining clues via biography dump")
+                break
+
+    # SC-43: Tighter Opening Hook (s1+s2) & Early Personal-Stakes Offset
+    if _is_short and len(segs) >= 2:
+        s1_s2_w = len(strip_markup(segs[0]["text"]).split()) + len(strip_markup(segs[1]["text"]).split())
+        s12_max = int(DNA_BEAT.get("hook_s1_s2_max_words", 32))
+        if s1_s2_w > s12_max:
+            warn("SC-43", f"s1+s2 is {s1_s2_w} words (> {s12_max} target; ref median S1+S2 = 22w) — tighten opening hook")
+        cum_w = 0
+        first_p_pct = 1.0
+        tot_w = max(1, len(words))
+        for s in segs:
+            t_s = strip_markup(s["text"])
+            if FIRST_PERSON_RE.search(t_s):
+                first_p_pct = cum_w / tot_w
+                break
+            cum_w += len(t_s.split())
+        stakes_warn = float(DNA_BEAT.get("personal_stakes_offset_warn_pct", 0.28))
+        if first_p_pct > stakes_warn:
+            warn("SC-43", f"first-person personal stakes enter at {first_p_pct:.0%} of words (> {stakes_warn:.0%}; ref median 16.5%) — pivot to 'Còn tôi...' earlier")
+        if beats and map_rows:
+            act1_w_pct = float(DNA_BEAT.get("act1_ceiling_warn_pct", 0.35))
+            if first_act2 / len(map_rows) > act1_w_pct:
+                warn("SC-43", f"Act 1 spans {first_act2}/{len(map_rows)} segments ({first_act2/len(map_rows):.0%} > {act1_w_pct:.0%} DNA target) — compress world setup")
 
 report = {"segments": len(segs), "words": len(words), "est_seconds": round(est, 1), "sentences": len(lens),
           "sent_mean": round(mean, 2), "sent_sd": round(sd, 2), "sent_min": min(lens or [0]), "sent_max": max(lens or [0]),

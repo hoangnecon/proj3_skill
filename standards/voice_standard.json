@@ -1,6 +1,6 @@
 {
- "_doc": "House voice standard v2.0 (sv-12-voice): Hải Đăng preset with offline per-sentence fast rhythm (5.25 syllable-units/s, inside pauses >0.32s trimmed to 0.16s, pitch_ratio 1.02 via WSOLA), bilingual <en>...</en> support, ellipsis '...'/'…' and VieNeu V3 Turbo emotion tags allowed, plus per-sentence/per-segment fine-tuning in script.json. Shared by every episode; do not edit per episode.",
- "version": "2.0",
+ "_doc": "House voice standard v3.0 (sv-12-voice, Option B1 corpus-calibrated 2026-11-24): Native 1.0x Hải Đăng preset with gentle per-sentence rhythm (target_ups 4.70, phonation_ups 4.90, blend_raw 0.65, pitch_ratio 1.00, tempo_clamp [0.95, 1.08]), natural pause preservation (inside pauses >0.55s -> 0.25s, sentence_gap_s 0.24s, clause_pad_s 0.08s incl. em-dashes), bilingual <en>...</en> and VieNeu V3 Turbo emotion tags allowed. Shared by every episode; do not edit per episode.",
+ "version": "3.0",
  "engine": {
   "voice": "Hải Đăng",
   "clone": false,
@@ -14,24 +14,24 @@
   "seed": 20261111,
   "takes": 1,
   "max_attempts": 3,
-  "_why": "VieNeu V3 Turbo preset Hải Đăng with use_ref_codes=True and temperature=0.7/top_k=25/top_p=0.95 (approved ZIP sampling), synthesized sentence-by-sentence so each sentence's internal pauses (>0.32s -> 0.16s) and tempo/pitch (5.25 units/s, pitch 1.02) are controlled individually without uniform 1.25x distortion, while keeping automatic ASR/acoustic verification and up to 3 deterministic seed retries per sentence."
+  "_why": "VieNeu V3 Turbo preset Hải Đăng with use_ref_codes=True and temperature=0.7/top_k=25/top_p=0.95, synthesized sentence-by-sentence at native 1.0x pace (4.64-4.69 raw ups) with gentle tempo_clamp [0.95, 1.08] and blend_raw=0.65 so natural human cadence and 20-24% pause breathing room are preserved without metallic WSOLA speedup."
  },
  "rhythm": {
-  "target_ups": 5.25,
-  "phonation_ups": 5.62,
-  "blend_raw": 0.2,
-  "pitch_ratio": 1.02,
-  "inside_pause_threshold_s": 0.32,
-  "inside_pause_target_s": 0.16,
-  "sentence_gap_s": 0.16,
-  "clause_pad_s": 0.04,
-  "short_sentence_pad_s": 0.06,
+  "target_ups": 4.70,
+  "phonation_ups": 4.90,
+  "blend_raw": 0.65,
+  "pitch_ratio": 1.00,
+  "inside_pause_threshold_s": 0.55,
+  "inside_pause_target_s": 0.25,
+  "sentence_gap_s": 0.24,
+  "clause_pad_s": 0.08,
+  "short_sentence_pad_s": 0.08,
   "emotion_cue_s": 0.38,
   "tempo_clamp": [
-   0.85,
-   1.42
+   0.95,
+   1.08
   ],
-  "_doc": "Offline per-sentence rhythm matching the approved 5.25 units/s lively Hải Đăng profile without external Edge-TTS or RubberBand dependencies. Authors may override wps, pause_after, tts_text, or seed per segment or per sentence in script.json."
+  "_doc": "v3.0 Native 1.0x Hải Đăng breathing rhythm (Option B1, calibrated against 11 SCRIPT_YOUTUBE ref MP4s at 19.6-23.8% audio pause ratio). Eliminates v2.0 1.14-1.42x WSOLA acceleration and 0.32->0.16s pause crushing. Authors may override wps, pause_after (up to 1.20s for silent visual holds), tts_text, or seed per segment/sentence in script.json."
  },
  "text": {
   "_doc": "Rules for spoken text (tts_text if present, else text). script_lint SC-15..SC-17 and voice.py enforce them.",
@@ -47,17 +47,17 @@
    "sigh",
    "clear throat"
   ],
-  "_why": "Numbers must be written in words for predictable reading; '...' and '…' are allowed for expressive phrasing because inside_pause_threshold_s trims any >0.32s hole to 0.16s; VieNeu V3 Turbo's 3 native inline emotion tokens ([cười], [thở dài], [hắng giọng] and English aliases) are allowed and stripped from display captions; English proper nouns/terms use <en>...</en> or top-level script.json 'english': [...] for native English G2P."
+  "_why": "Numbers must be written in words for predictable reading; '...' and '…' and '—' are allowed for natural breathing because inside_pause_threshold_s preserves pauses up to 0.55s and trims longer holes cleanly to 0.25s; VieNeu V3 Turbo's 3 native inline emotion tokens are allowed and stripped from captions; English terms use <en>...</en> or top-level 'english': [...]."
  },
  "line_checks": {
-  "_doc": "Every segment is measured against profile (below). [min, max]. If a sentence/segment fails, offending sentences regenerate with the next deterministic seed up to engine.max_attempts. Segments with explicit wps overrides check rate against their requested wps.",
+  "_doc": "Every segment is measured against profile (below). [min, max]. If a sentence/segment fails, offending sentences regenerate with the next deterministic seed up to engine.max_attempts.",
   "asr_similarity": [
    0.85,
    1.0
   ],
   "rate_vs_profile": [
-   -0.18,
-   0.18
+   -0.22,
+   0.20
   ],
   "f0_vs_profile_st": [
    -2.2,
@@ -69,7 +69,7 @@
   ],
   "max_hole_s": [
    0,
-   0.45
+   0.75
   ]
  },
  "episode_checks": {
@@ -79,7 +79,7 @@
   ],
   "rate_cv": [
    0,
-   0.1
+   0.14
   ],
   "timbre_cv": [
    0,
@@ -93,13 +93,13 @@
    -99,
    -50.0
   ],
-  "_between_words_why": "Same chain and measure as G6 (audiolib.voice_chain + between_words_db, mix_targets voice.between_words_db). Measured at G3 since v3.7 so a noisy take is re-made before shots are timed to it."
+  "_between_words_why": "Same chain and measure as G6 (audiolib.voice_chain + between_words_db, mix_targets voice.between_words_db). Measured at G3 so a noisy take is re-made before shots are timed to it."
  },
  "profile": {
-  "_doc": "Calibrated Hải Đăng profile under v2.0 per-sentence rhythm (target_ups 5.25, pitch_ratio 1.02, inside holes >0.32s trimmed to 0.16s). rate_wps is syllable-units / segment duration (excluding emotion-cue allowance).",
-  "rate_wps": 5.25,
-  "f0_hz": 158.5,
-  "centroid_hz": 1315.0,
-  "calibrated": "2026-11-17, VieNeu V3 Turbo Hải Đăng preset (t0.7/k25/p0.95, use_ref_codes=True) + offline per-sentence rhythm (target_ups=5.25, pitch_ratio=1.02)."
+  "_doc": "Calibrated native 1.0x Hải Đăng profile under v3.0 breathing rhythm (target_ups 4.70, pitch_ratio 1.00, inside holes >0.55s trimmed to 0.25s). rate_wps is syllable-units / segment duration.",
+  "rate_wps": 4.70,
+  "f0_hz": 155.4,
+  "centroid_hz": 1295.0,
+  "calibrated": "2026-11-24, VieNeu V3 Turbo Hải Đăng preset (t0.7/k25/p0.95, use_ref_codes=True) native 1.0x rhythm (target_ups=4.70, blend_raw=0.65, pitch_ratio=1.00) calibrated against 41-folder SCRIPT_YOUTUBE corpus."
  }
 }

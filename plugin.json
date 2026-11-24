@@ -1,8 +1,8 @@
 {
   "name": "story-video-skills",
   "displayName": "Story Video Skills",
-  "version": "5.8.1",
-  "description": "Gated production suite for 2-3 minute vertical Shorts and 9.5-16.0 minute 16:9 widescreen Vietnamese 2D story videos (Remotion, riso-ink, canonical New Nhim, pure 5.25 ups Hai Dang narration, 158 lint rules).",
+  "version": "5.9.0",
+  "description": "Gated production suite for 1.75-2.65 minute vertical Shorts and 6.5-15.0 minute 16:9 widescreen Vietnamese 2D story videos (Remotion, riso-ink, canonical New Nhim, corpus-calibrated Script DNA DB, native 1.0x 4.70 ups Hai Dang narration with natural 20-24% pauses, 164 lint rules).",
   "suggestedPrompts": [
     "Pitch 5-10 Short premises with New Nhim for approval",
     "Scaffold a new story-video episode and run doctor check",
