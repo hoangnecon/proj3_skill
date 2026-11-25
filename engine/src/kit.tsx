@@ -1,5 +1,6 @@
 // Bộ nét vẽ dùng chung: style "Mực in risograph" (style B đã chọn ở style-lab).
 import React from 'react';
+import * as Remotion from 'remotion';
 import {loadFont} from '@remotion/google-fonts/BeVietnamPro';
 
 export const {fontFamily: FONT} = loadFont('normal', {weights: ['600', '800', '900'], subsets: ['vietnamese', 'latin']});
@@ -558,5 +559,154 @@ export const BotanicalEdge: React.FC<BotanicalEdgeProps> = ({w, h, side = 'both'
       {(side === 'left' || side === 'both') && renderCluster(false)}
       {(side === 'right' || side === 'both') && renderCluster(true)}
     </g>
+  );
+};
+
+// Keep decoded HTMLImageElement instances pinned per Chromium tab so Blink's MemoryCache
+// never evicts raster backdrop PNGs between parallel Remotion frame captures.
+const DECODED_PLATES = new Map<string, HTMLImageElement>();
+
+export type RasterPlateProps = Omit<React.SVGProps<SVGImageElement>, 'href' | 'x' | 'y' | 'width' | 'height'> & {
+  src: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  preserveAspectRatio?: string;
+};
+
+/**
+ * Zero-flicker SVG raster backdrop for multi-tab Remotion renders.
+ * Remotion's renderMedia auto-awaits HTML <Img>, NOT SVG <image>, so a bare <image href=...>
+ * can leak the previous set's bitmap across set cuts for 5-11 frames under multi-tab rendering.
+ * RasterPlate synchronously opens delayRender() on mount/src change, pins the decoded bitmap in
+ * Blink MemoryCache, awaits img.decode() + SVG <image onLoad> (with a 120 ms cache-hit fallback)
+ * + 2x requestAnimationFrame paint flush before releasing continueRender().
+ * In Node SSR (lint.mjs setStats / SE-06), emits a plain <image> with zero browser calls.
+ */
+export const RasterPlate: React.FC<RasterPlateProps> = ({
+  src,
+  x,
+  y,
+  width,
+  height,
+  preserveAspectRatio = 'none',
+  onLoad,
+  onError,
+  ...rest
+}) => {
+  const handleRef = React.useRef<number | null>(null);
+  const srcRef = React.useRef<string | null>(null);
+  const svgReadyRef = React.useRef(false);
+  const svgWaiterRef = React.useRef<(() => void) | null>(null);
+
+  const isBrowser = typeof window !== 'undefined' && typeof Remotion.delayRender === 'function';
+  if (isBrowser && srcRef.current !== src) {
+    if (handleRef.current !== null) {
+      try { Remotion.continueRender(handleRef.current); } catch {}
+    }
+    srcRef.current = src;
+    svgReadyRef.current = false;
+    handleRef.current = Remotion.delayRender(`RasterPlate:${src}`);
+  }
+
+  const markSvgReady = React.useCallback(() => {
+    svgReadyRef.current = true;
+    const cb = svgWaiterRef.current;
+    if (cb) {
+      svgWaiterRef.current = null;
+      cb();
+    }
+  }, []);
+
+  React.useEffect(() => {
+    if (!isBrowser) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let raf1 = 0;
+    let raf2 = 0;
+
+    const release = () => {
+      if (cancelled) return;
+      if (handleRef.current !== null) {
+        const h = handleRef.current;
+        handleRef.current = null;
+        try { Remotion.continueRender(h); } catch {}
+      }
+    };
+
+    const flushTwoFrames = () => {
+      if (cancelled) return;
+      raf1 = window.requestAnimationFrame(() => {
+        if (cancelled) return;
+        raf2 = window.requestAnimationFrame(() => {
+          release();
+        });
+      });
+    };
+
+    let img = DECODED_PLATES.get(src);
+    if (!img) {
+      img = new window.Image();
+      img.decoding = 'sync';
+      img.src = src;
+      DECODED_PLATES.set(src, img);
+    }
+
+    const decodeDone: Promise<void> =
+      typeof img.decode === 'function'
+        ? img.decode().catch(() => {})
+        : img.complete
+          ? Promise.resolve()
+          : new Promise<void>((res) => {
+              img!.addEventListener('load', () => res(), {once: true});
+              img!.addEventListener('error', () => res(), {once: true});
+            });
+
+    const svgDone: Promise<void> = svgReadyRef.current
+      ? Promise.resolve()
+      : new Promise<void>((res) => {
+          svgWaiterRef.current = res;
+          timer = setTimeout(() => {
+            if (svgWaiterRef.current === res) svgWaiterRef.current = null;
+            res();
+          }, 120);
+        });
+
+    Promise.all([decodeDone, svgDone]).then(flushTwoFrames);
+
+    return () => {
+      cancelled = true;
+      svgWaiterRef.current = null;
+      if (timer !== null) clearTimeout(timer);
+      if (raf1) window.cancelAnimationFrame(raf1);
+      if (raf2) window.cancelAnimationFrame(raf2);
+      if (handleRef.current !== null) {
+        const h = handleRef.current;
+        handleRef.current = null;
+        try { Remotion.continueRender(h); } catch {}
+      }
+    };
+  }, [src, isBrowser]);
+
+  return (
+    <image
+      key={src}
+      href={src}
+      x={x}
+      y={y}
+      width={width}
+      height={height}
+      preserveAspectRatio={preserveAspectRatio}
+      onLoad={(e) => {
+        markSvgReady();
+        onLoad?.(e);
+      }}
+      onError={(e) => {
+        markSvgReady();
+        onError?.(e);
+      }}
+      {...rest}
+    />
   );
 };

@@ -1114,17 +1114,18 @@ export const Film: React.FC = () => {
   const fgItems = [...fgExtras, ...fgActors].sort((p, q) => p.y - q.y);
 
   // background and actors share depth 1 so feet never slide on the floor when the camera moves
+  // Key set layers by shot.set so Chromium unmounts/remounts <image> backdrops cleanly across set cuts
   const worldLayers = (
     <>
-      {layers.far && <LayerG d={0.5} cam={cam}>{layers.far}</LayerG>}
+      {layers.far && <LayerG key={`far-${shot.set}`} d={0.5} cam={cam}>{layers.far}</LayerG>}
       {shot.dof === true && layers.far && <rect width={FRAME_W} height={FRAME_H} fill={PAL.paper} opacity={0.14} />}
-      <LayerG d={1} cam={cam}>
+      <LayerG key={`back-${shot.set}`} d={1} cam={cam}>
         {def.videoPlate && <VideoPlateLayer vp={def.videoPlate} />}
         {layers.back}
       </LayerG>
       <LayerG d={1} cam={cam}>{midItems.map((m) => <g key={m.key}>{m.node}</g>)}</LayerG>
       {fgItems.length > 0 && <LayerG d={1.2} cam={cam}>{fgItems.map((m) => <g key={m.key}>{m.node}</g>)}</LayerG>}
-      {layers.fg && <LayerG d={1.3} cam={cam}>{layers.fg}</LayerG>}
+      {layers.fg && <LayerG key={`fg-${shot.set}`} d={1.3} cam={cam}>{layers.fg}</LayerG>}
     </>
   );
   const world = shot.tilt ? <g transform={`rotate(${shot.tilt} ${FRAME_W / 2} ${FRAME_H / 2})`}>{worldLayers}</g> : worldLayers;

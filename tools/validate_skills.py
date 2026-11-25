@@ -146,7 +146,7 @@ if (ROOT / "roles").is_dir():
 
 # ---------------------------------------------------------------- 2. lint IDs
 impl = ""
-for s in ("scripts/lint.mjs", "scripts/script_lint.py", "scripts/sv_log_lint.py", "scripts/art_direction_lint.py"):
+for s in ("scripts/lint.mjs", "scripts/script_lint.py", "scripts/sv_log_lint.py", "scripts/art_direction_lint.py", "scripts/transition_qa.py"):
     p = ENG / s
     if p.exists():
         impl += p.read_text(encoding="utf-8")
@@ -180,7 +180,7 @@ REQUIRED = {
             "art_direction_lint.py", "audio_qa.py", "audiolib.py", "blind_pack.mjs", "deliver.mjs", "design.mjs", "entry.tsx",
             "geom.mjs", "lint.mjs", "load.mjs", "mix.py", "plate_check.py", "qa.mjs", "script_lint.py",
             "sv_cli.py", "sv_doctor.py", "sv_gate.py", "sv_log.py", "sv_log_lint.py", "theme.py",
-            "tile.py", "times.mjs", "voice.py",
+            "tile.py", "times.mjs", "transition_qa.py", "voice.py",
         )
     ],
     "standards": [

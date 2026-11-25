@@ -1,4 +1,4 @@
-# Story Video Skills (`story-video-skills` · v6.2.0) — Mandatory Non-Bypass Rules
+# Story Video Skills (`story-video-skills` · v6.2.1) — Mandatory Non-Bypass Rules
 
 Applies to every primary agent, subagent, and swarm worker whenever working on a Vietnamese 2D story-video episode (`9:16` Short or `16:9` Long-Form) or any folder containing `.episode.json`, `.suite.json`, `gates/`, `logs/`, `script.json`, or `src/episode/`.
 

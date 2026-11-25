@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Log-CI / Log-Lint Gate (LG-01..LG-13) for story-video-skills v6.2.0.
+"""Log-CI / Log-Lint Gate (LG-01..LG-13) for story-video-skills v6.2.1.
 
 Every Executor run, Reviewer run, and Orchestrator audit run MUST pass Log-CI BEFORE
 its stage output can enter the Verification Gate (`sv_gate.py pass` / `sv_cli.py gate pass`).

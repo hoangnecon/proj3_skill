@@ -69,12 +69,15 @@ For animated loop bakes, the scene HTML exposes `window.__RENDER_FRAME__(frame, 
 Attach `GodrayFilter` directly onto the visible sky/backdrop sprite or container (`addDepthLayer(app, skyCanvas, {PIXI, filters, godray: {...}})`), or use `addWindowGodrayBeam` (sprite-level `blendMode = 'add'` with stage-level mask). Never put `GodrayFilter` on an opaque black sprite inside an additive container — in PixiJS v8 that turns the upper sky black.
 
 ## 5. Mounting Static (`rasterPlate`) vs Looped Video (`videoPlate`) in `src/episode/sets.tsx`
+**Zero-Flicker Rule (Multi-Tab Remotion Renders):** Remotion's `renderMedia` auto-awaits HTML `<Img>` tags, **NOT** bare SVG `<image href=...>` elements — mounting a bare `<image>` can leak the previous set's bitmap across set cuts for 5–11 frames under parallel tab rendering (caught at delivery by `scripts/transition_qa.py` `DL-01`). Always mount static raster plates using **`<RasterPlate>` from `../kit`** (which synchronously holds `delayRender()`, pins the decoded bitmap in Blink MemoryCache, and awaits `img.decode()` + `<image onLoad>` + `2× requestAnimationFrame` before releasing `continueRender()`, while `Film.tsx` keys `<LayerG>` by `shot.set`):
+
 ```tsx
 import {staticFile} from 'remotion';
+import {RasterPlate} from '../kit';
 import type {SetDef} from '../sets/types';
 
 export const EPISODE_SETS: Record<string, SetDef> = {
-  // (A) Static PNG backdrop (default — fast, zero video decode overhead)
+  // (A) Static PNG backdrop (default — fast, zero multi-tab flicker via <RasterPlate>)
   alleyNight: {
     title: 'Ngõ nhỏ buổi tối',
     bed: 'night',
@@ -86,8 +89,8 @@ export const EPISODE_SETS: Record<string, SetDef> = {
     stateless: true,
     render: (o) => ({
       back: (
-        <g>
-          <image href={staticFile('plates/alley_night.png')} x={-160} y={-160} width={1400} height={2240} />
+        <g key="alleyNight">
+          <RasterPlate src={staticFile('plates/alley_night.png')} x={-160} y={-160} width={1400} height={2240} />
           {/* Optional live SVG life (e.g. subtle lamp pulse driven by o.t) so SE-12 sees motion */}
         </g>
       ),

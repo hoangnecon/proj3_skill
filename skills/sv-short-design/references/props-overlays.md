@@ -28,6 +28,15 @@ view switches.
    vehicles/carts/cars or floating `maxY`; `PR-02` errors on prop shapes covering prop text).
 5. Check it in context in a shot frame (`node scripts/qa.mjs shot <i>`).
 
+### Hero Subjects (`src/episode/subjects.tsx` — `PR-06`, `PR-08..11`)
+Register recurring creatures, vehicles, machines, or hero props in `SUBJECTS` (`>= 4` distinct poses `PR-06`; living animation on creatures `PR-08`; no wide-shot disembodied `partialOf` limbs `PR-10`).
+- **Distance-Locked Locomotion & Stop-Settle Anti-Treadmill (`PR-11`):** For any grounded locomotion pose (`walk`, `run`, `trot`, `crawl`, `gallop`, `roll`, `drive`, ...), ALWAYS drive leg/wheel stride strictly from `opts.phase` AND gate stride amplitude on `opts.moving` / `opts.speed` so creatures/vehicles NEVER walk in place ("treadmill") or freeze mid-stride after arriving at the end of a `path` (keep subtle breathing/tail-wagging on `opts.t` separately):
+  ```tsx
+  const moveAmt = o.moving ? Math.min(1, Math.max(0.25, o.speed ?? 1)) : 0;
+  const stride = moveAmt * Math.sin((o.phase ?? 0) * Math.PI * 2); // 0 when stopped!
+  const breath = Math.sin(o.t * 2.2) * 1.8;                       // subtle idle life
+  ```
+
 ## 2. Overlays (src/overlays.tsx)
 
 Screen graphics on top of the picture. They pop in (scale 0 → 1.12 → 1 over 0.34 s). Use them sparingly:

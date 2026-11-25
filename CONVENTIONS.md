@@ -1,4 +1,4 @@
-# Conventions (`v6.2.0`)
+# Conventions (`v6.2.1`)
 
 Enforced by `tools/validate_skills.py`.
 
@@ -12,7 +12,7 @@ Enforced by `tools/validate_skills.py`.
 | `schemas/` | formal JSON Schemas (`cli_envelope`, `role_log`, `review_record`, `art_direction`, `g4_scores`) | runtime logs |
 | `skills/` | 3-track instructions ONLY: `sv-(core\|short\|long)-*/SKILL.md` + `references/*.md` | code, data, templates |
 | `standards/` | Single Source of Truth split by track: `core/{voice_standard,mix_targets}.json`, `short/{pacing,script_dna_db}.json`, `long/pacing.json` | episode overrides |
-| `engine/` | shared Remotion runtime & scripts (`sv_cli.py`, `sv_log.py`, `sv_log_lint.py`, `sv_gate.py`, `art_direction_lint.py`, `lint.mjs`, `script_lint.py`, `qa.mjs`, `blind_pack.mjs`, `rough_helpers.mjs`, `pixi_stage.mjs`, `pixi_fx.mjs`, `rough_pixi_bake.mjs`, `voice.py`, `mix.py`, `deliver.mjs`) | episode content or standards |
+| `engine/` | shared Remotion runtime & scripts (`sv_cli.py`, `sv_log.py`, `sv_log_lint.py`, `sv_gate.py`, `art_direction_lint.py`, `lint.mjs`, `script_lint.py`, `qa.mjs`, `blind_pack.mjs`, `rough_helpers.mjs`, `pixi_stage.mjs`, `pixi_fx.mjs`, `rough_pixi_bake.mjs`, `voice.py`, `mix.py`, `deliver.mjs`, `transition_qa.py`) | episode content or standards |
 | `starter/` | blank episode files copied by `tools/new_episode.py` (incl. `art_direction.json`) | demo or reference content |
 | `examples/` | `thang-may/` (quality bar exemplar) and `demo/` (4-shot sandbox) | production episode outputs |
 | `tools/` | `new_episode.py`, `new_episode.sh`, `new_episode.ps1`, `validate_skills.py`, `benchmark_suite.py`, `doctor.py` | episode-only scripts |
@@ -33,7 +33,8 @@ Enforced by `tools/validate_skills.py`.
 | `LG-01..13` | Immutable SHA-256 hash-chained role logs, `init`→`complete`, separation of duties (`executor != reviewer`), real `read_evidence`, non-boilerplate notes, CI-pass proof, Pre-G4 `art_direction.json` SHA lock & 8-axis G4 rubric pass (`LG-13`) | `scripts/sv_log_lint.py` |
 | `CH-01..11`, `TK-01..03` | Cast silhouettes, canonical New Nhím (`CH-11`), format cast richness (`CH-09`), no hand-drawn characters outside `<Person>` (`CH-10`), token discipline | `scripts/lint.mjs` |
 | `SE-01..20` | Sets: density, bounds, life, plate emptiness, Location Packs (`cameraDir`, `landmarks`), 3/4 high perspective, botanical variety, `scaleMode` & `stateless` plates | `scripts/lint.mjs` |
-| `PR-01..06`, `PR-08..10` | Props & Hero Subjects: proportions, grip, multi-pose (`PR-06`), living creatures (`PR-08..09`), disembodied partial-body wide-shot guard (`PR-10`) | `scripts/lint.mjs` |
+| `PR-01..06`, `PR-08..11` | Props & Hero Subjects: proportions, grip, multi-pose (`PR-06`), living creatures (`PR-08..09`), disembodied partial-body wide-shot guard (`PR-10`), distance-locked locomotion & stop-settle anti-treadmill guard (`PR-11`) | `scripts/lint.mjs` |
+| `DL-01..02` | Post-encode 30fps delivery verification: zero stale-backdrop leaks across set cuts (`DL-01`), zero blank/unrendered flash frames (`DL-02`) | `scripts/transition_qa.py` |
 | `SH-01..23`, `LA-01..04` | Shot grammar, transitions, set fatigue, view diversity, shot-scale alternation, multi-location progression, `scaleMode` & temporal bleed guards, 3×3 clutter & anatomical scale lock | `scripts/lint.mjs` |
 | `AN-01..02`, `OV-01..04`, `CA-01..08`, `SZ-01..02`, `KY-01`, `CO-01..03`, `PC-01..03` | Anchors, overlays, camera bounds/180° axis/`camKeys`, screen sizes, animated keys, coverage, dual shot pacing | `scripts/lint.mjs` |
 | `MO-01..19` | Distance-locked walk/run stop-settle, `pushTarget`, straddle mounts, `ActionFx`, choreography density, 4-stage `jumpPhase`, anti-freeze, late-ramp guard | `scripts/lint.mjs` |

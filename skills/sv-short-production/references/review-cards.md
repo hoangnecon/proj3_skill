@@ -51,7 +51,7 @@ a shot ("look at #23") reliably finds these faults.
 | caption | Faces, hands, badges, and hero props must stay clear of the caption band; lower legs/shoes passing behind bottom captions are normal. |
 | beat | Does the picture show what the words say at that moment? Does the cut land on the word? |
 | model | Open `qa/design/cast_episode_p*_v.jpg` and `qa/design/props_episode_p*_v.jpg` next to the card. Is every character the cast rig, on model? |
-| continuity | Compare against `context_window.prev_shot` and `next_shot`: do physical distances, chronological before/after order vs spoken narration, persistent operators on moving vehicles/props, floor grounding (`GE-21`), and absence of disembodied wide-shot limbs (`PR-10`) hold cleanly? |
+| continuity | Compare against `context_window.prev_shot` and `next_shot`: (1) **Multi-shot movement & facing**: do end coordinates of shot `N` match start coordinates of shot `N+1` (no backward teleporting) and does `flip`/facing stay consistent? (2) **Sub-scene cut differentiation**: when cutting between two sub-scenes of the same location, do camera framing and actor/subject blocking genuinely change (never leaving actors/subjects frozen at identical screen positions so it looks like a swapped backdrop)? (3) **Time-of-day & speech-beat sync**: do lighting (day/dusk/night) and arrival/stop states (no treadmill walking in place, `PR-11`) match the exact spoken words at that moment? Plus chronological order, persistent operators on moving props, floor grounding (`GE-21`), and no wide-shot disembodied limbs (`PR-10`). |
 
 ## Geometry & Placement CI Rules (lint, from the shot table, no render)
 | rule | measures | typical fix |

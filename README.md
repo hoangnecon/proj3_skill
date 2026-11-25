@@ -1,4 +1,4 @@
-# story-video-skills (`v6.2.0`)
+# story-video-skills (`v6.2.1`)
 
 An anti-bypass, **3-track** gated production suite for **Vietnamese 2D story videos** in Remotion ("riso ink" flat vector style, canonical New Nhím `CH-11`, empirically calibrated `v4.0` **Hải Đăng** narration at `~4.57 wps` / natural `pitch_ratio: 1.00`):
 
@@ -32,13 +32,13 @@ python scripts/sv_cli.py doctor --stage G1 --json
 | **Long 16:9** | `sv-long-design` | `G4` | `8–10+` cast (`CH-09`), `24–30` Spatial Location Packs (`SE-15..20`), quadruped `SUBJECTS` |
 | **Long 16:9** | `sv-long-production` | `G5.U*`, `G5` | Sequential unit-by-unit blocking (`U1..Uk`), `SH-16..23`, 11-check blind QA & locking |
 
-## Anti-Bypass Architecture (`v6.2.0`)
+## Anti-Bypass Architecture (`v6.2.1`)
 1. **Hash-Chained Role Logs & Log-CI (`LG-01..LG-13`):** Orchestrator (`logs/orchestrator.jsonl`), Executor (`logs/executor_<id>.jsonl`), and Reviewer (`logs/reviewer_<id>.jsonl`) emit SHA-256 chained records via `scripts/sv_cli.py log init|step|complete`, audited deterministically by `scripts/sv_log_lint.py` before any gate can pass.
 2. **Mandatory Pre-G4 Art Direction & 8-Axis Rubric Gate (`v6.2.0`, `AD-01..AD-08`, `LG-13`):** Genre-agnostic `art_direction.json` MUST pass `sv_cli.py ci art-direction` before `H3` unlocks `src/episode/*` or `plates/*`; `plate_check.py` + `lint.mjs` verify cross-plate richness (`AD-07`) and 1-to-1 `EPISODE_SETS` sync (`AD-08`); Reviewer MUST pass `sv_cli.py design score` (`total >= 82`, every axis `>= 7` across 8 axes) before `G4`.
 3. **Unified CLI & Formal JSON API:** `scripts/sv_cli.py` standardizes every command, exit code (`0..5`), and `--json` envelope (`schemas/cli_envelope.schema.json`).
 4. **Antigravity Native Lifecycle Hooks (`hooks.json` + `hooks/sv_guard.py`):** Hard `PreToolUse` `deny` blocks edits to read-only suite files (`H1`), log/report/score tampering (`H2`/`H4`), out-of-order phase & Pre-G4 `art_direction.json` writes (`H3`), premature `deliver.mjs` (`H5`), and blind `design score` / review / gate passes lacking real `read_file` calls on rendered JPEG evidence in `transcriptPath` (`H6`).
-5. **General First-Principles CI:** Empirically locked `v4.0` voice corridor (`4.42–4.74 wps` Short / `4.40–4.74 wps` Long), ground-plane contact invariant (`GE-21`), wide-shot partial-body guard (`PR-10`), and 3-shot `context_window` `continuity` blind review.
-6. **Opt-In Atmospheric Plates & Restrained 2D Squash & Stretch (`v6.1.0`):** Sets may opt into `rasterPlate: true` using the aspect-agnostic `rough.js + PixiJS v8` toolkit (`scripts/rough_pixi_bake.mjs`, split into `<= 5–6` plates/worker via `plates/pack_*.mjs` when `>= 6`) while keeping 2D Risograph characters untouched on top; `Actor.leap` and `Actor.pop` (`engine/src/anim.ts`) add story-motivated, volume-preserving 2D squash-and-stretch with automatic `GroundShadow` scaling and `<DustPuff>` bursts.
+5. **General First-Principles & Post-Encode Delivery CI (`v6.2.1`):** Empirically locked `v4.0` voice corridor (`4.42–4.74 wps` Short / `4.40–4.74 wps` Long), ground-plane contact invariant (`GE-21`), wide-shot partial-body guard (`PR-10`), distance-locked anti-treadmill locomotion guard (`PR-11`), 3-shot `context_window` `continuity` blind review, and 30fps post-encode set-transition flicker/blank-flash verification (`scripts/transition_qa.py`, `DL-01..02`).
+6. **Zero-Flicker Atmospheric Plates & Restrained 2D Squash & Stretch (`v6.1.0` / `v6.2.1`):** Sets may opt into `rasterPlate: true` mounted via `<RasterPlate>` (`engine/src/kit.tsx`) + keyed `<LayerG>` (`engine/src/Film.tsx`) using the aspect-agnostic `rough.js + PixiJS v8` toolkit (`scripts/rough_pixi_bake.mjs`, split into `<= 5–6` plates/worker via `plates/pack_*.mjs` when `>= 6`) while keeping 2D Risograph characters untouched on top; `Actor.leap` and `Actor.pop` (`engine/src/anim.ts`) add story-motivated, volume-preserving 2D squash-and-stretch with automatic `GroundShadow` scaling and `<DustPuff>` bursts.
 
 ## Repository Layout
 ```text

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unified Story Video Skills CLI & Standardized JSON API Dispatcher (v6.2.0).
+"""Unified Story Video Skills CLI & Standardized JSON API Dispatcher (v6.2.1).
 
 Single canonical CLI for Orchestrator, Executor, and Reviewer roles:
   python scripts/sv_cli.py status [--json]
@@ -376,6 +376,7 @@ def cmd_ci(root: Path, args: argparse.Namespace) -> None:
         rc, out, err_s, dt = _run_proc(cmd, root)
         dr_p = root / "qa" / "deliver_report.json"
         va_p = root / "qa" / "video_audio.json"
+        tq_p = root / "qa" / "transition_qa.json"
         if dr_p.is_file():
             dr = json.loads(dr_p.read_text(encoding="utf-8"))
             metrics.update({k: dr.get(k) for k in ("duration", "expected", "width", "height", "fps")})
@@ -390,6 +391,24 @@ def cmd_ci(root: Path, args: argparse.Namespace) -> None:
             out_sha["qa/video_audio.json"] = L.sha256_file(va_p)
         elif rc != 0:
             errors.append(err_s.strip() or "video audio QA failed")
+        if (root / "out" / "final.mp4").is_file() and (root / "qa" / "shots.json").is_file() and (root / "scripts" / "transition_qa.py").is_file():
+            t_cmd = [_py_for_audio(), str(root / "scripts" / "transition_qa.py"), "--video", "out/final.mp4"]
+            t_rc, t_out, t_err, t_dt = _run_proc(t_cmd, root)
+            dt += t_dt
+            if tq_p.is_file():
+                tq = json.loads(tq_p.read_text(encoding="utf-8"))
+                metrics.update({
+                    "set_transitions": tq.get("set_transitions"),
+                    "stale_bg_frames": tq.get("stale_bg_frames"),
+                    "blank_flash_frames": tq.get("blank_flash_frames"),
+                })
+                out_sha["qa/transition_qa.json"] = L.sha256_file(tq_p)
+                for e in tq.get("errors") or []:
+                    errors.append(e)
+                if not tq.get("ok") and not (tq.get("errors") or []):
+                    errors.append("transition_qa.json reported ok=false")
+            elif t_rc != 0:
+                errors.append(t_err.strip() or t_out.strip() or "transition_qa.py failed")
         rc = 0 if not errors and rc == 0 else 1
     else:
         raise SystemExit(f"unknown domain {dom}")

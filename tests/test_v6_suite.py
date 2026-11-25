@@ -662,7 +662,7 @@ def test_10_v61_raster_plate_and_squash_stretch(ep_short: Path) -> None:
         "const stub = { name: 'stub', setup(b) {\n"
         "  b.onResolve({filter: /^@remotion\\/google-fonts|^remotion$/}, (a) => ({path: a.path, namespace: 'st'}));\n"
         "  b.onLoad({filter: /.*/, namespace: 'st'}, (a) => ({\n"
-        "    contents: a.path.startsWith('@remotion') ? 'export const loadFont = () => ({fontFamily:\"Be Vietnam Pro\"});' : 'export const AbsoluteFill=()=>null;export const Audio=()=>null;export const OffthreadVideo=()=>null;export const Loop=({children})=>children??null;export const staticFile=(s)=>s;export const useCurrentFrame=()=>0;',\n"
+        "    contents: a.path.startsWith('@remotion') ? 'export const loadFont = () => ({fontFamily:\"Be Vietnam Pro\"});' : 'export const AbsoluteFill=()=>null;export const Audio=()=>null;export const OffthreadVideo=()=>null;export const Loop=({children})=>children??null;export const staticFile=(s)=>s;export const delayRender=()=>0;export const continueRender=()=>{};export const useCurrentFrame=()=>0;',\n"
         "    loader: 'js',\n"
         "  }));\n"
         "}};\n"
@@ -1307,6 +1307,195 @@ def test_12_v62_art_direction_gate_and_scored_rubric(tmp: Path) -> None:
     print("[PASS] Test 12: v6.2.0 Pre-G4 Art Direction gate (H3 lock/relock, AD-01..08, H2 protection, 8-axis design score & LG-13) verified")
 
 
+def test_13_v621_zero_flicker_transition_qa_and_pr11(tmp: Path) -> None:
+    """Verify v6.2.1 zero-flicker <RasterPlate> + keyed <LayerG>, PR-11 anti-treadmill CI, and 30fps transition_qa.py (DL-01/DL-02)."""
+    # (a) Engine zero-flicker structural locks in Film.tsx, kit.tsx, and deliver.mjs
+    film_txt = (SUITE / "engine" / "src" / "Film.tsx").read_text(encoding="utf-8")
+    for needle in ("key={`far-${shot.set}`}", "key={`back-${shot.set}`}", "key={`fg-${shot.set}`}"):
+        assert needle in film_txt, f"Film.tsx must key set LayerG by shot.set ({needle})"
+    kit_txt = (SUITE / "engine" / "src" / "kit.tsx").read_text(encoding="utf-8")
+    for needle in ("DECODED_PLATES", "export const RasterPlate", "delayRender", "continueRender", "img.decode", "requestAnimationFrame", "onLoad"):
+        assert needle in kit_txt, f"kit.tsx RasterPlate missing required zero-flicker mechanism: {needle}"
+    deliv_txt = (SUITE / "engine" / "scripts" / "deliver.mjs").read_text(encoding="utf-8")
+    assert "process.env.SV_PY" in deliv_txt and "scripts/transition_qa.py" in deliv_txt, (
+        "deliver.mjs must fall back to SV_PY and run scripts/transition_qa.py"
+    )
+
+    # (b) Scaffold fresh episode: verify <RasterPlate> passes SE-06 cleanly with 0 bare-<image> warning,
+    #     and PR-11 catches clock-only & un-gated treadmill subjects while passing distance-locked + stop-settled subjects!
+    ep = tmp / "ep-v621"
+    r_sc = _run([PY, str(SUITE / "tools" / "new_episode.py"), str(ep), "--track", "short"], cwd=SUITE)
+    assert r_sc.returncode == 0, f"v6.2.1 scaffold failed:\n{r_sc.stdout}\n{r_sc.stderr}"
+
+    bg_png = ep / "public" / "plates" / "bg.png"
+    bg_png.parent.mkdir(parents=True, exist_ok=True)
+    bg_png.write_bytes(b"\x89PNG\r\n\x1a\n" + b"P" * 1024)
+
+    (ep / "src" / "episode" / "cast.ts").write_text(
+        "import {NHIM_LOOK, type Look} from '../chars';\n"
+        "export const CAST: Record<string, Look> = { nhim: {...NHIM_LOOK, name: 'nhim'} };\n"
+        "export const CAST_ROLES = { nhim: {role: 'principal' as const, vi: 'Nhím nhân vật chính'} };\n",
+        encoding="utf-8",
+    )
+    (ep / "src" / "episode" / "sets.tsx").write_text(
+        "import React from 'react';\n"
+        "import {staticFile} from 'remotion';\n"
+        "import {RasterPlate} from '../kit';\n"
+        "import type {SetDef} from '../sets/types';\n"
+        "export const EPISODE_SETS: Record<string, SetDef> = {\n"
+        "  yardPlate: {\n"
+        "    title: 'Sân vườn nền raster',\n"
+        "    bed: 'outdoor',\n"
+        "    rasterPlate: true,\n"
+        "    bounds: [-200, -200, 1280, 2120],\n"
+        "    zones: {bgY: 1100, mgY: [1540, 1760], fgY: 1860},\n"
+        "    render: (o) => ({\n"
+        "      back: <g key='yardPlate'><RasterPlate src={staticFile('plates/bg.png')} x={-200} y={-200} width={1480} height={2320} /><circle cx={200} cy={200} r={5 + Math.sin(o.t)} /></g>,\n"
+        "      mid: [],\n"
+        "    }),\n"
+        "  },\n"
+        "};\n",
+        encoding="utf-8",
+    )
+    (ep / "src" / "episode" / "subjects.tsx").write_text(
+        "import React from 'react';\n"
+        "import {E, R, S} from '../kit';\n"
+        "import type {SubjectDef} from '../subjects';\n"
+        "export const SUBJECTS: Record<string, SubjectDef> = {\n"
+        "  badClockDog: {\n"
+        "    title: 'Chó chạy theo đồng hồ',\n"
+        "    kind: 'creature',\n"
+        "    relToActor: [0.35, 0.7],\n"
+        "    poses: ['idle', 'walk', 'sit', 'bark'],\n"
+        "    render: (pose, o) => {\n"
+        "      const leg = pose === 'walk' ? Math.sin(o.t * 8.0) * 18 : 0;\n"
+        "      const dy = pose === 'sit' ? 14 : pose === 'bark' ? -8 : 0;\n"
+        "      return <g><S d={R(-60, -100 + dy, 120, 60)} f='wood' /><S d={E(-30 + leg, -20, 12, 20)} f='woodDark' /><S d={E(30 - leg, -20, 12, 20)} f='woodDark' /></g>;\n"
+        "    },\n"
+        "  },\n"
+        "  badTreadmillDog: {\n"
+        "    title: 'Chó đi tại chỗ khi dừng',\n"
+        "    kind: 'creature',\n"
+        "    relToActor: [0.35, 0.7],\n"
+        "    poses: ['idle', 'walk', 'sit', 'bark'],\n"
+        "    render: (pose, o) => {\n"
+        "      const ph = (o.phase ?? 0) * Math.PI * 2 + o.t * 7.2;\n"
+        "      const leg = pose === 'walk' ? Math.sin(ph) * 18 : 0;\n"
+        "      const dy = pose === 'sit' ? 14 : pose === 'bark' ? -8 : 0;\n"
+        "      return <g><S d={R(-60, -100 + dy, 120, 60)} f='gold' /><S d={E(-30 + leg, -20, 12, 20)} f='goldDark' /><S d={E(30 - leg, -20, 12, 20)} f='goldDark' /></g>;\n"
+        "    },\n"
+        "  },\n"
+        "  goodDog: {\n"
+        "    title: 'Chó khóa quãng đường chuẩn',\n"
+        "    kind: 'creature',\n"
+        "    relToActor: [0.35, 0.7],\n"
+        "    poses: ['idle', 'walk', 'sit', 'bark'],\n"
+        "    render: (pose, o) => {\n"
+        "      const moveAmt = o.moving ? Math.min(1, Math.max(0.25, o.speed ?? 1)) : 0;\n"
+        "      const leg = pose === 'walk' ? moveAmt * Math.sin((o.phase ?? 0) * Math.PI * 2) * 18 : 0;\n"
+        "      const breath = Math.sin(o.t * 2.2) * 1.8;\n"
+        "      const dy = pose === 'sit' ? 14 : pose === 'bark' ? -8 : 0;\n"
+        "      return <g><S d={R(-60, -100 + dy + breath, 120, 60)} f='orange' /><S d={E(-30 + leg, -20, 12, 20)} f='woodDark' /><S d={E(30 - leg, -20, 12, 20)} f='woodDark' /></g>;\n"
+        "    },\n"
+        "  },\n"
+        "};\n",
+        encoding="utf-8",
+    )
+
+    _run(["node", "scripts/lint.mjs", "design"], cwd=ep)
+    d_lint = json.loads((ep / "qa" / "lint.json").read_text(encoding="utf-8"))
+    errs = d_lint.get("errors", [])
+    warns = d_lint.get("warns", [])
+    assert not any("[SE-06]" in e and "yardPlate" in e for e in errs), f"<RasterPlate> must pass SE-06:\n{errs}"
+    assert not any("[SE-06]" in w and "yardPlate" in w for w in warns), f"<RasterPlate> must not trigger bare <image> warning:\n{warns}"
+    assert any("[PR-11]" in e and "badClockDog" in e for e in errs), f"clock-only dog must fail PR-11:\n{errs}"
+    assert any("[PR-11]" in e and "badTreadmillDog" in e for e in errs), f"un-gated treadmill dog must fail PR-11:\n{errs}"
+    assert not any(("[PR-11]" in e or "[PR-08]" in e) and "goodDog" in e for e in errs), (
+        f"distance-locked + stop-settled goodDog with idle breathing must pass PR-08 & PR-11:\n{errs}"
+    )
+
+    # (c) H2 protects qa/transition_qa.json from direct edits
+    res_h2_tq = _invoke_hook({
+        "hookEventName": "PreToolUse",
+        "cwd": str(ep),
+        "toolCall": {"name": "write_file", "args": {"Path": str(ep / "qa" / "transition_qa.json")}},
+    })
+    assert res_h2_tq["decision"] == "deny" and "H2" in res_h2_tq["reason"], (
+        f"H2 must deny direct edits to qa/transition_qa.json: {res_h2_tq}"
+    )
+
+    # (d) Real ffmpeg 30fps synthesis verifying transition_qa.py catches DL-01 stale-bg, DL-02 blank-flash, and passes clean cut!
+    py_qa = os.environ.get("SV_PY")
+    if not (py_qa and Path(py_qa).is_file()):
+        py_qa = PY
+    shots_p = ep / "qa" / "shots.json"
+    shots_p.parent.mkdir(parents=True, exist_ok=True)
+    shots_p.write_text(json.dumps([
+        {"i": 0, "name": "sA", "set": "setA", "tr": "cut", "t0": 0.0, "t1": 1.5},
+        {"i": 1, "name": "sB", "set": "setB", "tr": "cut", "t0": 1.5, "t1": 3.0},
+    ]), encoding="utf-8")
+
+    out_dir = ep / "out"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    clip_clean = out_dir / "clean.mp4"
+    clip_stale = out_dir / "stale.mp4"
+    clip_blank = out_dir / "blank.mp4"
+
+    # Pattern A (high-contrast testsrc2) vs Pattern B (distinct smptebars) @ 180x320 30fps
+    r_clean = _run([
+        "ffmpeg", "-y", "-loglevel", "error",
+        "-f", "lavfi", "-i", "testsrc2=size=180x320:rate=30:duration=1.5",
+        "-f", "lavfi", "-i", "smptebars=size=180x320:rate=30:duration=1.5",
+        "-filter_complex", "[0:v][1:v]concat=n=2:v=1:a=0[v]",
+        "-map", "[v]", "-pix_fmt", "yuv420p", "-c:v", "libx264", "-crf", "18", str(clip_clean),
+    ], cwd=ep)
+    assert r_clean.returncode == 0, f"ffmpeg clean clip synthesis failed: {r_clean.stderr}"
+
+    # Stale backdrop: setA bleeds 0.20s (6 frames) past the 1.50s cut into setB
+    r_stale = _run([
+        "ffmpeg", "-y", "-loglevel", "error",
+        "-f", "lavfi", "-i", "testsrc2=size=180x320:rate=30:duration=1.7",
+        "-f", "lavfi", "-i", "smptebars=size=180x320:rate=30:duration=1.3",
+        "-filter_complex", "[0:v][1:v]concat=n=2:v=1:a=0[v]",
+        "-map", "[v]", "-pix_fmt", "yuv420p", "-c:v", "libx264", "-crf", "18", str(clip_stale),
+    ], cwd=ep)
+    assert r_stale.returncode == 0, f"ffmpeg stale clip synthesis failed: {r_stale.stderr}"
+
+    # Blank flash: 3 solid black frames right after the 1.50s cut
+    r_blank = _run([
+        "ffmpeg", "-y", "-loglevel", "error",
+        "-f", "lavfi", "-i", "testsrc2=size=180x320:rate=30:duration=1.5",
+        "-f", "lavfi", "-i", "color=c=black:s=180x320:r=30:d=0.1",
+        "-f", "lavfi", "-i", "smptebars=size=180x320:rate=30:duration=1.4",
+        "-filter_complex", "[0:v][1:v][2:v]concat=n=3:v=1:a=0[v]",
+        "-map", "[v]", "-pix_fmt", "yuv420p", "-c:v", "libx264", "-crf", "18", str(clip_blank),
+    ], cwd=ep)
+    assert r_blank.returncode == 0, f"ffmpeg blank clip synthesis failed: {r_blank.stderr}"
+
+    # 1) Clean clip -> exit 0, 0 stale, 0 blank
+    tq_clean = ep / "qa" / "tq_clean.json"
+    rc1 = _run([py_qa, "scripts/transition_qa.py", "--video", str(clip_clean), "--shots", str(shots_p), "--out", str(tq_clean)], cwd=ep)
+    assert rc1.returncode == 0, f"clean clip must pass transition_qa.py: {rc1.stdout}\n{rc1.stderr}"
+    d1 = json.loads(tq_clean.read_text(encoding="utf-8"))
+    assert d1["ok"] is True and d1["stale_bg_frames"] == 0 and d1["blank_flash_frames"] == 0 and d1["set_transitions"] == 1, f"unexpected clean result: {d1}"
+
+    # 2) Stale-bg clip -> exit 2, DL-01 error, stale_bg_frames >= 4
+    tq_stale = ep / "qa" / "tq_stale.json"
+    rc2 = _run([py_qa, "scripts/transition_qa.py", "--video", str(clip_stale), "--shots", str(shots_p), "--out", str(tq_stale)], cwd=ep)
+    assert rc2.returncode == 2, f"stale-bg clip must fail transition_qa.py with rc=2 (got {rc2.returncode}): {rc2.stdout}\n{rc2.stderr}"
+    d2 = json.loads(tq_stale.read_text(encoding="utf-8"))
+    assert d2["ok"] is False and d2["stale_bg_frames"] >= 4 and any("[DL-01]" in e for e in d2["errors"]), f"expected DL-01 failure: {d2}"
+
+    # 3) Blank-flash clip -> exit 2, DL-02 error, blank_flash_frames >= 2
+    tq_blank = ep / "qa" / "tq_blank.json"
+    rc3 = _run([py_qa, "scripts/transition_qa.py", "--video", str(clip_blank), "--shots", str(shots_p), "--out", str(tq_blank)], cwd=ep)
+    assert rc3.returncode == 2, f"blank-flash clip must fail transition_qa.py with rc=2 (got {rc3.returncode}): {rc3.stdout}\n{rc3.stderr}"
+    d3 = json.loads(tq_blank.read_text(encoding="utf-8"))
+    assert d3["ok"] is False and d3["blank_flash_frames"] >= 2 and any("[DL-02]" in e for e in d3["errors"]), f"expected DL-02 failure: {d3}"
+
+    print("[PASS] Test 13: v6.2.1 zero-flicker <RasterPlate>/keyed <LayerG>, PR-11 anti-treadmill CI, H2 lock & 30fps transition_qa (DL-01/DL-02) verified")
+
+
 def main() -> int:
     t0 = time.perf_counter()
     test_1_validate_skills()
@@ -1323,8 +1512,9 @@ def main() -> int:
         test_10_v61_raster_plate_and_squash_stretch(ep_short)
         test_11_anti_bypass_hardening(ep_short, tmp)
         test_12_v62_art_direction_gate_and_scored_rubric(tmp)
+        test_13_v621_zero_flicker_transition_qa_and_pr11(tmp)
     finally:
-        for sub in ("ep-short", "ep-long", "ep-v62"):
+        for sub in ("ep-short", "ep-long", "ep-v62", "ep-v621"):
             nm = tmp / sub / "node_modules"
             if nm.exists():
                 if os.name == "nt":
@@ -1334,7 +1524,7 @@ def main() -> int:
         shutil.rmtree(tmp, ignore_errors=True)
 
     dt = time.perf_counter() - t0
-    print(f"\nALL 12/12 v6.2.0 END-TO-END VERIFICATION TESTS PASSED in {dt:.2f}s!")
+    print(f"\nALL 13/13 v6.2.1 END-TO-END VERIFICATION TESTS PASSED in {dt:.2f}s!")
     return 0
 
 

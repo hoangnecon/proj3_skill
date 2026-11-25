@@ -23,15 +23,16 @@ description: Gate G7 final master render, encoded audio verification, 12-frame s
    - `out/final.mp4` (`H.264`, `CRF 18`, `30 fps`, `1080×1920` for Short / `1920×1080` for Long, AAC audio)
    - `qa/deliver_report.json` (duration vs expected `<= 0.15 s`, exact resolution/fps, `final_sha`)
    - `qa/video_audio.json` (`audio_qa.py --video` re-measuring loudness, true peak, AAC drift, and A/V sync *inside* the rendered MP4)
+   - `qa/transition_qa.json` (`scripts/transition_qa.py --video out/final.mp4` decoding at 30 fps to verify zero stale-backdrop leaks `DL-01` and zero blank/unrendered flash frames `DL-02` across every set cut)
    - `qa/final_check.jpg` (12-frame spot-check sheet sampled directly from `out/final.mp4`)
 3. **Run Delivery CI Gate:**
    ```bash
    python scripts/sv_cli.py ci delivery --json
    ```
-   Close Executor log (`log complete --verdict pass`) and verify `python scripts/sv_cli.py ci log --stage G7 --role executor --json`.
+   Verifies `deliver_report.json`, `video_audio.json`, and `transition_qa.json` (`DL-01` `stale_bg_frames == 0`, `DL-02` `blank_flash_frames == 0`). Close Executor log (`log complete --verdict pass`) and verify `python scripts/sv_cli.py ci log --stage G7 --role executor --json`.
 4. **Independent Reviewer & Orchestrator Visual Audit (MANDATORY — No Blind Pass):**
-   - Reviewer (`reviewer_id != exec-deliver`) opens `qa/final_check.jpg` via `read_file` and checks `qa/deliver_report.json` + `qa/video_audio.json`, logging concrete observations (`--action inspect_visual --target qa/final_check.jpg`, `>= 6` words) and passing `python scripts/sv_cli.py ci log --stage G7 --role reviewer --json`.
-   - Orchestrator ALSO opens `qa/final_check.jpg` via `read_file` (verified by `hooks/sv_guard.py H6`), confirms zero encoding glitches, captions legible, exact format/duration, and writes `gates/G7.review.md` naming `deliver_report.json`, `final_check.jpg`, and `video_audio.json` (`>= 4` words each).
+   - Reviewer (`reviewer_id != exec-deliver`) opens `qa/final_check.jpg` via `read_file` and checks `qa/deliver_report.json` + `qa/video_audio.json` + `qa/transition_qa.json`, logging concrete observations (`--action inspect_visual --target qa/final_check.jpg`, `>= 6` words) and passing `python scripts/sv_cli.py ci log --stage G7 --role reviewer --json`.
+   - Orchestrator ALSO opens `qa/final_check.jpg` via `read_file` (verified by `hooks/sv_guard.py H6`), confirms zero encoding glitches, zero transition flicker (`transition_qa.json`), captions legible, exact format/duration, and writes `gates/G7.review.md` naming `deliver_report.json`, `final_check.jpg`, `video_audio.json`, and `transition_qa.json` (`>= 4` words each).
 5. **Pass Gate G7 & Deliver:**
    ```bash
    python scripts/sv_cli.py gate check G7 --json

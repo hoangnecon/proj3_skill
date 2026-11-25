@@ -1,6 +1,6 @@
 ---
 name: sv-core-router
-description: Entry point and 3-track router for Vietnamese 2D story-video episodes (v6.2.0) — detects Short 9:16 vs Long 16:9 from .episode.json, scaffolds new episodes with --track short|long, enforces the 7-gate DAG (G1, G2, G3 in parallel with Pre-G4 art_direction.json AD-01..AD-08 + G4 8-axis scoring, G5, G6, G7), role logs (LG-01..LG-13), and unified sv_cli.py verification gates. Always read first when starting, resuming, or auditing any story-video episode.
+description: Entry point and 3-track router for Vietnamese 2D story-video episodes (v6.2.1) — detects Short 9:16 vs Long 16:9 from .episode.json, scaffolds new episodes with --track short|long, enforces the 7-gate DAG (G1, G2, G3 in parallel with Pre-G4 art_direction.json AD-01..AD-08 + G4 8-axis scoring, G5, G6, G7 + DL-01..02 transition QA), role logs (LG-01..LG-13), and unified sv_cli.py verification gates. Always read first when starting, resuming, or auditing any story-video episode.
 ---
 
 # sv-core-router · Pipeline Router & 5-Pillar Verification Gate

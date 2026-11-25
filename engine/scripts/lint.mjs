@@ -391,6 +391,9 @@ if (phase !== 'shots') {
           if (!hasFullBackdrop) {
             err('SE-06', `${id} (rasterPlate): no <image> covers >= 85% of set bounds (${Math.round(bw)}x${Math.round(bh)} px) — a tiny icon cannot substitute for a full stage plate`);
           }
+          if (hasFullBackdrop && !/\b(?:RasterPlate|delayRender)\b/.test(setsSrc) && !lineWaived(setsSrc, 'SE-06', id)) {
+            warn('SE-06', `${id} (rasterPlate): bare SVG <image> without <RasterPlate> (from '../kit') can flicker across multi-tab Remotion set cuts — use <RasterPlate src={staticFile(...)} x={...} y={...} width={...} height={...} />`);
+          }
         }
       } else if (!isBakedPlate) {
         if (st.shapes < TH.shapes) err('SE-06', `${id}: ${st.shapes} shapes < ${TH.shapes} (exemplar median). Add fixtures, clutter, wear — see sets.md §Detail budget`);
@@ -752,6 +755,30 @@ if (phase !== 'shots') {
         err('PR-08', `subject '${id}' (creature) is 100% frozen across time/phase (0/${poses.length} poses animate with opts.t/opts.phase) — animate breathing, tail, wings, or leg stride`);
       } else if (poses.length >= 2 && animatedCount < Math.ceil(poses.length * 0.5)) {
         warn('PR-08', `subject '${id}' (creature) animates in only ${animatedCount}/${poses.length} poses — add t/phase motion (stride, wing-beat, breathing) across active poses`);
+      }
+    }
+    // PR-11: Distance-Locked Subject Locomotion & Stop-Settle Anti-Treadmill Guard (v6.2.1)
+    // Grounded locomotion poses must be driven by opts.phase while moving (never clock-only treadmill)
+    // AND gate stride amplitude on opts.moving/opts.speed so legs/wheels settle cleanly on arrival.
+    const LOCO_POSE_RE = /^(?:walk|run|trot|gallop|crawl|march|stride|stalk|chase|charge|scurry|sprint|jog|pad|prowl|hop|waddle|skitter|roll|drive|pedal)/i;
+    for (const [id, def] of Object.entries(P.SUBJECTS ?? {})) {
+      if (lineWaived(subjectsSrc, 'PR-11', id)) continue;
+      const poses = Array.isArray(def?.poses) ? def.poses : [];
+      const locoPoses = poses.filter((p) => LOCO_POSE_RE.test(String(p)));
+      if (!locoPoses.length) continue;
+      const expr0 = def?.exprs?.[0];
+      for (const p of locoPoses) {
+        try {
+          const mov0 = renderMarkup(def.render(p, {t: 0.5, expr: expr0, phase: 0.0, speed: 1.0, moving: true, altitude: 0}));
+          const mov1 = renderMarkup(def.render(p, {t: 0.5, expr: expr0, phase: 0.37, speed: 1.0, moving: true, altitude: 0}));
+          const stop0 = renderMarkup(def.render(p, {t: 0.5, expr: expr0, phase: 0.0, speed: 0.0, moving: false, altitude: 0}));
+          const stop1 = renderMarkup(def.render(p, {t: 0.5, expr: expr0, phase: 0.37, speed: 0.0, moving: false, altitude: 0}));
+          if (def?.kind === 'creature' && mov0 === mov1) {
+            err('PR-11', `subject '${id}' pose '${p}': grounded locomotion ignores opts.phase at fixed t (treadmill/foot-slide risk) — drive leg stride from opts.phase while opts.moving is true`);
+          } else if (mov0 !== mov1 && stop0 !== stop1) {
+            err('PR-11', `subject '${id}' pose '${p}': locomotion stride still shifts with opts.phase when stationary (moving=false, speed=0) — gate stride amplitude on opts.moving/opts.speed so limbs/wheels settle cleanly on arrival (no treadmill or frozen mid-stride)`);
+          }
+        } catch {}
       }
     }
   }

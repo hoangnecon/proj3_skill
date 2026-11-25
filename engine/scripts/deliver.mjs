@@ -265,11 +265,17 @@ const report = {
 };
 fs.writeFileSync('qa/deliver_report.json', JSON.stringify(report, null, 1));
 // audio inside the delivered files: loudness drift after AAC, true peak, A/V length, sync (sv-core-audio)
-const PY = process.env.SV_PYTHON || PY_VIENEU;
+const PY = process.env.SV_PYTHON || process.env.SV_PY || PY_VIENEU;
 if (fs.existsSync('qa/video_audio.json')) fs.unlinkSync('qa/video_audio.json');
 for (const f of [final]) {
   try { execFileSync(PY, ['scripts/audio_qa.py', '--video', f], {stdio: 'inherit'}); }
   catch { console.error(`WARN audio check failed for ${f} — see qa/video_audio.json (gate G7 will refuse)`); }
+}
+// 30fps post-encode set-transition flicker (DL-01) & blank-flash (DL-02) check
+if (fs.existsSync('qa/transition_qa.json')) fs.unlinkSync('qa/transition_qa.json');
+if (fs.existsSync('scripts/transition_qa.py') && fs.existsSync('qa/shots.json')) {
+  try { execFileSync(PY, ['scripts/transition_qa.py', '--video', final], {stdio: 'inherit'}); }
+  catch { console.error(`WARN transition flicker check failed for ${final} — see qa/transition_qa.json (gate G7 will refuse)`); }
 }
 // spot-check frames straight from the encoded file in parallel (catches encode/audio-sync issues the stills cannot)
 fs.mkdirSync('qa/_f', {recursive: true});

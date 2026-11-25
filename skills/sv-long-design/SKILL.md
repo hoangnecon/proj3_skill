@@ -1,6 +1,6 @@
 ---
 name: sv-long-design
-description: Long 16:9 track Gate G4 widescreen visual design — mandatory Pre-G4 art_direction.json blueprint (AD-01..AD-08, H3 lock), 8-10+ cast (CH-09, canonical Nhím CH-11), 24-30 Spatial Location Pack plates across 4-6 locations (SE-15..20, anti-cramming plate split), living quadruped/hero SUBJECTS (PR-06, PR-08..10), 8-axis Reviewer design scoring (LG-13), and user approval. Use ONLY when .episode.json has track "long".
+description: Long 16:9 track Gate G4 widescreen visual design — mandatory Pre-G4 art_direction.json blueprint (AD-01..AD-08, H3 lock), 8-10+ cast (CH-09, canonical Nhím CH-11), 24-30 Spatial Location Pack plates across 4-6 locations (SE-15..20, zero-flicker RasterPlate, anti-cramming plate split), living quadruped/hero SUBJECTS (PR-06, PR-08..11), 8-axis Reviewer design scoring (LG-13), and user approval. Use ONLY when .episode.json has track "long".
 ---
 
 # sv-long-design · Long 16:9 Spatial Location Packs & Hero Subjects (G4)
@@ -19,8 +19,8 @@ description: Long 16:9 track Gate G4 widescreen visual design — mandatory Pre-
    - **Shared `landmarks`** (`SE-15`): declare consistent room/outdoor anchor IDs across every angle in a location pack.
    - **Perspective & Botany (`SE-18`, `SE-19`):** Use true 3/4 elevated perspective on indoor/outdoor floors and varied organic botanical silhouettes (zero clone-stamped identical shapes).
    - **Scale Mode, Stateless Plates & Anti-Cramming Split (`SE-20`, `SH-22`):** Explicitly tag every set with `scaleMode: 'normal' | 'tiny'` matching the story unit's scale, declare `zones: { bgY, mgY: [minY, maxY], fgY }` and `actorScale: [minS, maxS]`, and keep every plate `stateless: true`. Sets may optionally use `rasterPlate: true` (`atmospheric-plates.md`) with 16:9 widescreen dimensions while keeping all `SE-13`/`SE-15..20`/`AD-07` locks and crisp 2D Risograph cast untouched; whenever `rasterPlate` count `>= 6`, **MUST split work into `<= 5–6` plates per worker (`plates/pack_*.mjs`)**.
-4. **Living Hero Subjects (`src/episode/subjects.tsx`, `PR-06`, `PR-08..09`, `SH-23`, `LA-03`):**
-   - Register every recurring creature, vehicle, or machine in `SUBJECTS` with `>= 4` genuinely distinct poses (`PR-06`) and continuous `opts.t`/`opts.phase` animation on creatures (`PR-08`, `PR-09`).
+4. **Living Hero Subjects (`src/episode/subjects.tsx`, `PR-06`, `PR-08..09`, `PR-11`, `SH-23`, `LA-03`):**
+   - Register every recurring creature, vehicle, or machine in `SUBJECTS` with `>= 4` genuinely distinct poses (`PR-06`), continuous `opts.t`/`opts.phase` animation on creatures (`PR-08`, `PR-09`), and distance-locked `opts.phase` gated on `opts.moving`/`opts.speed` for grounded locomotion (`PR-11`, zero treadmill/mid-stride freeze on arrival).
    - Add **temporal guards** (`firstSeg`, `appearSegs`, `poseSegs`) so story-gated creatures or transformed states cannot bleed into earlier segments (`SH-23`).
    - Add **`scaleWithTinyActor: [minR, maxR]`** on giant creatures and dedicated **`partialOf`** subjects (`...Paw`, `...Head`) ONLY for `closeup`/`insert` plates (`LA-03`, `PR-10`).
    - Declare `seats` with `straddle: true` and `grip: [gx, gy]` on rideable mounts (`MO-14`).

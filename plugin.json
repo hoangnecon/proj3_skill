@@ -1,8 +1,8 @@
 {
   "name": "story-video-skills",
   "displayName": "Story Video Skills",
-  "version": "6.2.0",
-  "description": "Anti-bypass 3-track production suite (Core + Short 9:16 + Long 16:9) for Vietnamese 2D story videos (Remotion, riso-ink + opt-in rough.js/PixiJS atmospheric plates, mandatory Pre-G4 art_direction.json AD-01..08 & 8-axis G4 rubric scoring LG-13, native 2D squash-and-stretch, canonical New Nhim, empirically calibrated v4.0 Hai Dang voice ~4.57 wps, hash-chained role logs LG-01..13, unified sv_cli.py JSON API, native PreToolUse hooks, general physics/continuity CI).",
+  "version": "6.2.1",
+  "description": "Anti-bypass 3-track production suite (Core + Short 9:16 + Long 16:9) for Vietnamese 2D story videos (Remotion, riso-ink + zero-flicker RasterPlate rough.js/PixiJS atmospheric plates, mandatory Pre-G4 art_direction.json AD-01..08 & 8-axis G4 rubric scoring LG-13, native 2D squash-and-stretch, anti-treadmill PR-11, 30fps post-encode transition QA DL-01..02, canonical New Nhim, v4.0 Hai Dang voice ~4.57 wps, hash-chained role logs LG-01..13, unified sv_cli.py JSON API, native PreToolUse hooks).",
   "suggestedPrompts": [
     "Scaffold a new Short 9:16 episode (--track short) and pitch 5 premises",
     "Scaffold a new Long 16:9 adventure episode (--track long) and run doctor",

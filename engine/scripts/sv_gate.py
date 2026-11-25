@@ -117,7 +117,10 @@ def evidence(g):
     if g == "G6":
         return ["qa/mix_report.json", "qa/mix/overview.png", "qa/mix/segments.png"]
     if g == "G7":
-        return ["qa/deliver_report.json", "qa/final_check.jpg", "qa/video_audio.json"]
+        ev = ["qa/deliver_report.json", "qa/final_check.jpg", "qa/video_audio.json"]
+        if (ROOT / "qa" / "transition_qa.json").is_file():
+            ev.append("qa/transition_qa.json")
+        return ev
     return []
 
 
@@ -364,6 +367,16 @@ def checks(g):
             for c in va[name]["checks"]:
                 if not c["ok"]:
                     bad.append(f"{name} audio: {c['check']} = {c['value']} outside {c['range']}")
+        tq = jload("qa/transition_qa.json")
+        if not tq:
+            if (ROOT / "out" / "final.mp4").is_file() and (ROOT / "qa" / "shots.json").is_file():
+                bad.append("qa/transition_qa.json missing — run python scripts/transition_qa.py --video out/final.mp4 (or node scripts/deliver.mjs)")
+        else:
+            if tq.get("final_sha") and (ROOT / "out" / "final.mp4").is_file() and tq["final_sha"] != sha("out/final.mp4"):
+                bad.append("out/final.mp4 changed after qa/transition_qa.json — re-run scripts/transition_qa.py")
+            if not tq.get("ok") or int(tq.get("stale_bg_frames", 0)) > 0 or int(tq.get("blank_flash_frames", 0)) > 0:
+                for e in tq.get("errors") or [f"transition_qa failed: stale_bg={tq.get('stale_bg_frames')}, blank_flash={tq.get('blank_flash_frames')}"]:
+                    bad.append(e)
     return bad
 
 

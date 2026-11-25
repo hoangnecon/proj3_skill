@@ -61,6 +61,7 @@ IMMUTABLE_CI_FILES = {
     "qa/mix_report.json",
     "qa/deliver_report.json",
     "qa/video_audio.json",
+    "qa/transition_qa.json",
     "qa/qa_status.json",
     "qa/cache.json",
     "qa/shots.json",
@@ -362,7 +363,7 @@ def _check_run_command(payload: dict) -> None:
     protected_target_re = (
         r'(?:gates[\\/]log\.jsonl|logs[\\/][^\s"\']+\.jsonl|qa[\\/]review[\\/]|'
         r'qa[\\/]design[\\/](?:plate_stats|g4_scores)\.json|'
-        r'qa[\\/](?:lint|script_lint|art_direction_lint|voice_report|mix_report|deliver_report|qa_status|layout_report)\.json|'
+        r'qa[\\/](?:lint|script_lint|art_direction_lint|voice_report|mix_report|deliver_report|video_audio|transition_qa|qa_status|layout_report)\.json|'
         r'standards[\\/][^\s"\']+\.json)'
     )
     tamper_re = re.compile(
