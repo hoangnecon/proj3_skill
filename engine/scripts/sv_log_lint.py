@@ -325,7 +325,14 @@ def audit_logs(
                     if dom in ("design", "shots") and (root / "qa" / "lint.json").is_file():
                         try:
                             lj = json.loads((root / "qa" / "lint.json").read_text(encoding="utf-8"))
-                            disk_errs = list(lj.get("errors") or [])
+                            l_phase = str(lj.get("phase") or "")
+                            valid_phases = ("design", "all") if dom == "design" else ("shots", "all")
+                            if l_phase in valid_phases:
+                                disk_errs = list(lj.get("errors") or [])
+                            elif not ci_ok_rec:
+                                disk_errs = [
+                                    f"qa/lint.json phase is {l_phase!r} (expected {dom!r}) and logs/ci_lint.jsonl has no passing {dom!r} record"
+                                ]
                         except Exception:
                             disk_errs = ["unreadable qa/lint.json"]
                     elif dom == "script" and (root / "qa" / "script_lint.json").is_file():

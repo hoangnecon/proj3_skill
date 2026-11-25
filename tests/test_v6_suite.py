@@ -645,7 +645,7 @@ def test_10_v61_raster_plate_and_squash_stretch(ep_short: Path) -> None:
         r_chk = _run(["node", "--check", str(SUITE / "engine" / "scripts" / script_name)], cwd=SUITE)
         assert r_chk.returncode == 0, f"syntax error in {script_name}:\n{r_chk.stderr}"
 
-    # (b) Bundle & execute anim.ts squashStretch / evalSquashLeap / evalPopSquash invariants + compile-check Film.tsx
+    # (b) Bundle & execute anim.ts squashStretch / evalSquashLeap / evalPopSquash invariants + compile-check Film.tsx & Sheets.tsx
     probe_js = (
         "import {build} from 'esbuild';\n"
         "import fs from 'node:fs';\n"
@@ -654,7 +654,7 @@ def test_10_v61_raster_plate_and_squash_stretch(ep_short: Path) -> None:
         "const stub = { name: 'stub', setup(b) {\n"
         "  b.onResolve({filter: /^@remotion\\/google-fonts|^remotion$/}, (a) => ({path: a.path, namespace: 'st'}));\n"
         "  b.onLoad({filter: /.*/, namespace: 'st'}, (a) => ({\n"
-        "    contents: a.path.startsWith('@remotion') ? 'export const loadFont = () => ({fontFamily:\"Be Vietnam Pro\"});' : 'export const AbsoluteFill=()=>null;export const Audio=()=>null;export const staticFile=(s)=>s;export const useCurrentFrame=()=>0;',\n"
+        "    contents: a.path.startsWith('@remotion') ? 'export const loadFont = () => ({fontFamily:\"Be Vietnam Pro\"});' : 'export const AbsoluteFill=()=>null;export const Audio=()=>null;export const OffthreadVideo=()=>null;export const Loop=({children})=>children??null;export const staticFile=(s)=>s;export const useCurrentFrame=()=>0;',\n"
         "    loader: 'js',\n"
         "  }));\n"
         "}};\n"
@@ -663,7 +663,7 @@ def test_10_v61_raster_plate_and_squash_stretch(ep_short: Path) -> None:
         "  external: ['react', 'react-dom', 'react/jsx-runtime'], plugins: [stub], logLevel: 'error',\n"
         "});\n"
         "await build({\n"
-        "  entryPoints: [path.resolve('src/Film.tsx')], bundle: true, write: false, platform: 'node', format: 'esm',\n"
+        "  entryPoints: [path.resolve('src/Film.tsx'), path.resolve('src/design/Sheets.tsx')], bundle: true, outdir: path.resolve('qa/.sv-tmp'), write: false, platform: 'node', format: 'esm',\n"
         "  jsx: 'automatic', external: ['react', 'react-dom', 'react/jsx-runtime'], plugins: [stub], logLevel: 'error',\n"
         "});\n"
         "fs.mkdirSync(path.resolve('qa'), {recursive: true});\n"
@@ -694,11 +694,13 @@ def test_10_v61_raster_plate_and_squash_stretch(ep_short: Path) -> None:
     r_anim = _run(["node", "--input-type=module", "-e", probe_js], cwd=ep_short)
     assert r_anim.returncode == 0 and "ANIM_OK" in r_anim.stdout, f"anim.ts test failed:\n{r_anim.stdout}\n{r_anim.stderr}"
 
-    # (c) rasterPlate design lint: missing <image>, missing public/ file, or tiny icon all fail SE-06; real public/ file passes SE-06..SE-10
+    # (c) rasterPlate & videoPlate design lint: missing <image>, https://, .mp4 inside <image>, tiny icon, or missing videoPlate fail SE-06; valid local PNG & MP4 pass!
     yard_png = ep_short / "public" / "plates" / "yard.png"
+    rain_mp4 = ep_short / "public" / "plates" / "rain.mp4"
     yard_png.parent.mkdir(parents=True, exist_ok=True)
-    if yard_png.exists():
-        yard_png.unlink()
+    for fp in (yard_png, rain_mp4):
+        if fp.exists():
+            fp.unlink()
     (ep_short / "src" / "episode" / "sets.tsx").write_text(
         "import React from 'react';\n"
         "import {R, S} from '../kit';\n"
@@ -711,6 +713,22 @@ def test_10_v61_raster_plate_and_squash_stretch(ep_short: Path) -> None:
         "    bounds: [-200, -200, 1280, 2120],\n"
         "    zones: {bgY: 1100, mgY: [1540, 1760], fgY: 1860},\n"
         "    render: () => ({back: <g><S d={R(-200, -200, 1480, 2320)} f='sky2' /></g>, mid: []}),\n"
+        "  },\n"
+        "  badHttpsImg: {\n"
+        "    title: 'Nền URL ngoài',\n"
+        "    bed: 'outdoor',\n"
+        "    rasterPlate: true,\n"
+        "    bounds: [-200, -200, 1280, 2120],\n"
+        "    zones: {bgY: 1100, mgY: [1540, 1760], fgY: 1860},\n"
+        "    render: () => ({back: <g><image href='https://example.com/plate.png' x={-200} y={-200} width={1480} height={2320} /></g>, mid: []}),\n"
+        "  },\n"
+        "  badMp4InSvgImg: {\n"
+        "    title: 'Nhét mp4 vào thẻ image',\n"
+        "    bed: 'rain',\n"
+        "    rasterPlate: true,\n"
+        "    bounds: [-200, -200, 1280, 2120],\n"
+        "    zones: {bgY: 1100, mgY: [1540, 1760], fgY: 1860},\n"
+        "    render: () => ({back: <g><image href='plates/rain.mp4' x={-200} y={-200} width={1480} height={2320} /></g>, mid: []}),\n"
         "  },\n"
         "  badTinyImg: {\n"
         "    title: 'Nền icon tí hon',\n"
@@ -728,24 +746,37 @@ def test_10_v61_raster_plate_and_squash_stretch(ep_short: Path) -> None:
         "    zones: {bgY: 1100, mgY: [1540, 1760], fgY: 1860},\n"
         "    render: (o) => ({back: <g><image href='plates/yard.png' x={-200} y={-200} width={1480} height={2320} /><circle cx={100} cy={100} r={4 + Math.sin(o.t)} /></g>, mid: []}),\n"
         "  },\n"
+        "  goodVideoPlate: {\n"
+        "    title: 'Phố mưa động',\n"
+        "    bed: 'rain',\n"
+        "    videoPlate: {src: 'plates/rain.mp4', x: -200, y: -200, width: 1480, height: 2320, dur: 4.0},\n"
+        "    bounds: [-200, -200, 1280, 2120],\n"
+        "    zones: {bgY: 1100, mgY: [1540, 1760], fgY: 1860},\n"
+        "    render: () => ({back: <g />, mid: []}),\n"
+        "  },\n"
         "};\n",
         encoding="utf-8",
     )
-    # Missing on-disk public/plates/yard.png -> goodPlate MUST FAIL SE-06!
+    # Missing on-disk public/plates/yard.png & rain.mp4 -> goodPlate & goodVideoPlate MUST FAIL SE-06!
     _run(["node", "scripts/lint.mjs", "design"], cwd=ep_short)
     d_miss = json.loads((ep_short / "qa" / "lint.json").read_text(encoding="utf-8")).get("errors", [])
     assert any("[SE-06]" in e and "goodPlate" in e and "missing on disk" in e for e in d_miss), f"missing public plate must fail SE-06:\n{d_miss}"
+    assert any("[SE-06]" in e and "goodVideoPlate" in e and "missing on disk" in e for e in d_miss), f"missing public videoPlate must fail SE-06:\n{d_miss}"
 
-    # Write real >=512B plate file on disk -> goodPlate passes SE-06..SE-10 while badNoImg & badTinyImg still fail SE-06!
+    # Write real >=512B PNG & >=1024B MP4 -> goodPlate & goodVideoPlate pass SE-06..SE-10 (and SE-12 moves), while bad* fail SE-06!
     yard_png.write_bytes(b"\x89PNG\r\n\x1a\n" + b"X" * 1024)
+    rain_mp4.write_bytes(b"\x00\x00\x00\x18ftypmp42" + b"V" * 2048)
     _run(["node", "scripts/lint.mjs", "design"], cwd=ep_short)
     d_lint = json.loads((ep_short / "qa" / "lint.json").read_text(encoding="utf-8"))
     d_errs = d_lint.get("errors", [])
-    assert any("[SE-06]" in e and "badNoImg" in e for e in d_errs), f"badNoImg must fail SE-06:\n{d_errs}"
-    assert any("[SE-06]" in e and "badTinyImg" in e for e in d_errs), f"badTinyImg must fail SE-06:\n{d_errs}"
-    assert not any(any(code in e for code in ("[SE-06]", "[SE-07]", "[SE-08]", "[SE-09]", "[SE-10]")) and "goodPlate" in e for e in d_errs), (
-        f"goodPlate should pass SE-06..SE-10:\n{d_errs}"
-    )
+    d_warns = d_lint.get("warns", [])
+    for bad_id in ("badNoImg", "badHttpsImg", "badMp4InSvgImg", "badTinyImg"):
+        assert any("[SE-06]" in e and bad_id in e for e in d_errs), f"{bad_id} must fail SE-06:\n{d_errs}"
+    for good_id in ("goodPlate", "goodVideoPlate"):
+        assert not any(any(code in e for code in ("[SE-06]", "[SE-07]", "[SE-08]", "[SE-09]", "[SE-10]")) and good_id in e for e in d_errs), (
+            f"{good_id} should pass SE-06..SE-10:\n{d_errs}"
+        )
+    assert not any("[SE-12]" in w and "goodVideoPlate" in w for w in d_warns), f"goodVideoPlate inherently moves and must not warn SE-12:\n{d_warns}"
 
     # (d) Actor.leap & Actor.pop anchor validation, bounds/restraint CI, MO-08 liveness, and leap QA strip emission
     (ep_short / "src" / "episode" / "shotlist.ts").write_text(
@@ -775,6 +806,7 @@ def test_10_v61_raster_plate_and_squash_stretch(ep_short: Path) -> None:
     assert "[KY-01]" in sb_errs, f"late leap outside shot must fail KY-01:\n{sb_errs}"
     assert "[MO-15]" in sb_warns, f"leap/pop on sad expression should warn MO-15:\n{sb_warns}"
 
+    # Out-of-order non-overlapping leaps (e.g. [1.6, 0.2]) must sort cleanly without false MO-17 overlap error!
     (ep_short / "src" / "episode" / "shotlist.ts").write_text(
         "import type {ShotDef} from '../engine';\n"
         "export const SHOTS: ShotDef[] = [\n"
@@ -783,7 +815,7 @@ def test_10_v61_raster_plate_and_squash_stretch(ep_short: Path) -> None:
         "    at: 's1',\n"
         "    set: 'goodPlate',\n"
         "    cam: [540, 1150, 1.0],\n"
-        "    actors: [{id: 'nhim', look: 'nhim', x: 540, y: 1650, s: 1.0, e: 'joy', leap: [{at: 's1@Nhím', h: 65, dur: 0.85}], pop: [{at: 's1@học', amp: 0.11}]}],\n"
+        "    actors: [{id: 'nhim', look: 'nhim', x: 540, y: 1650, s: 1.0, e: 'joy', leap: [{at: 1.6, h: 65, dur: 0.7}, {at: 's1@Nhím', h: 65, dur: 0.7}], pop: [{at: 's1@học', amp: 0.11}]}],\n"
         "  },\n"
         "];\n",
         encoding="utf-8",
@@ -825,9 +857,21 @@ def test_11_anti_bypass_hardening(ep_short: Path, tmp: Path) -> None:
     })
     assert res_batch_ok["decision"] == "allow", f"Reviewer batch input rev_1.jsonl must stay writable: {res_batch_ok}"
 
-    # 3. H4 blocks inline python -c / node -e & shell redirects targeting standards/, qa/review/, or logs/
+    # 3. H4 allows read-only python -c / node -e diagnostics, while blocking mutating inline scripts & shell redirects
+    for ok_read_cmd in (
+        'python -c "import json; print(len(json.load(open(\'qa/lint.json\'))[\'errors\']))"',
+        'node -e "console.log(require(\'fs\').readFileSync(\'standards/pacing.json\', \'utf8\').length)"',
+    ):
+        res = _invoke_hook({
+            "hookEventName": "PreToolUse",
+            "cwd": str(ep_short),
+            "toolCall": {"name": "run_command", "args": {"CommandLine": ok_read_cmd}},
+        })
+        assert res["decision"] == "allow", f"H4 must allow read-only diagnostic `{ok_read_cmd}`: {res}"
+
     for bad_cmd in (
         'python -c "open(\'standards/pacing.json\', \'w\').write(\'{}\')"',
+        'python -c "from pathlib import Path; Path(\'qa/lint.json\').write_text(\'{}\')"',
         'node -e "require(\'fs\').writeFileSync(\'qa/review/00.json\', \'{}\')"',
         'Copy-Item fake.json qa/design/plate_stats.json',
     ):
@@ -882,12 +926,45 @@ def test_11_anti_bypass_hardening(ep_short: Path, tmp: Path) -> None:
         f"direct sv_gate.py pass must be blocked: {r_direct.stdout} {r_direct.stderr}"
     )
 
-    # 6. LG-05 rejects fake exit_code=0 when qa/lint.json has unresolved errors; LG-11 rejects missing G4.review.md
-    (ep_short / "qa" / "lint.json").write_text(json.dumps({"errors": ["[SE-06] unresolved error"], "warns": []}), encoding="utf-8")
+    # 6. LG-05 phase-aware cross-check:
+    # (a) same-phase design errors in qa/lint.json -> MUST FAIL G4 executor Log-CI
+    (ep_short / "qa" / "lint.json").write_text(json.dumps({"phase": "design", "errors": ["[SE-06] unresolved error"], "warns": []}), encoding="utf-8")
     r_lg05 = _run([PY, "scripts/sv_cli.py", "ci", "log", "--stage", "G4", "--role", "executor", "--json"], cwd=ep_short)
     d_lg05 = json.loads(r_lg05.stdout)
-    assert r_lg05.returncode == 2 and any("[LG-05]" in e for e in d_lg05["errors"]), f"LG-05 must catch on-disk lint errors: {d_lg05}"
-    (ep_short / "qa" / "lint.json").write_text(json.dumps({"errors": [], "warns": []}), encoding="utf-8")
+    assert r_lg05.returncode == 2 and any("[LG-05]" in e for e in d_lg05["errors"]), f"LG-05 must catch same-phase design lint errors: {d_lg05}"
+
+    # (b) cross-phase loophole: leftover phase='design', errors=[] MUST NOT satisfy a fake G5 ('shots') executor run without ci_lint pass
+    (ep_short / "qa" / "lint.json").write_text(json.dumps({"phase": "design", "errors": [], "warns": []}), encoding="utf-8")
+    sh_skill = str(SUITE / "skills" / "sv-short-production" / "SKILL.md")
+    r_fake_g5 = _log_init(ep_short, "executor", "exec-fake-g5", "G5", "Fake shots CI")
+    _log_step(ep_short, r_fake_g5, "read_skill", target=sh_skill, note="Read Short production skill before shots")
+    _log_step(ep_short, r_fake_g5, "run_tool", target="shots", cmd="sv_cli.py ci shots", exit_code=0, note="Claimed shots CI passed without running it")
+    _log_complete(ep_short, r_fake_g5, "pass", "src/episode/shotlist.ts", "Completed shotlist")
+    r_lg05_mm = _run([PY, "scripts/sv_cli.py", "ci", "log", "--stage", "G5", "--role", "executor", "--actor", "exec-fake-g5", "--json"], cwd=ep_short)
+    d_lg05_mm = json.loads(r_lg05_mm.stdout)
+    assert r_lg05_mm.returncode == 2 and any("[LG-05]" in e and "phase" in e for e in d_lg05_mm["errors"]), (
+        f"LG-05 must reject leftover phase='design' qa/lint.json for G5 shots: {d_lg05_mm}"
+    )
+
+    # (c) cross-phase non-regression: once ci_lint.jsonl has a genuine passing 'design' record, later G5 phase='shots' errors in qa/lint.json MUST NOT break G4 Log-CI
+    d_skill = str(SUITE / "skills" / "sv-short-design" / "SKILL.md")
+    r_g4_cur = _log_init(ep_short, "executor", "exec-design-v61", "G4", "Re-log G4 on current sets.tsx")
+    _log_step(ep_short, r_g4_cur, "read_skill", target=d_skill, note="Read Short design skill for G4 verification")
+    _log_step(ep_short, r_g4_cur, "run_tool", target="design", cmd="sv_cli.py ci design", exit_code=0, note="Design CI passed cleanly on current sets")
+    _log_complete(ep_short, r_g4_cur, "pass", "src/episode/sets.tsx", "Locked current sets.tsx SHA")
+    ci_lint_p = ep_short / "logs" / "ci_lint.jsonl"
+    _run(
+        [PY, "-c", "import sys; sys.path.insert(0, 'scripts'); import sv_log as L; from pathlib import Path; L.log_ci_event(Path('.'), stage='G4', domain='design', actor_id='sv-ci', command='lint design', exit_code=0, metrics={}, note='design CI PASS')"],
+        cwd=ep_short,
+    )
+    assert ci_lint_p.is_file()
+    (ep_short / "qa" / "lint.json").write_text(json.dumps({"phase": "shots", "errors": ["[SH-02] later G5 shot error"], "warns": []}), encoding="utf-8")
+    r_lg05_g4_ok = _run([PY, "scripts/sv_cli.py", "ci", "log", "--stage", "G4", "--role", "executor", "--actor", "exec-design-v61", "--json"], cwd=ep_short)
+    d_lg05_g4_ok = json.loads(r_lg05_g4_ok.stdout)
+    assert r_lg05_g4_ok.returncode == 0 and d_lg05_g4_ok["ok"], (
+        f"G4 executor Log-CI should stay green when ci_lint recorded design PASS even after G5 overwrote qa/lint.json: {d_lg05_g4_ok}"
+    )
+    (ep_short / "qa" / "lint.json").write_text(json.dumps({"phase": "all", "errors": [], "warns": []}), encoding="utf-8")
 
     g4_rev = ep_short / "gates" / "G4.review.md"
     saved_g4 = g4_rev.read_text(encoding="utf-8")

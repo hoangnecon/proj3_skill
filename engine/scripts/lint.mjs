@@ -314,13 +314,44 @@ if (phase !== 'shots') {
       if (st.texts < 1) err('SE-07', `${id} (insert): no diegetic text`);
     } else {
       let latestPlateSrcMtime = fs.statSync('src/episode/sets.tsx').mtimeMs;
-      if (d.rasterPlate) {
+      const isBakedPlate = Boolean(d.rasterPlate || d.videoPlate);
+      const bw = Array.isArray(d.bounds) && d.bounds.length === 4 ? Math.max(1, d.bounds[2] - d.bounds[0]) : W;
+      const bh = Array.isArray(d.bounds) && d.bounds.length === 4 ? Math.max(1, d.bounds[3] - d.bounds[1]) : H;
+      if (d.videoPlate) {
+        const vp = d.videoPlate;
+        const rawSrc = String(vp?.src ?? '').trim();
+        if (!rawSrc) {
+          err('SE-06', `${id} (videoPlate): videoPlate.src is empty`);
+        } else if (/^(?:https?:|data:)/i.test(rawSrc)) {
+          err('SE-06', `${id} (videoPlate): external or inline URL "${rawSrc}" is forbidden — store baked loop locally under public/`);
+        } else if (!/\.(?:mp4|webm)$/i.test(rawSrc.split(/[?#]/)[0])) {
+          err('SE-06', `${id} (videoPlate): "${rawSrc}" must be a .mp4 or .webm loop (use rasterPlate: true + <image> for static PNG/JPG/WebP)`);
+        } else {
+          const cleanRel = decodeURIComponent(rawSrc.split(/[?#]/)[0]).replace(/^\/+/, '').replace(/^public[\\/]+/, '');
+          const diskPath = path.resolve('public', cleanRel);
+          const pubRoot = path.resolve('public');
+          if (!diskPath.startsWith(pubRoot + path.sep) || !fs.existsSync(diskPath) || !fs.statSync(diskPath).isFile()) {
+            err('SE-06', `${id} (videoPlate): videoPlate.src "${rawSrc}" missing on disk at public/${cleanRel} — bake the loop before passing design CI`);
+          } else {
+            const stFile = fs.statSync(diskPath);
+            if (stFile.size < 1024) {
+              err('SE-06', `${id} (videoPlate): public/${cleanRel} is only ${stFile.size} bytes (< 1024 B placeholder) — bake a real loop MP4/WebM`);
+            }
+            if (stFile.mtimeMs > latestPlateSrcMtime) latestPlateSrcMtime = stFile.mtimeMs;
+          }
+        }
+        if (!((vp?.width ?? 0) >= bw * 0.85 && (vp?.height ?? 0) >= bh * 0.85)) {
+          err('SE-06', `${id} (videoPlate): videoPlate size (${vp?.width ?? 0}x${vp?.height ?? 0}) covers < 85% of set bounds (${Math.round(bw)}x${Math.round(bh)} px)`);
+        }
+        if (vp?.dur !== undefined && !(Number.isFinite(vp.dur) && vp.dur >= 0.5 && vp.dur <= 30)) {
+          err('SE-06', `${id} (videoPlate): videoPlate.dur=${vp.dur} must be between 0.5 and 30 seconds`);
+        }
+      }
+      if (d.rasterPlate && !d.videoPlate) {
         const imgTags = Array.isArray(st.imageTags) ? st.imageTags : [];
         if ((st.images ?? 0) < 1 || imgTags.length < 1) {
           err('SE-06', `${id} (rasterPlate): renders 0 <image> elements — mount the pre-baked plate via <image href={staticFile(...)} /> or remove rasterPlate: true`);
         } else {
-          const bw = Array.isArray(d.bounds) && d.bounds.length === 4 ? Math.max(1, d.bounds[2] - d.bounds[0]) : W;
-          const bh = Array.isArray(d.bounds) && d.bounds.length === 4 ? Math.max(1, d.bounds[3] - d.bounds[1]) : H;
           let hasFullBackdrop = false;
           for (const im of imgTags) {
             const rawHref = String(im.href ?? '').trim();
@@ -328,8 +359,17 @@ if (phase !== 'shots') {
               err('SE-06', `${id} (rasterPlate): <image> has empty href`);
               continue;
             }
-            if (!/^(?:data:|https?:)/i.test(rawHref)) {
-              const cleanRel = decodeURIComponent(rawHref.split(/[?#]/)[0]).replace(/^\/+/, '').replace(/^public[\\/]+/, '');
+            if (/^https?:/i.test(rawHref)) {
+              err('SE-06', `${id} (rasterPlate): external URL "${rawHref}" is forbidden — bake and store plate locally under public/`);
+              continue;
+            }
+            const cleanBase = rawHref.split(/[?#]/)[0];
+            if (/\.(?:mp4|webm|mov)$/i.test(cleanBase)) {
+              err('SE-06', `${id} (rasterPlate): SVG <image href="${rawHref}"> cannot play video in Chromium — use SetDef.videoPlate: {src, x, y, width, height, dur} instead`);
+              continue;
+            }
+            if (!/^data:/i.test(rawHref)) {
+              const cleanRel = decodeURIComponent(cleanBase).replace(/^\/+/, '').replace(/^public[\\/]+/, '');
               const diskPath = path.resolve('public', cleanRel);
               const pubRoot = path.resolve('public');
               if (!diskPath.startsWith(pubRoot + path.sep) || !fs.existsSync(diskPath) || !fs.statSync(diskPath).isFile()) {
@@ -341,7 +381,7 @@ if (phase !== 'shots') {
                 }
                 if (stFile.mtimeMs > latestPlateSrcMtime) latestPlateSrcMtime = stFile.mtimeMs;
               }
-            } else if (/^data:/i.test(rawHref) && rawHref.length < 600) {
+            } else if (rawHref.length < 600) {
               err('SE-06', `${id} (rasterPlate): inline data: <image> is too small (${rawHref.length} chars) — cannot use a 1x1 pixel stub to bypass SE-06`);
             }
             if ((im.width ?? 0) >= bw * 0.85 && (im.height ?? 0) >= bh * 0.85) {
@@ -352,7 +392,7 @@ if (phase !== 'shots') {
             err('SE-06', `${id} (rasterPlate): no <image> covers >= 85% of set bounds (${Math.round(bw)}x${Math.round(bh)} px) — a tiny icon cannot substitute for a full stage plate`);
           }
         }
-      } else {
+      } else if (!isBakedPlate) {
         if (st.shapes < TH.shapes) err('SE-06', `${id}: ${st.shapes} shapes < ${TH.shapes} (exemplar median). Add fixtures, clutter, wear — see sets.md §Detail budget`);
         if (st.colours < TH.colours) err('SE-08', `${id}: ${st.colours} distinct colours < ${TH.colours}`);
         if (st.texts < TH.texts) err('SE-07', `${id}: ${st.texts} diegetic texts < ${TH.texts} (signs, labels, notices — one must be a gag)`);
@@ -386,7 +426,7 @@ if (phase !== 'shots') {
         }
       }
       if (!st.moves) warn('SE-12', `${id}: nothing in the set changes over time — add life driven by o.t (LED pulse, fan, smoke, leaves, clock; sets.md §7)`);
-      if (!d.rasterPlate && st.glow < TH.glow) err('SE-10', `${id}: no light source glow (url(#glowY)) — every location has a visible light source`);
+      if (!isBakedPlate && st.glow < TH.glow) err('SE-10', `${id}: no light source glow (url(#glowY)) — every location has a visible light source`);
       // SE-14: diegetic sign clipped on set plate camera
       if (!lineWaived(setsSrc, 'SE-14', id)) {
         const cam = d.plateCam ?? [W / 2, H / 2 + 190, 1];
@@ -405,7 +445,7 @@ if (phase !== 'shots') {
         }
       }
       // SE-19: Anti-Clone-Stamp Botanical & Prop Variety Guard
-      if (!d.rasterPlate && !lineWaived(setsSrc, 'SE-19', id)) {
+      if (!isBakedPlate && !lineWaived(setsSrc, 'SE-19', id)) {
         const L = d.render({t: 1, ...(d.plateOpts ?? {})});
         const setSvg = renderToStaticMarkup(
           React.createElement('svg', null, L.far, L.back, ...(L.mid ?? []).map((m) => React.createElement('g', {key: m.key}, m.node)), L.fg),
@@ -1174,7 +1214,7 @@ if (phase !== 'design') {
           warn('MO-17', `${tag}: actor '${a.id}' has ${A.leap.length} leaps in one ${dur.toFixed(1)}s shot (max 2 recommended) — avoid bouncy slapstick spam`);
           markHot(r.i, 'MO-17');
         }
-        let prevEnd = -Infinity;
+        const resolvedLeaps = [];
         for (const [li, lp] of A.leap.entries()) {
           let lt = NaN;
           try { lt = typeof lp.at === 'number' ? r.t0 + lp.at : P.tAt(lp.at); } catch {}
@@ -1187,16 +1227,21 @@ if (phase !== 'design') {
           if (!(lh >= 12 && lh <= 220) || !(ldur >= 0.25 && ldur <= 1.8)) {
             err('MO-17', `${tag}: actor '${a.id}' leap[${li}] has out-of-bounds physics (h=${lh}, dur=${ldur}; expected h in 12..220 px, dur in 0.25..1.8 s)`);
           }
-          if (lt < prevEnd && !waived('MO-17', r.name)) {
-            err('MO-17', `${tag}: actor '${a.id}' leap[${li}] at ${lt.toFixed(2)}s overlaps previous leap ending at ${prevEnd.toFixed(2)}s`);
-          }
-          prevEnd = Math.max(prevEnd, lt + Math.max(0.25, ldur) * 0.85);
           const curExpr = scalarKeyAt(A.e, 'neutral', r, P, lt + 0.1);
           if ((curExpr === 'sad' || curExpr === 'cry' || curExpr === 'deadpan') && !waived('MO-15', r.name)) {
             warn('MO-15', `${tag}: actor '${a.id}' triggers cartoon leap while expression is '${curExpr}' — verify story-motivation restraint (actor-api.md)`);
             markHot(r.i, 'MO-15');
           }
+          resolvedLeaps.push({li, lt, ldur});
           strips.push({name: `s${String(i).padStart(2, '0')}_${a.id}_leap${li ? li + 1 : ''}`, t0: +Math.max(r.t0, lt - 0.1).toFixed(2), t1: +Math.min(r.t1, lt + Math.max(0.25, ldur) + 0.15).toFixed(2), n: 8, why: 'leap'});
+        }
+        resolvedLeaps.sort((p, q) => p.lt - q.lt);
+        let prevEnd = -Infinity;
+        for (const item of resolvedLeaps) {
+          if (item.lt < prevEnd && !waived('MO-17', r.name)) {
+            err('MO-17', `${tag}: actor '${a.id}' leap[${item.li}] at ${item.lt.toFixed(2)}s overlaps another leap ending at ${prevEnd.toFixed(2)}s`);
+          }
+          prevEnd = Math.max(prevEnd, item.lt + Math.max(0.25, item.ldur) * 0.85);
         }
       }
       if (Array.isArray(A.pop) && A.pop.length > 0) {

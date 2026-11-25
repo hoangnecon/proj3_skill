@@ -1,11 +1,12 @@
 import React, {useMemo} from 'react';
-import {AbsoluteFill, Audio, staticFile, useCurrentFrame} from 'remotion';
+import {AbsoluteFill, Audio, Loop, OffthreadVideo, staticFile, useCurrentFrame} from 'remotion';
 import {Defs, FONT, L, PAL, S, E} from './kit';
 import {Person, POSES, Pose, poseMix, Expr, Look, LegMode} from './chars';
 import {PersonSide, SIDE_CYCLE, SideLegs, SideArms} from './side';
 import {PersonBack} from './back';
 import {Person3Q} from './threeq';
 import {SETS, SetLayers, Item, SetOpts} from './sets';
+import type {VideoPlateSpec} from './sets/types';
 import {OverView} from './overlays';
 import {Actor, DURATION, ExtraDef, FPS, Keys, Shot, TT, WORDS, abs, resolveShots, tAt} from './engine';
 import {FRAME_W, FRAME_H, CAPTION_Y} from './format';
@@ -698,7 +699,6 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx; renderLayer?: 'all' | 'far' | 'ne
   let sqSx = 1;
   let sqSy = 1;
   let sqDy = 0;
-  let sqShadowScale = 1;
   let sqDustTakeoff = false;
   let sqDustLand = false;
   if (!a.mount && !a.ride) {
@@ -714,7 +714,6 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx; renderLayer?: 'all' | 'far' | 'ne
         sqSx *= sm.sx;
         sqSy *= sm.sy;
         sqDy += sm.dy;
-        sqShadowScale = Math.min(sqShadowScale, sm.shadowScale);
         if (lp.dust !== false) {
           if (sm.takeoffDust) sqDustTakeoff = true;
           if (sm.landingDust) sqDustLand = true;
@@ -743,6 +742,7 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx; renderLayer?: 'all' | 'far' | 'ne
   const showLandingDust = renderLayer !== 'far' && !a.mount && !a.ride && (jumpState.landingBurst || sqDustLand);
   const showTakeoffDust = renderLayer !== 'far' && !a.mount && !a.ride && sqDustTakeoff;
   const totalAlt = Math.max(0, hop + arcY + turnHop - pImp.dy - sqDy);
+  const groundSquashSpread = sqDy === 0 && sqSx > 1 ? 1 + (sqSx - 1) * 0.35 : 1;
   const bodyTransform = `translate(${x + sh} ${y - hop - arcY + bob + pImp.dy - turnHop + sqDy})${rotStr} scale(${s * sx * sqSx} ${s * sqSy})`;
 
   if (!showShadow && !fxList && !showLandingDust && !showTakeoffDust) {
@@ -758,8 +758,8 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx; renderLayer?: 'all' | 'far' | 'ne
         <GroundShadow
           x={x + sh}
           y={y + 4}
-          rx={(poseLegs === 'fall' ? 135 : 82) * s * sqShadowScale}
-          ry={18 * s * sqShadowScale}
+          rx={(poseLegs === 'fall' ? 135 : 82) * s * groundSquashSpread}
+          ry={18 * s}
           alt={totalAlt}
         />
       )}
@@ -795,6 +795,23 @@ export const LayerG: React.FC<{d: number; cam: [number, number, number]; childre
   const x = FRAME_W / 2 + (cx - FRAME_W / 2) * d;
   const y = FRAME_H / 2 + (cy - FRAME_H / 2) * d;
   return <g transform={`translate(${FRAME_W / 2} ${FRAME_H / 2}) scale(${kd}) translate(${-x} ${-y})`}>{children}</g>;
+};
+
+/** Pre-baked seamless loop video backdrop rendered via Remotion <OffthreadVideo> in world space (depth 1). */
+export const VideoPlateLayer: React.FC<{vp: VideoPlateSpec}> = ({vp}) => {
+  const loopFrames = Math.max(1, Math.round((vp.dur ?? 4) * FPS));
+  const cleanSrc = vp.src.replace(/^\/+/, '').replace(/^public\/+/, '');
+  return (
+    <foreignObject x={vp.x} y={vp.y} width={vp.width} height={vp.height}>
+      <Loop durationInFrames={loopFrames} layout="none">
+        <OffthreadVideo
+          muted
+          src={staticFile(cleanSrc)}
+          style={{width: '100%', height: '100%', display: 'block', objectFit: 'fill'}}
+        />
+      </Loop>
+    </foreignObject>
+  );
 };
 
 const Captions: React.FC<{t: number}> = ({t}) => {
@@ -1101,7 +1118,10 @@ export const Film: React.FC = () => {
     <>
       {layers.far && <LayerG d={0.5} cam={cam}>{layers.far}</LayerG>}
       {shot.dof === true && layers.far && <rect width={FRAME_W} height={FRAME_H} fill={PAL.paper} opacity={0.14} />}
-      <LayerG d={1} cam={cam}>{layers.back}</LayerG>
+      <LayerG d={1} cam={cam}>
+        {def.videoPlate && <VideoPlateLayer vp={def.videoPlate} />}
+        {layers.back}
+      </LayerG>
       <LayerG d={1} cam={cam}>{midItems.map((m) => <g key={m.key}>{m.node}</g>)}</LayerG>
       {fgItems.length > 0 && <LayerG d={1.2} cam={cam}>{fgItems.map((m) => <g key={m.key}>{m.node}</g>)}</LayerG>}
       {layers.fg && <LayerG d={1.3} cam={cam}>{layers.fg}</LayerG>}

@@ -335,11 +335,23 @@ def _check_run_command(payload: dict) -> None:
         r'[^\r\n;&|]*' + protected_target_re,
         re.I,
     )
-    inline_code_tamper_re = re.compile(
-        r'\b(?:python3?|py|node)\b[^\r\n;&|]*\s(?:-c|-e|--eval)\s[^\r\n]*' + protected_target_re,
+    inline_code_head_re = re.compile(
+        r'\b(?:python3?|py|node)\b[^\r\n;&|]*\s(?:-c|-e|--eval)\s',
         re.I,
     )
-    if tamper_re.search(cmd) or inline_code_tamper_re.search(cmd):
+    inline_code_mut_re = re.compile(
+        r'(?:write_text|write_bytes|writeFileSync|writeFile|appendFileSync|appendFile|'
+        r'createWriteStream|unlinkSync|unlink|rmSync|rmdirSync|remove|rmtree|rename|replace|'
+        r'truncate|copyfile|copy2|shutil\.|os\.remove|os\.unlink|os\.replace|os\.rename|'
+        r'open\s*\([^)]*(?:,\s*[\'"][wa+][^\'"]*[\'"]|mode\s*=\s*[\'"][wa+]))',
+        re.I,
+    )
+    is_inline_tamper = bool(
+        inline_code_head_re.search(cmd)
+        and re.search(protected_target_re, cmd, re.I)
+        and inline_code_mut_re.search(cmd)
+    )
+    if tamper_re.search(cmd) or is_inline_tamper:
         _deny(
             "[SV-GUARD H4] Direct shell or inline-script modification/deletion of protected logs, gates/log.jsonl, qa/review/*, CI reports, or standards/* is forbidden. "
             "Use scripts/sv_cli.py commands only."

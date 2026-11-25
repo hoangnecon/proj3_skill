@@ -1,5 +1,6 @@
 // Cross-platform headless ANGLE WebGL baker for opt-in pre-baked atmospheric plates & loop MP4s (G4).
-// Uses @remotion/renderer's Chromium (with playwright-core fallback) and load.mjs's cross-platform FFmpeg discovery.
+// Tested against @remotion/renderer@4.0.250 (automatically falls back to playwright-core if Remotion's
+// internal browser/CDP helper signature changes in a future version).
 //
 // Usage:
 //   1) Static PNG plate (default):
@@ -54,6 +55,7 @@ function resolveNodeModuleFile(absRoot, subRel) {
 
 function startStaticServer(rootDir) {
   const absRoot = path.resolve(rootDir);
+  let missingDepErr = null;
   return new Promise((resolve) => {
     const server = http.createServer((req, res) => {
       const reqUrl = (req.url || '/').split('?')[0];
@@ -61,7 +63,16 @@ function startStaticServer(rootDir) {
       const rel = decodeURIComponent(reqUrl).replace(/^\/+/, '');
       let fullPath = null;
       if (rel.startsWith('node_modules/')) {
-        fullPath = resolveNodeModuleFile(absRoot, rel.slice('node_modules/'.length));
+        const subRel = rel.slice('node_modules/'.length);
+        fullPath = resolveNodeModuleFile(absRoot, subRel);
+        if (!fullPath && /^(roughjs|pixi\.js|pixi-filters)\b/.test(subRel)) {
+          const pkg = subRel.split('/')[0];
+          missingDepErr = missingDepErr ?? (
+            `Missing optional atmospheric-plate package '${pkg}' (${rel}). ` +
+            `Install once via: npm install --no-save roughjs@4.6.6 pixi.js@8.6.6 pixi-filters@6.0.5 ` +
+            `(or set SV_ROUGH_PIXI_MODULES=/path/to/node_modules).`
+          );
+        }
       } else {
         const candidate = path.resolve(absRoot, rel);
         if (!candidate.startsWith(absRoot + path.sep) && candidate !== absRoot) {
@@ -83,7 +94,7 @@ function startStaticServer(rootDir) {
       });
       fs.createReadStream(fullPath).pipe(res);
     });
-    server.listen(0, '127.0.0.1', () => resolve({ server, port: server.address().port }));
+    server.listen(0, '127.0.0.1', () => resolve({ server, port: server.address().port, getMissingDepErr: () => missingDepErr }));
   });
 }
 
@@ -178,13 +189,25 @@ async function captureJob(job, { goto, evalFn, screenshotBuf, getPageErr }) {
   console.log(`[rough_pixi_bake] ${job.out} (${job.width}x${job.height}, ${job.frames}f @ ${job.fps}fps) baked in ${((performance.now() - t0) / 1000).toFixed(1)}s`);
 }
 
-async function bakeWithRemotion(baseUrl, jobs) {
+async function bakeWithRemotion(baseUrl, jobs, getMissingDepErr) {
   const { openBrowser } = await import('@remotion/renderer');
   const browser = await openBrowser('chrome', { chromiumOptions: { gl: 'angle' }, logLevel: 'error' });
+  if (typeof browser?.newPage !== 'function') {
+    await browser?.close?.({ silent: true }).catch(() => {});
+    const apiErr = new Error('REMOTION_INTERNAL_API_CHANGED: browser.newPage is unavailable');
+    apiErr.isRemotionApiMismatch = true;
+    throw apiErr;
+  }
   try {
     const dummySourceMap = { getSourceMap: async () => null };
     for (const job of jobs) {
       const page = await browser.newPage(dummySourceMap, 'error', false);
+      if (typeof page?._client !== 'function') {
+        await page?.close?.().catch(() => {});
+        const apiErr = new Error('REMOTION_INTERNAL_API_CHANGED: page._client is unavailable');
+        apiErr.isRemotionApiMismatch = true;
+        throw apiErr;
+      }
       try {
         await page.setViewport({ width: job.width, height: job.height, deviceScaleFactor: 1 });
         const relUrl = job.html.replace(/\\/g, '/').replace(/^\/+/, '');
@@ -199,7 +222,7 @@ async function bakeWithRemotion(baseUrl, jobs) {
         await captureJob(job, {
           goto: () => page.goto({ url, timeout: 45000 }),
           evalFn: (fn, arg) => (arg === undefined ? page.evaluate(fn) : page.evaluate(fn, arg)),
-          getPageErr: () => pageErr,
+          getPageErr: () => getMissingDepErr?.() || pageErr,
           screenshotBuf: async (fmt) => {
             const res = await client.send('Page.captureScreenshot', {
               format: fmt,
@@ -222,7 +245,7 @@ async function bakeWithRemotion(baseUrl, jobs) {
   }
 }
 
-async function bakeWithPlaywright(baseUrl, jobs) {
+async function bakeWithPlaywright(baseUrl, jobs, getMissingDepErr) {
   const { chromium } = await import('playwright-core');
   const candidates = [
     process.env.CHROME_PATH,
@@ -250,7 +273,7 @@ async function bakeWithPlaywright(baseUrl, jobs) {
       await captureJob(job, {
         goto: () => page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 }),
         evalFn: (fn, arg) => (arg === undefined ? page.evaluate(fn) : page.evaluate(fn, arg)),
-        getPageErr: () => pageErr,
+        getPageErr: () => getMissingDepErr?.() || pageErr,
         screenshotBuf: async (fmt) => {
           const { data } = await cdp.send('Page.captureScreenshot', {
             format: fmt,
@@ -271,16 +294,25 @@ async function bakeWithPlaywright(baseUrl, jobs) {
 
 async function main() {
   const { root, jobs } = parseArgs(process.argv);
-  const { server, port } = await startStaticServer(root);
+  const { server, port, getMissingDepErr } = await startStaticServer(root);
   const baseUrl = `http://127.0.0.1:${port}`;
   try {
-    let usedRemotion = false;
+    let hasRemotion = false;
     try {
       await import('@remotion/renderer');
-      usedRemotion = true;
+      hasRemotion = true;
     } catch {}
-    if (usedRemotion) await bakeWithRemotion(baseUrl, jobs);
-    else await bakeWithPlaywright(baseUrl, jobs);
+    if (hasRemotion) {
+      try {
+        await bakeWithRemotion(baseUrl, jobs, getMissingDepErr);
+        return;
+      } catch (remErr) {
+        const isApiMismatch = Boolean(remErr?.isRemotionApiMismatch) || (remErr instanceof TypeError && /newPage|_client|openBrowser/.test(String(remErr.message)));
+        if (!isApiMismatch) throw remErr;
+        console.warn(`[rough_pixi_bake] @remotion/renderer internal API changed (${remErr.message}); falling back to playwright-core...`);
+      }
+    }
+    await bakeWithPlaywright(baseUrl, jobs, getMissingDepErr);
   } finally {
     server.close();
   }
