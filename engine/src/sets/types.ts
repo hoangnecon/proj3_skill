@@ -32,4 +32,5 @@ export type SetDef = {
   zones?: {bgY?: number; mgY?: [number, number]; fgY?: number}; // explicit depth-lane Y coordinates for BG / MG / FG layout validation
   scaleMode?: 'normal' | 'tiny'; // declares whether this plate depicts normal human world scale or shrunken miniature world scale
   stateless?: boolean; // optional marker confirming zero transient plot props/shadows are baked into the background
+  rasterPlate?: boolean; // opt-in pre-baked atmospheric backdrop (<image> or looped plate) composited behind untouched 2D Risograph actors
 };

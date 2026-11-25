@@ -31,6 +31,7 @@ export const setStats = (id: string) => {
   return {
     id,
     shapes: count(/<(path|rect|circle|ellipse|polygon|line|text)\b/g),
+    images: count(/<image\b/g),
     colours: fills.size,
     texts: texts.length,
     textSamples: texts.slice(0, 12),

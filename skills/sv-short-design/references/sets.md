@@ -35,6 +35,10 @@ Minimum for an episode set (lint errors below these): **60 shapes, 8 colours, 2 
 1 glow**, and `bounds`. Inserts: 15 shapes, 1 text. Aim for the lobby/corridor level (100+ shapes) for
 any set that holds more than 3 shots — the camera will push in and every crop must still be rich.
 
+For scenes that opt into a pre-baked painterly/atmospheric backdrop (`rasterPlate: true`, e.g. `rough.js + PixiJS v8`
+paper grain, depth-of-field, volumetric light shafts, or bloom), see `atmospheric-plates.md`: lint `SE-06` checks for
+`>= 1` `<image>` element while `bounds`, `zones`, `SE-13`, `SE-16`, and untouched 2D Risograph cast rules remain mandatory.
+
 ## 2. Procedure
 
 1. **Location card** (in `brief.md` → Locations): what place, whose, what era/class, what time of day,

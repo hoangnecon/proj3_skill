@@ -37,6 +37,19 @@ export const segEnd = (seg: string) => Math.max(...WORDS.filter((w) => w.seg ===
 export type TT = number | string; // seconds from shot start, or an absolute word anchor
 export type Keys<T> = T | [T, TT][];
 export type ActionFx = 'dust' | 'sweat' | 'speed' | 'impact' | 'stars';
+export type ActorLeap = {
+  at: TT; // word anchor or shot-relative seconds when anticipation crouch starts
+  h?: number; // peak vertical leap height in world px (default 70)
+  dur?: number; // total 4-phase leap cycle duration in seconds (default 0.90)
+  squat?: number; // anticipation crouch scaleY (default 0.80)
+  stretch?: number; // launch stretch scaleY (default 1.24)
+  land?: number; // landing impact squash scaleY (default 0.78)
+  dust?: boolean; // emit riso-ink <DustPuff> on takeoff & landing (default true)
+};
+export type ActorPop = {
+  at: TT; // word anchor or shot-relative seconds for startle/impact pop
+  amp?: number; // restrained squash/stretch amplitude (0.08–0.14 recommended, default 0.12)
+};
 
 export type Actor = {
   id: string; // stable within a shot; the same character keeps the same id across shots
@@ -79,6 +92,9 @@ export type Actor = {
   pushTarget?: [number, number]; // world (x, y) contact point that push/pull hands lock directly onto via IK
   fx?: ActionFx[]; // procedural action FX ('dust' | 'sweat' | 'speed' | 'impact' | 'stars') rendered with the actor
   shadow?: boolean; // ground contact shadow (default true for grounded non-ghost non-fg actors; false to opt out)
+  // ---- story-motivated volume-preserving 2D squash & stretch (v6.1) ----
+  leap?: ActorLeap[]; // 4-phase cartoon leaps (anticipation -> stretch -> apex -> land squash); stagger companions +0.14–0.20s
+  pop?: ActorPop[]; // restrained startle/impact pop impulses (amp 0.08–0.14); never bounce calm dialogue or sad beats
 };
 
 export type OverKind = 'tag' | 'bubble' | 'label' | 'stamp' | 'score' | 'pin' | 'title' | 'card' | 'arrow';

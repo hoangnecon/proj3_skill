@@ -313,10 +313,14 @@ if (phase !== 'shots') {
       if (st.shapes < TH.insertShapes) err('SE-06', `${id} (insert): ${st.shapes} shapes < ${TH.insertShapes}`);
       if (st.texts < 1) err('SE-07', `${id} (insert): no diegetic text`);
     } else {
-      if (st.shapes < TH.shapes) err('SE-06', `${id}: ${st.shapes} shapes < ${TH.shapes} (exemplar median). Add fixtures, clutter, wear — see sets.md §Detail budget`);
-      if (st.colours < TH.colours) err('SE-08', `${id}: ${st.colours} distinct colours < ${TH.colours}`);
-      if (st.texts < TH.texts) err('SE-07', `${id}: ${st.texts} diegetic texts < ${TH.texts} (signs, labels, notices — one must be a gag)`);
-      if (st.halftone < TH.halftone) err('SE-09', `${id}: halftone texture used ${st.halftone}× < ${TH.halftone} (walls/floor/shade side)`);
+      if (d.rasterPlate) {
+        if ((st.images ?? 0) < 1) err('SE-06', `${id} (rasterPlate): renders 0 <image> elements — mount the pre-baked plate via <image href={staticFile(...)} /> or remove rasterPlate: true`);
+      } else {
+        if (st.shapes < TH.shapes) err('SE-06', `${id}: ${st.shapes} shapes < ${TH.shapes} (exemplar median). Add fixtures, clutter, wear — see sets.md §Detail budget`);
+        if (st.colours < TH.colours) err('SE-08', `${id}: ${st.colours} distinct colours < ${TH.colours}`);
+        if (st.texts < TH.texts) err('SE-07', `${id}: ${st.texts} diegetic texts < ${TH.texts} (signs, labels, notices — one must be a gag)`);
+        if (st.halftone < TH.halftone) err('SE-09', `${id}: halftone texture used ${st.halftone}× < ${TH.halftone} (walls/floor/shade side)`);
+      }
       const pl = plateStats[id];
       if (!pl) err('SE-13', `${id}: plate not measured yet — run node scripts/design.mjs`);
       else if ((pl.measured ?? pl.mtime) * 1000 < fs.statSync('src/episode/sets.tsx').mtimeMs) err('SE-13', `${id}: plate is older than src/episode/sets.tsx — re-render with node scripts/design.mjs --only set:${id}`);
@@ -345,7 +349,7 @@ if (phase !== 'shots') {
         }
       }
       if (!st.moves) warn('SE-12', `${id}: nothing in the set changes over time — add life driven by o.t (LED pulse, fan, smoke, leaves, clock; sets.md §7)`);
-      if (st.glow < TH.glow) err('SE-10', `${id}: no light source glow (url(#glowY)) — every location has a visible light source`);
+      if (!d.rasterPlate && st.glow < TH.glow) err('SE-10', `${id}: no light source glow (url(#glowY)) — every location has a visible light source`);
       // SE-14: diegetic sign clipped on set plate camera
       if (!lineWaived(setsSrc, 'SE-14', id)) {
         const cam = d.plateCam ?? [W / 2, H / 2 + 190, 1];
@@ -364,7 +368,7 @@ if (phase !== 'shots') {
         }
       }
       // SE-19: Anti-Clone-Stamp Botanical & Prop Variety Guard
-      if (!lineWaived(setsSrc, 'SE-19', id)) {
+      if (!d.rasterPlate && !lineWaived(setsSrc, 'SE-19', id)) {
         const L = d.render({t: 1, ...(d.plateOpts ?? {})});
         const setSvg = renderToStaticMarkup(
           React.createElement('svg', null, L.far, L.back, ...(L.mid ?? []).map((m) => React.createElement('g', {key: m.key}, m.node)), L.fg),
@@ -771,6 +775,8 @@ if (phase !== 'design') {
       for (const k of ['p', 'e', 'view', 'face', 'legs', 'arms']) if (Array.isArray(a[k])) a[k].forEach(([, tt]) => visitTT(tt, `${at}.${k}`));
       for (const [x, y] of a.talk ?? []) { visitTT(x, at + '.talk'); visitTT(y, at + '.talk'); }
       for (const r of a.reach ?? []) visitTT(r.at, at + '.reach');
+      for (const lp of a.leap ?? []) visitTT(lp.at, at + '.leap');
+      for (const pp of a.pop ?? []) visitTT(pp.at, at + '.pop');
       for (const w of a.path ?? []) visitTT(w[2], at + '.path');
       visitTT(a.enter, at + '.enter'); visitTT(a.exit, at + '.exit');
       if (a.ride && !(s.actors ?? []).some((c) => c.id === a.ride)) err('MO-07', `${at}: rides '${a.ride}' who is not in the shot`);
@@ -828,6 +834,8 @@ if (phase !== 'design') {
       if (A.pushTarget) n += 1;
       if (A.ride) n += 1;
       if (Array.isArray(A.reach) && A.reach.length) n += A.reach.length;
+      if (Array.isArray(A.leap) && A.leap.length) n += A.leap.length;
+      if (Array.isArray(A.pop) && A.pop.length) n += A.pop.length;
       for (const k of ['p', 'e', 'view', 'face', 'legs', 'arms']) {
         if (Array.isArray(A[k]) && A[k].length >= 2) n += 1;
       }
@@ -1030,7 +1038,7 @@ if (phase !== 'design') {
       err('CA-04', `${tag}: first shot in '${r.set}' is not an establishing frame (zoom ${Math.min(k0, k1)} > 1.2)`);
     // something must change in every shot (actor motion, camera move, set state, talk, expression, overlay)
     const lives = r.cam2 || (Array.isArray(s.camKeys) && s.camKeys.length >= 2) || (s.keys && Object.keys(s.keys).length) || (s.over ?? []).length || s.of || s.punch ||
-      (s.actors ?? []).some((A) => A.path || A.reach || A.talk || A.hop || A.shake || A.pant || A.ride || A.arcH || A.mount || A.pushTarget || (A.fx && A.fx.length) || A.wind || ['p', 'e', 'legs', 'arms', 'view'].some((k) => Array.isArray(A[k]))) ||
+      (s.actors ?? []).some((A) => A.path || A.reach || (A.leap && A.leap.length) || (A.pop && A.pop.length) || A.talk || A.hop || A.shake || A.pant || A.ride || A.arcH || A.mount || A.pushTarget || (A.fx && A.fx.length) || A.wind || ['p', 'e', 'legs', 'arms', 'view'].some((k) => Array.isArray(A[k]))) ||
       (s.extras ?? []).some((E) => (E.path && E.path.length > 1) || Array.isArray(E.pose) || Array.isArray(E.expr));
     if (!lives && !waived('MO-08', r.name)) warn('MO-08', `${tag}: nothing moves or changes for ${dur.toFixed(1)} s — add a camera drift, an expression key or a gesture`);
     // MO-16: Long-Shot Choreography Density Guard (long_16x9 rich multi-beat shots > 5.0 s)
@@ -1124,6 +1132,13 @@ if (phase !== 'design') {
         for (const t of tt) strips.push({name: `s${String(i).padStart(2, '0')}_${a.id}_legs`, t0: +Math.max(r.t0, t - 0.5).toFixed(2), t1: +Math.min(r.t1, t + 0.9).toFixed(2), n: 8, why: 'sit/stand'});
       }
       if (A.ride) strips.push({name: `s${String(i).padStart(2, '0')}_${a.id}_ride`, t0: r.t0, t1: +Math.min(r.t1, r.t0 + 2.5).toFixed(2), n: 8, why: 'piggyback'});
+      for (const [li, lp] of (A.leap ?? []).entries()) {
+        try {
+          const lt = typeof lp.at === 'number' ? r.t0 + lp.at : P.tAt(lp.at);
+          const ldur = Math.max(0.25, lp.dur ?? 0.9);
+          strips.push({name: `s${String(i).padStart(2, '0')}_${a.id}_leap${li ? li + 1 : ''}`, t0: +Math.max(r.t0, lt - 0.1).toFixed(2), t1: +Math.min(r.t1, lt + ldur + 0.15).toFixed(2), n: 8, why: 'leap'});
+        } catch {}
+      }
       if (A.seatH !== undefined && !waived('MO-12', r.name)) {
         const bed = P.SETS[r.set]?.bed;
         const hasSeatProp = (s.extras ?? []).some((e) => /bench|stool|chair|desk/i.test(e.k));

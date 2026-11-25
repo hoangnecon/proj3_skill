@@ -19,6 +19,8 @@ import {EX_LOOKS} from './exemplar/looks';
 import {
   springSettle,
   parabolicArc,
+  evalSquashLeap,
+  evalPopSquash,
   poseImpulse,
   computeSubjectKinematics,
   inferHandKind,
@@ -693,13 +695,51 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx; renderLayer?: 'all' | 'far' | 'ne
     }
   }
 
+  let sqSx = 1;
+  let sqSy = 1;
+  let sqDy = 0;
+  let sqShadowScale = 1;
+  let sqDustTakeoff = false;
+  let sqDustLand = false;
+  if (!a.mount && !a.ride) {
+    for (const lp of a.leap ?? []) {
+      const sm = evalSquashLeap(t - abs(lp.at, shot), {
+        height: lp.h,
+        dur: lp.dur,
+        squat: lp.squat,
+        stretch: lp.stretch,
+        land: lp.land,
+      });
+      if (sm.active) {
+        sqSx *= sm.sx;
+        sqSy *= sm.sy;
+        sqDy += sm.dy;
+        sqShadowScale = Math.min(sqShadowScale, sm.shadowScale);
+        if (lp.dust !== false) {
+          if (sm.takeoffDust) sqDustTakeoff = true;
+          if (sm.landingDust) sqDustLand = true;
+        }
+      }
+    }
+    for (const pp of a.pop ?? []) {
+      const sm = evalPopSquash(t - abs(pp.at, shot), pp.amp);
+      if (sm.active) {
+        sqSx *= sm.sx;
+        sqSy *= sm.sy;
+        sqDy += sm.dy;
+      }
+    }
+  }
+
   const rotStr = mountRot ? ` rotate(${mountRot.toFixed(2)})` : '';
   const showShadow = renderLayer !== 'far' && !a.fg && !a.mount && !a.ride && !look.ghost && a.shadow !== false;
   const fxList = renderLayer !== 'far' && a.fx && a.fx.length > 0 ? a.fx : null;
-  const showLandingDust = renderLayer !== 'far' && !a.mount && !a.ride && jumpState.landingBurst;
-  const bodyTransform = `translate(${x + sh} ${y - hop - arcY + bob + pImp.dy - turnHop})${rotStr} scale(${s * sx} ${s})`;
+  const showLandingDust = renderLayer !== 'far' && !a.mount && !a.ride && (jumpState.landingBurst || sqDustLand);
+  const showTakeoffDust = renderLayer !== 'far' && !a.mount && !a.ride && sqDustTakeoff;
+  const totalAlt = Math.max(0, hop + arcY + turnHop - pImp.dy - sqDy);
+  const bodyTransform = `translate(${x + sh} ${y - hop - arcY + bob + pImp.dy - turnHop + sqDy})${rotStr} scale(${s * sx * sqSx} ${s * sqSy})`;
 
-  if (!showShadow && !fxList && !showLandingDust) {
+  if (!showShadow && !fxList && !showLandingDust && !showTakeoffDust) {
     return (
       <g transform={bodyTransform} opacity={op < 1 ? op : undefined}>
         {body}
@@ -712,12 +752,15 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx; renderLayer?: 'all' | 'far' | 'ne
         <GroundShadow
           x={x + sh}
           y={y + 4}
-          rx={(poseLegs === 'fall' ? 135 : 82) * s}
-          ry={18 * s}
-          alt={Math.max(0, hop + arcY + turnHop - pImp.dy)}
+          rx={(poseLegs === 'fall' ? 135 : 82) * s * sqShadowScale}
+          ry={18 * s * sqShadowScale}
+          alt={totalAlt}
         />
       )}
       <g transform={bodyTransform}>{body}</g>
+      {showTakeoffDust && (
+        <DustPuff key="fx-takeoff-dust" x={x} y={y + 2} t={t} dir={dir} seed={ph + 1.7} scale={s * 0.72} intensity={0.85} />
+      )}
       {showLandingDust && (
         <DustPuff key="fx-land-dust" x={x} y={y + 2} t={t} dir={dir} seed={ph + 3.1} scale={s * 0.85} />
       )}

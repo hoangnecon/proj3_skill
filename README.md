@@ -1,4 +1,4 @@
-# story-video-skills (`v6.0.0`)
+# story-video-skills (`v6.1.0`)
 
 An anti-bypass, **3-track** gated production suite for **Vietnamese 2D story videos** in Remotion ("riso ink" flat vector style, canonical New Nhím `CH-11`, empirically calibrated `v4.0` **Hải Đăng** narration at `~4.57 wps` / natural `pitch_ratio: 1.00`):
 
@@ -37,6 +37,7 @@ python scripts/sv_cli.py doctor --stage G1 --json
 2. **Unified CLI & Formal JSON API:** `scripts/sv_cli.py` standardizes every command, exit code (`0..5`), and `--json` envelope (`schemas/cli_envelope.schema.json`).
 3. **Antigravity Native Lifecycle Hooks (`hooks.json` + `hooks/sv_guard.py`):** Hard `PreToolUse` `deny` blocks edits to read-only suite files (`H1`), log/report tampering (`H2`/`H4`), out-of-order phase edits (`H3`), premature `deliver.mjs` (`H5`), and blind review/gate passes lacking real `read_file` calls on rendered JPEG evidence in `transcriptPath` (`H6`).
 4. **General First-Principles CI:** Empirically locked `v4.0` voice corridor (`4.42–4.74 wps` Short / `4.40–4.74 wps` Long), ground-plane contact invariant (`GE-21`), wide-shot partial-body guard (`PR-10`), and 3-shot `context_window` `continuity` blind review.
+5. **Opt-In Atmospheric Plates & Restrained 2D Squash & Stretch (`v6.1.0`):** Sets may opt into `rasterPlate: true` using the aspect-agnostic `rough.js + PixiJS v8` toolkit (`scripts/rough_pixi_bake.mjs`) while keeping 2D Risograph characters untouched on top; `Actor.leap` and `Actor.pop` (`engine/src/anim.ts`) add story-motivated, volume-preserving 2D squash-and-stretch with automatic `GroundShadow` scaling and `<DustPuff>` bursts.
 
 ## Repository Layout
 ```text

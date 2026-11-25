@@ -623,6 +623,136 @@ def test_9_long_unit_gate_cli_and_lg10(ep_long: Path) -> None:
     print("[PASS] Test 9: Long G5.U1 CLI routing + unit-scoped LG-10 + read_evidence verified")
 
 
+def test_10_v61_raster_plate_and_squash_stretch(ep_short: Path) -> None:
+    """Verify v6.1.0 opt-in rasterPlate lint, rough/Pixi script syntax, and anim.ts squash-stretch kinematics."""
+    # (a) Syntax check all 4 generalized atmospheric-plate scripts
+    for script_name in ("rough_helpers.mjs", "pixi_stage.mjs", "pixi_fx.mjs", "rough_pixi_bake.mjs"):
+        r_chk = _run(["node", "--check", str(SUITE / "engine" / "scripts" / script_name)], cwd=SUITE)
+        assert r_chk.returncode == 0, f"syntax error in {script_name}:\n{r_chk.stderr}"
+
+    # (b) Bundle & execute anim.ts squashStretch / evalSquashLeap / evalPopSquash invariants + compile-check Film.tsx
+    probe_js = (
+        "import {build} from 'esbuild';\n"
+        "import fs from 'node:fs';\n"
+        "import path from 'node:path';\n"
+        "import {pathToFileURL} from 'node:url';\n"
+        "const stub = { name: 'stub', setup(b) {\n"
+        "  b.onResolve({filter: /^@remotion\\/google-fonts|^remotion$/}, (a) => ({path: a.path, namespace: 'st'}));\n"
+        "  b.onLoad({filter: /.*/, namespace: 'st'}, (a) => ({\n"
+        "    contents: a.path.startsWith('@remotion') ? 'export const loadFont = () => ({fontFamily:\"Be Vietnam Pro\"});' : 'export const AbsoluteFill=()=>null;export const Audio=()=>null;export const staticFile=(s)=>s;export const useCurrentFrame=()=>0;',\n"
+        "    loader: 'js',\n"
+        "  }));\n"
+        "}};\n"
+        "const r = await build({\n"
+        "  entryPoints: [path.resolve('src/anim.ts')], bundle: true, write: false, platform: 'node', format: 'esm',\n"
+        "  external: ['react', 'react-dom', 'react/jsx-runtime'], plugins: [stub], logLevel: 'error',\n"
+        "});\n"
+        "await build({\n"
+        "  entryPoints: [path.resolve('src/Film.tsx')], bundle: true, write: false, platform: 'node', format: 'esm',\n"
+        "  jsx: 'automatic', external: ['react', 'react-dom', 'react/jsx-runtime'], plugins: [stub], logLevel: 'error',\n"
+        "});\n"
+        "fs.mkdirSync(path.resolve('qa'), {recursive: true});\n"
+        "const out = path.resolve('qa/.sv-anim-test.mjs');\n"
+        "fs.writeFileSync(out, r.outputFiles[0].text);\n"
+        "try {\n"
+        "  const M = await import(pathToFileURL(out).href);\n"
+        "  const s1 = M.squashStretch(1.25);\n"
+        "  if (Math.abs(s1.sx * s1.sy - 1) > 1e-6) throw new Error('volume drift');\n"
+        "  if (M.squashStretch(0.1).sy !== 0.65 || M.squashStretch(5).sy !== 1.45) throw new Error('clamp failed');\n"
+        "  if (M.evalSquashLeap(-0.1).active || M.evalSquashLeap(1.2).active) throw new Error('leap bounds');\n"
+        "  const ant = M.evalSquashLeap(0.08, {height: 80, dur: 0.9});\n"
+        "  if (!ant.active || ant.dy !== 0 || ant.sy >= 1 || ant.sx <= 1) throw new Error('anticipation failed');\n"
+        "  const air = M.evalSquashLeap(0.405, {height: 80, dur: 0.9});\n"
+        "  if (!air.active || air.dy >= -50 || air.shadowScale >= 0.8) throw new Error('airborne apex failed');\n"
+        "  const land = M.evalSquashLeap(0.71, {height: 80, dur: 0.9});\n"
+        "  if (!land.active || land.dy !== 0 || land.sy >= 1 || !land.landingDust) throw new Error('landing squash failed');\n"
+        "  for (let i = 0; i <= 20; i++) {\n"
+        "    const sm = M.evalSquashLeap((i / 20) * 0.9, {height: 80, dur: 0.9});\n"
+        "    if (Math.abs(sm.sx * sm.sy - 1) > 1e-6) throw new Error('leap volume drift');\n"
+        "  }\n"
+        "  const pop = M.evalPopSquash(0.08, 0.12);\n"
+        "  if (!pop.active || Math.abs(pop.sx * pop.sy - 1) > 1e-6) throw new Error('pop volume drift');\n"
+        "  if (M.evalPopSquash(0.6, 0.12).active) throw new Error('pop end bound');\n"
+        "  console.log('ANIM_OK');\n"
+        "} finally { fs.rmSync(out, {force: true}); }\n"
+    )
+    r_anim = _run(["node", "--input-type=module", "-e", probe_js], cwd=ep_short)
+    assert r_anim.returncode == 0 and "ANIM_OK" in r_anim.stdout, f"anim.ts test failed:\n{r_anim.stdout}\n{r_anim.stderr}"
+
+    # (c) rasterPlate design lint: missing <image> fails SE-06, present <image> passes SE-06..SE-10
+    (ep_short / "src" / "episode" / "sets.tsx").write_text(
+        "import React from 'react';\n"
+        "import {R, S} from '../kit';\n"
+        "import type {SetDef} from '../sets/types';\n"
+        "export const EPISODE_SETS: Record<string, SetDef> = {\n"
+        "  badPlate: {\n"
+        "    title: 'Nền thiếu ảnh',\n"
+        "    bed: 'outdoor',\n"
+        "    rasterPlate: true,\n"
+        "    bounds: [-200, -200, 1280, 2120],\n"
+        "    zones: {bgY: 1100, mgY: [1540, 1760], fgY: 1860},\n"
+        "    render: () => ({back: <g><S d={R(-200, -200, 1480, 2320)} f='sky2' /></g>, mid: []}),\n"
+        "  },\n"
+        "  goodPlate: {\n"
+        "    title: 'Nền vẽ tay hoàn chỉnh',\n"
+        "    bed: 'outdoor',\n"
+        "    rasterPlate: true,\n"
+        "    bounds: [-200, -200, 1280, 2120],\n"
+        "    zones: {bgY: 1100, mgY: [1540, 1760], fgY: 1860},\n"
+        "    render: (o) => ({back: <g><image href='plates/yard.png' x={-200} y={-200} width={1480} height={2320} /><circle cx={100} cy={100} r={4 + Math.sin(o.t)} /></g>, mid: []}),\n"
+        "  },\n"
+        "};\n",
+        encoding="utf-8",
+    )
+    _run(["node", "scripts/lint.mjs", "design"], cwd=ep_short)
+    d_lint = json.loads((ep_short / "qa" / "lint.json").read_text(encoding="utf-8"))
+    d_errs = d_lint.get("errors", [])
+    assert any("[SE-06]" in e and "badPlate" in e for e in d_errs), f"badPlate must fail SE-06:\n{d_errs}"
+    assert not any(any(code in e for code in ("[SE-06]", "[SE-07]", "[SE-08]", "[SE-09]", "[SE-10]")) and "goodPlate" in e for e in d_errs), (
+        f"goodPlate should pass SE-06..SE-10:\n{d_errs}"
+    )
+
+    # (d) Actor.leap & Actor.pop anchor validation, MO-08 liveness, and leap QA strip emission
+    (ep_short / "src" / "episode" / "shotlist.ts").write_text(
+        "import type {ShotDef} from '../engine';\n"
+        "export const SHOTS: ShotDef[] = [\n"
+        "  {\n"
+        "    name: 'bad_leap_anchor',\n"
+        "    at: 's1',\n"
+        "    set: 'goodPlate',\n"
+        "    cam: [540, 1150, 1.0],\n"
+        "    actors: [{id: 'nhim', look: 'nhim', x: 540, y: 1650, s: 1.0, leap: [{at: 's1@khongco', h: 65}]}],\n"
+        "  },\n"
+        "];\n",
+        encoding="utf-8",
+    )
+    _run(["node", "scripts/lint.mjs", "shots"], cwd=ep_short)
+    s_bad = json.loads((ep_short / "qa" / "lint.json").read_text(encoding="utf-8"))
+    assert any("[AN-01]" in e and ".leap" in e for e in s_bad.get("errors", [])), f"bad leap anchor must fail AN-01:\n{s_bad}"
+
+    (ep_short / "src" / "episode" / "shotlist.ts").write_text(
+        "import type {ShotDef} from '../engine';\n"
+        "export const SHOTS: ShotDef[] = [\n"
+        "  {\n"
+        "    name: 'good_leap_pop',\n"
+        "    at: 's1',\n"
+        "    set: 'goodPlate',\n"
+        "    cam: [540, 1150, 1.0],\n"
+        "    actors: [{id: 'nhim', look: 'nhim', x: 540, y: 1650, s: 1.0, leap: [{at: 's1@Nhím', h: 65, dur: 0.85}], pop: [{at: 's1@học', amp: 0.11}]}],\n"
+        "  },\n"
+        "];\n",
+        encoding="utf-8",
+    )
+    _run(["node", "scripts/lint.mjs", "shots"], cwd=ep_short)
+    s_ok = json.loads((ep_short / "qa" / "lint.json").read_text(encoding="utf-8"))
+    assert not any("[AN-01]" in e for e in s_ok.get("errors", [])), f"valid leap/pop failed AN-01:\n{s_ok}"
+    assert not any("[MO-08]" in w for w in s_ok.get("warns", [])), f"valid leap/pop should count as live motion:\n{s_ok}"
+    strips_needed = json.loads((ep_short / "qa" / "strips_needed.json").read_text(encoding="utf-8"))
+    assert any(st.get("why") == "leap" for st in strips_needed), f"expected leap strip in strips_needed.json: {strips_needed}"
+
+    print("[PASS] Test 10: v6.1.0 rasterPlate SE-06 CI + rough/Pixi syntax + anim.ts squash-stretch & leap/pop lint verified")
+
+
 def main() -> int:
     t0 = time.perf_counter()
     test_1_validate_skills()
@@ -636,6 +766,7 @@ def main() -> int:
         test_7_general_physics_and_partial_body_ci(ep_short)
         test_8_blind_pack_continuity(ep_short)
         test_9_long_unit_gate_cli_and_lg10(ep_long)
+        test_10_v61_raster_plate_and_squash_stretch(ep_short)
     finally:
         for sub in ("ep-short", "ep-long"):
             nm = tmp / sub / "node_modules"
@@ -647,7 +778,7 @@ def main() -> int:
         shutil.rmtree(tmp, ignore_errors=True)
 
     dt = time.perf_counter() - t0
-    print(f"\nALL 9/9 v6.0.0 END-TO-END VERIFICATION TESTS PASSED in {dt:.2f}s!")
+    print(f"\nALL 10/10 v6.1.0 END-TO-END VERIFICATION TESTS PASSED in {dt:.2f}s!")
     return 0
 
 

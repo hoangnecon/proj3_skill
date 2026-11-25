@@ -24,6 +24,8 @@ sv-short-production shotlist-api). Prefer anchors: the action lands on the word 
 | `prop` | HAND_PROPS key |
 | `hop` | px bounce amplitude (joy 10–18, anger 6–10) |
 | `shake` | px tremble (fear/cold 3–5) |
+| `leap` | `[{at, h?, dur?, squat?, stretch?, land?, dust?}]` volume-preserving 4-phase cartoon leap (all views) |
+| `pop` | `[{at, amp?}]` restrained startle/impact squash-stretch pop (`amp` 0.08–0.14; all views) |
 
 ## Side view (default when `path` or `ride` is set; force with `view`)
 | Field | Meaning |
@@ -85,3 +87,12 @@ bench at that x. Arms to `down`/`hold` at the same key. Standing up: key `walk` 
 ## Piggyback
 Carrier: path + `arms: 'carry'` + `lean` 12 (automatic). Rider: `ride: '<carrierId>'`, any `e`. Both in
 the same shot; lint MO-07 checks the carrier exists. A ride always gets a motion strip.
+
+## Story-Motivated Squash & Stretch (`leap` & `pop`)
+Powered by `evalSquashLeap` and `evalPopSquash` in `src/anim.ts`, anchored directly at character feet `(x, y)` with strict volume preservation (`sx * sy === 1`) across all four views (`front`, `3q`, `side`, `back`):
+- **`leap: [{at, h?, dur?, squat?, stretch?, land?, dust?}]`** — 4-phase jump (`0–18%` anticipation crouch → `18–72%` launch stretch, parabolic arc, pre-land stretch → `72–86%` landing squash → `86–100%` elastic settle). Automatically scales `GroundShadow` with height, emits riso-ink `<DustPuff>` on takeoff and landing (`dust: false` to silence), and generates a G5 QA strip (`*_leap`). For companion/pet follow-through, stagger the companion's `at` by `+0.14–0.20 s` (`'s4@nhảy+0.16'`).
+- **`pop: [{at, amp?}]`** — brief `0.48 s` damped stretch-pop (`amp: 0.08–0.14`, default `0.12`) for sudden startles, double-takes, or physical impacts.
+- **Mandatory Restraint Rule (Zero Slapstick Overuse):**
+  - Use `leap` ONLY when the character physically hops, leaps, or celebrates with an unmistakable jump.
+  - Use `pop` ONLY on sharp reveals, surprises, or physical impacts.
+  - **NEVER** bounce characters during calm dialogue, sad/emotional scenes, deadpan narration, or steady walking. Overusing squash-and-stretch turns grounded storybook animation into rubbery slapstick.
