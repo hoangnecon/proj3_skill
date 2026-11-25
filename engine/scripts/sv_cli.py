@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unified Story Video Skills CLI & Standardized JSON API Dispatcher (v6.0.0).
+"""Unified Story Video Skills CLI & Standardized JSON API Dispatcher (v6.2.0).
 
 Single canonical CLI for Orchestrator, Executor, and Reviewer roles:
   python scripts/sv_cli.py status [--json]
@@ -7,7 +7,8 @@ Single canonical CLI for Orchestrator, Executor, and Reviewer roles:
   python scripts/sv_cli.py log init --role <r> --actor <id> --stage <G> --task "<t>" [--scope "<s>"] [--unit <U>] [--inputs p1,p2] [--json]
   python scripts/sv_cli.py log step --run <id> --action <a> [--target "<p>"] [--cmd "<c>"] [--exit-code 0] [--result ok] [--note "<n>"] [--approval user|delegated] [--user-quote "<q>"] [--json]
   python scripts/sv_cli.py log complete --run <id> --verdict <pass|fix|blocked> --outputs "<p1,p2>" --note "<n>" [--json]
-  python scripts/sv_cli.py ci <script|voice|design|shots|audio|delivery|log> [--stage <G>] [--role <r>] [--actor <id>] [--unit <U>] [--allow-fix] [--json]
+  python scripts/sv_cli.py ci <script|voice|art-direction|design|shots|audio|delivery|log> [--stage <G>] [--role <r>] [--actor <id>] [--unit <U>] [--allow-fix] [--json]
+  python scripts/sv_cli.py design score --input <draft.json> --actor <id> --run <run_id> [--json]
   python scripts/sv_cli.py review submit --batch <file.jsonl> --actor <id> --run <run_id> [--json]
   python scripts/sv_cli.py gate check <G> [--unit <U>] [--json]
   python scripts/sv_cli.py gate pass <G> --actor <orch_id> [--unit <U>] [--json]
@@ -15,7 +16,7 @@ Single canonical CLI for Orchestrator, Executor, and Reviewer roles:
 Exit Codes (standardized):
   0 = PASS / OK
   1 = Domain CI / Lint Failure
-  2 = Log-CI Failure (LG-01..LG-12)
+  2 = Log-CI Failure (LG-01..LG-13)
   3 = Verification Gate Blocked (missing upstream gate, user approval, role violation, or cooldown)
   4 = Environment / Preflight Doctor Failure
 """
@@ -38,11 +39,23 @@ import sv_log_lint as LL
 DOMAIN_STAGE_MAP = {
     "script": "G2",
     "voice": "G3",
+    "art-direction": "G4",
     "design": "G4",
     "shots": "G5",
     "audio": "G6",
     "delivery": "G7",
 }
+
+MANDATORY_G4_AXES = (
+    "style_cohesion",
+    "depth_and_lighting",
+    "perspective_and_scale",
+    "composition_and_integration",
+    "detail_density_and_variety",
+    "staging_readability",
+    "spatial_continuity",
+    "story_and_spoiler_fidelity",
+)
 
 
 def _py_for_audio() -> str:
@@ -314,6 +327,22 @@ def cmd_ci(root: Path, args: argparse.Namespace) -> None:
         else:
             errors = ["qa/voice_report.json missing — run python scripts/voice.py"]
             rc = 1
+    elif dom == "art-direction":
+        cmd = [sys.executable, str(root / "scripts" / "art_direction_lint.py")]
+        in_sha = {f: L.sha256_rel(root, f) for f in ("art_direction.json", "brief.md")}
+        rc, out, err_s, dt = _run_proc(cmd, root)
+        rep_p = root / "qa" / "art_direction_lint.json"
+        if rep_p.is_file():
+            rep = json.loads(rep_p.read_text(encoding="utf-8"))
+            errors = list(rep.get("errors", []))
+            warnings = list(rep.get("warns", []))
+            metrics = dict(rep.get("metrics") or {})
+            for k in ("sub_scenes", "locations", "art_direction_sha"):
+                if k in rep and k not in metrics:
+                    metrics[k] = rep[k]
+            out_sha["qa/art_direction_lint.json"] = L.sha256_file(rep_p)
+        elif rc != 0:
+            errors = [err_s.strip() or out.strip()[-300:] or "art_direction_lint.py failed"]
     elif dom in ("design", "shots"):
         cmd = ["node", str(root / "scripts" / "lint.mjs"), dom]
         rc, out, err_s, dt = _run_proc(cmd, root)
@@ -399,6 +428,271 @@ def cmd_ci(root: Path, args: argparse.Namespace) -> None:
             [f"python scripts/sv_cli.py log step --run <run_id> --action run_tool --target {dom} --exit-code 0 --result ok --note \"...\""]
             if ok
             else [f"Fix all {len(errors)} {dom} CI error(s) and re-run `python scripts/sv_cli.py ci {dom}`"]
+        ),
+    )
+    _emit(env, args.json)
+
+
+def cmd_design_score(root: Path, args: argparse.Namespace) -> None:
+    t0 = time.monotonic()
+    inp_p = Path(args.input)
+    if not inp_p.is_absolute():
+        inp_p = root / args.input
+    if not inp_p.is_file():
+        _emit(
+            L.make_envelope(
+                root,
+                ok=False,
+                exit_code=1,
+                command="design score",
+                stage="G4",
+                actor_role="reviewer",
+                actor_id=args.actor,
+                duration_ms=int((time.monotonic() - t0) * 1000),
+                errors=[f"draft scores file missing: {args.input}"],
+            ),
+            args.json,
+        )
+
+    try:
+        reviewer_id = L.sanitize_actor_id(args.actor)
+    except ValueError as exc:
+        _emit(
+            L.make_envelope(
+                root,
+                ok=False,
+                exit_code=1,
+                command="design score",
+                stage="G4",
+                actor_role="reviewer",
+                actor_id=args.actor,
+                duration_ms=int((time.monotonic() - t0) * 1000),
+                errors=[str(exc)],
+            ),
+            args.json,
+        )
+
+    try:
+        raw = json.loads(inp_p.read_text(encoding="utf-8"))
+    except Exception as exc:
+        _emit(
+            L.make_envelope(
+                root,
+                ok=False,
+                exit_code=1,
+                command="design score",
+                stage="G4",
+                actor_role="reviewer",
+                actor_id=reviewer_id,
+                duration_ms=int((time.monotonic() - t0) * 1000),
+                errors=[f"invalid JSON in {args.input}: {exc}"],
+            ),
+            args.json,
+        )
+
+    if not isinstance(raw, dict):
+        _emit(
+            L.make_envelope(
+                root,
+                ok=False,
+                exit_code=1,
+                command="design score",
+                stage="G4",
+                actor_role="reviewer",
+                actor_id=reviewer_id,
+                duration_ms=int((time.monotonic() - t0) * 1000),
+                errors=["draft scores JSON must be an object with 'sets' mapping or top-level set_id keys"],
+            ),
+            args.json,
+        )
+
+    if isinstance(raw.get("sets"), dict):
+        raw_sets = raw["sets"]
+    elif raw and all(isinstance(v, dict) for v in raw.values()):
+        raw_sets = raw
+    else:
+        raw_sets = {}
+
+    min_total = 82.0
+    min_dim = 7.0
+    expected_set_ids: set[str] = set()
+    art_direction_sha = L.sha256_rel(root, "art_direction.json")
+    ad_p = root / "art_direction.json"
+    if ad_p.is_file():
+        try:
+            ad_data = json.loads(ad_p.read_text(encoding="utf-8"))
+            if isinstance(ad_data, dict):
+                rubric = ad_data.get("reviewer_rubric") or {}
+                if isinstance(rubric, dict):
+                    try:
+                        if rubric.get("min_total") is not None:
+                            min_total = max(82.0, float(rubric["min_total"]))
+                    except (TypeError, ValueError):
+                        pass
+                    try:
+                        if rubric.get("min_dim") is not None:
+                            min_dim = max(7.0, float(rubric["min_dim"]))
+                    except (TypeError, ValueError):
+                        pass
+                lm = ad_data.get("location_matrix")
+                if isinstance(lm, list):
+                    for item in lm:
+                        if isinstance(item, dict) and item.get("id"):
+                            expected_set_ids.add(str(item["id"]).strip())
+        except Exception:
+            pass
+
+    vs_p = root / "qa" / "design" / "visual_spec.json"
+    if vs_p.is_file():
+        try:
+            vs_data = json.loads(vs_p.read_text(encoding="utf-8"))
+            if isinstance(vs_data, dict):
+                vs_sets = vs_data.get("sets")
+                if isinstance(vs_sets, dict):
+                    expected_set_ids.update(str(k).strip() for k in vs_sets.keys() if str(k).strip())
+                elif isinstance(vs_sets, list):
+                    for item in vs_sets:
+                        if isinstance(item, str) and item.strip():
+                            expected_set_ids.add(item.strip())
+                        elif isinstance(item, dict) and (item.get("id") or item.get("name")):
+                            expected_set_ids.add(str(item.get("id") or item.get("name")).strip())
+        except Exception:
+            pass
+
+    val_errors: list[str] = []
+    if not raw_sets:
+        val_errors.append("draft scores JSON contains 0 sets")
+
+    missing_sets = sorted(expected_set_ids - set(raw_sets.keys()))
+    if missing_sets:
+        val_errors.append(f"missing required set(s) in draft scores: {missing_sets}")
+
+    scored_sets: dict[str, dict[str, Any]] = {}
+    for set_id, set_entry in sorted(raw_sets.items()):
+        if not isinstance(set_entry, dict):
+            val_errors.append(f"set '{set_id}' entry must be an object")
+            continue
+        axes_raw = set_entry.get("axes") if isinstance(set_entry.get("axes"), dict) else set_entry
+        missing_axes = [ax for ax in MANDATORY_G4_AXES if ax not in axes_raw]
+        if missing_axes:
+            val_errors.append(f"set '{set_id}' missing mandatory axis/axes: {missing_axes}")
+            continue
+        axes_norm: dict[str, dict[str, Any]] = {}
+        scores_list: list[float] = []
+        set_bad = False
+        for ax in MANDATORY_G4_AXES:
+            ax_obj = axes_raw.get(ax)
+            if not isinstance(ax_obj, dict):
+                val_errors.append(f"set '{set_id}'.{ax} must be an object with 'score' and 'reason'")
+                set_bad = True
+                continue
+            sc_raw = ax_obj.get("score")
+            if isinstance(sc_raw, bool) or not isinstance(sc_raw, (int, float)):
+                val_errors.append(f"set '{set_id}'.{ax}.score must be a number in [0, 10] (got {sc_raw!r})")
+                set_bad = True
+                continue
+            sc_val = float(sc_raw)
+            if sc_val < 0.0 or sc_val > 10.0:
+                val_errors.append(f"set '{set_id}'.{ax}.score={sc_val} out of range [0, 10]")
+                set_bad = True
+                continue
+            reason = str(ax_obj.get("reason") or "").strip()
+            if not LL._is_meaningful_note(reason, min_words=6):
+                val_errors.append(f"set '{set_id}'.{ax}.reason must be concrete (>= 6 words, no boilerplate)")
+                set_bad = True
+                continue
+            axes_norm[ax] = {"score": sc_raw, "reason": reason}
+            scores_list.append(sc_val)
+        if not set_bad:
+            total = round(sum(scores_list) / 80.0 * 100.0, 1)
+            min_axis = min(scores_list)
+            failed_axes = [ax for ax in MANDATORY_G4_AXES if float(axes_norm[ax]["score"]) < min_dim]
+            set_ok = total >= min_total and min_axis >= min_dim
+            scored_sets[set_id] = {
+                "axes": axes_norm,
+                "total": total,
+                "min_axis": min_axis,
+                "ok": set_ok,
+                "failed_axes": failed_axes,
+            }
+
+    if val_errors:
+        _emit(
+            L.make_envelope(
+                root,
+                ok=False,
+                exit_code=1,
+                command="design score",
+                stage="G4",
+                actor_role="reviewer",
+                actor_id=reviewer_id,
+                duration_ms=int((time.monotonic() - t0) * 1000),
+                errors=val_errors,
+            ),
+            args.json,
+        )
+
+    failed_sets = [sid for sid, sd in scored_sets.items() if not sd["ok"]]
+    total_n = len(scored_sets)
+    passed_n = total_n - len(failed_sets)
+    verdict = "pass" if (total_n >= 1 and len(failed_sets) == 0) else "fix"
+
+    out_payload = {
+        "schema_version": "6.2",
+        "reviewer_id": reviewer_id,
+        "min_total": min_total,
+        "min_dim": min_dim,
+        "verdict": verdict,
+        "failed_sets": failed_sets,
+        "sets": scored_sets,
+        "submitted_at_utc": L.utc_now(),
+        "art_direction_sha": art_direction_sha,
+    }
+    out_p = root / "qa" / "design" / "g4_scores.json"
+    out_p.parent.mkdir(parents=True, exist_ok=True)
+    tmp_p = out_p.with_suffix(".json.tmp")
+    tmp_p.write_text(json.dumps(out_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp_p, out_p)
+
+    step_ref = None
+    if args.run:
+        _, step_ref = L.log_step(
+            root,
+            run_id=args.run,
+            action="submit_design_scores",
+            target="qa/design/g4_scores.json",
+            exit_code=0,
+            result=("ok" if verdict == "pass" else "fix"),
+            note=f"Submitted 8-axis G4 design scores ({passed_n}/{total_n} sets passing, verdict={verdict})",
+            metrics={
+                "sets_total": total_n,
+                "sets_passed": passed_n,
+                "failed_sets": failed_sets,
+                "verdict": verdict,
+            },
+        )
+
+    env = L.make_envelope(
+        root,
+        ok=True,
+        exit_code=0,
+        command="design score",
+        stage="G4",
+        actor_role="reviewer",
+        actor_id=reviewer_id,
+        duration_ms=int((time.monotonic() - t0) * 1000),
+        outputs_sha={"qa/design/g4_scores.json": L.sha256_file(out_p)},
+        metrics={
+            "verdict": verdict,
+            "sets_total": total_n,
+            "sets_passed": passed_n,
+            "failed_sets": failed_sets,
+            "min_total": min_total,
+            "min_dim": min_dim,
+        },
+        log_ref=step_ref,
+        next_actions=(
+            [f"Complete reviewer run with verdict={verdict} and run `sv_cli.py ci log --stage G4 --role reviewer --actor {reviewer_id}" + (" --allow-fix`" if verdict == "fix" else "`")]
         ),
     )
     _emit(env, args.json)
@@ -675,14 +969,22 @@ def main() -> None:
     p_lc.add_argument("--note", default="")
     p_lc.add_argument("--json", action="store_true")
 
-    p_ci = sub.add_parser("ci", help="Run Domain CI or Log-CI (LG-01..LG-12)")
-    p_ci.add_argument("domain", choices=["script", "voice", "design", "shots", "audio", "delivery", "log"])
+    p_ci = sub.add_parser("ci", help="Run Domain CI or Log-CI (LG-01..LG-13)")
+    p_ci.add_argument("domain", choices=["script", "voice", "art-direction", "design", "shots", "audio", "delivery", "log"])
     p_ci.add_argument("--stage", default=None)
     p_ci.add_argument("--role", default="all", choices=["all", "executor", "reviewer", "orchestrator"])
     p_ci.add_argument("--actor", default=None)
     p_ci.add_argument("--unit", default=None)
     p_ci.add_argument("--allow-fix", action="store_true")
     p_ci.add_argument("--json", action="store_true")
+
+    p_des = sub.add_parser("design", help="G4 visual design review & 8-axis scoring")
+    dsub = p_des.add_subparsers(dest="design_cmd", required=True)
+    p_ds = dsub.add_parser("score", help="Validate & submit 8-axis G4 design rubric scores")
+    p_ds.add_argument("--input", required=True)
+    p_ds.add_argument("--actor", required=True)
+    p_ds.add_argument("--run", default=None)
+    p_ds.add_argument("--json", action="store_true")
 
     p_rev = sub.add_parser("review", help="Blind review submission wrapper")
     rsub = p_rev.add_subparsers(dest="rev_cmd", required=True)
@@ -711,6 +1013,8 @@ def main() -> None:
         cmd_log(root, args)
     elif args.cmd == "ci":
         cmd_ci(root, args)
+    elif args.cmd == "design":
+        cmd_design_score(root, args)
     elif args.cmd == "review":
         cmd_review_submit(root, args)
     elif args.cmd == "gate":

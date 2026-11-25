@@ -1,0 +1,264 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://story-video-skills.local/schemas/art_direction.schema.json",
+  "title": "Story Video Skills v6.2 Episode Art Direction Plan",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "episode_slug",
+    "project_style_lock",
+    "story_world_elements",
+    "layer_architecture",
+    "location_matrix",
+    "reviewer_rubric"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "6.2"
+    },
+    "episode_slug": {
+      "type": "string",
+      "minLength": 1
+    },
+    "project_style_lock": {
+      "type": "object",
+      "required": [
+        "style_family",
+        "flat_2d_riso_characters",
+        "pal_tokens_only",
+        "nhim_canonical_ch11"
+      ],
+      "properties": {
+        "style_family": {
+          "type": "string",
+          "minLength": 3
+        },
+        "flat_2d_riso_characters": {
+          "type": "boolean",
+          "const": true
+        },
+        "pal_tokens_only": {
+          "type": "boolean",
+          "const": true
+        },
+        "nhim_canonical_ch11": {
+          "type": "boolean",
+          "const": true
+        }
+      }
+    },
+    "story_world_elements": {
+      "type": "object",
+      "required": [
+        "lighting_moods",
+        "recurring_motifs",
+        "material_and_organic_rules"
+      ],
+      "properties": {
+        "lighting_moods": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 3
+          }
+        },
+        "recurring_motifs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 3
+          }
+        },
+        "material_and_organic_rules": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 3
+          }
+        }
+      }
+    },
+    "layer_architecture": {
+      "type": "object",
+      "required": [
+        "far",
+        "mid",
+        "light_emissive",
+        "fg_staging",
+        "anti_shortcut_rules"
+      ],
+      "properties": {
+        "far": {
+          "type": "string",
+          "minLength": 15
+        },
+        "mid": {
+          "type": "string",
+          "minLength": 15
+        },
+        "light_emissive": {
+          "type": "string",
+          "minLength": 15
+        },
+        "fg_staging": {
+          "type": "string",
+          "minLength": 15
+        },
+        "anti_shortcut_rules": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 15
+          }
+        }
+      }
+    },
+    "location_matrix": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "location",
+          "shotScale",
+          "camera_angle",
+          "horizon_and_perspective",
+          "terrain_and_edge_transitions",
+          "lighting_mood",
+          "weather_fx_mode",
+          "mandatory_objects",
+          "landmarks",
+          "anti_spoiler_guards"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "location": {
+            "type": "string",
+            "minLength": 1
+          },
+          "shotScale": {
+            "type": "string",
+            "enum": [
+              "establishing",
+              "medium",
+              "closeup",
+              "insert"
+            ]
+          },
+          "camera_angle": {
+            "type": "string",
+            "enum": [
+              "front",
+              "reverse",
+              "high_3q",
+              "macro_top",
+              "macro_low",
+              "side",
+              "top",
+              "low",
+              "detail"
+            ]
+          },
+          "horizon_and_perspective": {
+            "type": "string",
+            "minLength": 20
+          },
+          "terrain_and_edge_transitions": {
+            "type": "string",
+            "minLength": 20
+          },
+          "lighting_mood": {
+            "type": "string",
+            "minLength": 2
+          },
+          "weather_fx_mode": {
+            "type": "string",
+            "enum": [
+              "none",
+              "dust_motes",
+              "rain",
+              "fireflies",
+              "petals"
+            ]
+          },
+          "mandatory_objects": {
+            "type": "array",
+            "minItems": 8,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "landmarks": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "anti_spoiler_guards": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
+    "reviewer_rubric": {
+      "type": "object",
+      "required": [
+        "min_total",
+        "min_dim",
+        "axes"
+      ],
+      "properties": {
+        "min_total": {
+          "type": "number",
+          "minimum": 82,
+          "maximum": 100
+        },
+        "min_dim": {
+          "type": "number",
+          "minimum": 7,
+          "maximum": 10
+        },
+        "axes": {
+          "type": "object",
+          "required": [
+            "style_cohesion",
+            "depth_and_lighting",
+            "perspective_and_scale",
+            "composition_and_integration",
+            "detail_density_and_variety",
+            "staging_readability",
+            "spatial_continuity",
+            "story_and_spoiler_fidelity"
+          ],
+          "properties": {
+            "style_cohesion": { "type": "string", "minLength": 15 },
+            "depth_and_lighting": { "type": "string", "minLength": 15 },
+            "perspective_and_scale": { "type": "string", "minLength": 15 },
+            "composition_and_integration": { "type": "string", "minLength": 15 },
+            "detail_density_and_variety": { "type": "string", "minLength": 15 },
+            "staging_readability": { "type": "string", "minLength": 15 },
+            "spatial_continuity": { "type": "string", "minLength": 15 },
+            "story_and_spoiler_fidelity": { "type": "string", "minLength": 15 }
+          }
+        }
+      }
+    }
+  }
+}

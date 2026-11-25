@@ -40,6 +40,7 @@ VALID_ACTIONS = (
     "inspect_visual",
     "inspect_audio",
     "submit_review",
+    "submit_design_scores",
     "cross_check",
     "user_approval",
     "decision",

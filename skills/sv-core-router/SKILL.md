@@ -1,6 +1,6 @@
 ---
 name: sv-core-router
-description: Entry point and 3-track router for Vietnamese 2D story-video episodes (v6.0.0) — detects Short 9:16 vs Long 16:9 from .episode.json, scaffolds new episodes with --track short|long, enforces the 7-gate DAG (G1, G2, G3 in parallel with G4, G5, G6, G7), role logs (LG-01..LG-12), and unified sv_cli.py verification gates. Always read first when starting, resuming, or auditing any story-video episode.
+description: Entry point and 3-track router for Vietnamese 2D story-video episodes (v6.2.0) — detects Short 9:16 vs Long 16:9 from .episode.json, scaffolds new episodes with --track short|long, enforces the 7-gate DAG (G1, G2, G3 in parallel with Pre-G4 art_direction.json AD-01..AD-08 + G4 8-axis scoring, G5, G6, G7), role logs (LG-01..LG-13), and unified sv_cli.py verification gates. Always read first when starting, resuming, or auditing any story-video episode.
 ---
 
 # sv-core-router · Pipeline Router & 5-Pillar Verification Gate
@@ -37,14 +37,15 @@ Before executing any phase, load your role prompt from `<suite>/roles/`:
 ## 4. 5-Pillar Gate Verification Flow (Every Gate)
 ```bash
 python scripts/sv_cli.py doctor --stage <G> --json
+python scripts/sv_cli.py ci art-direction --json   # mandatory Pre-G4 before editing src/episode/* or plates/*
 python scripts/sv_cli.py ci <domain> --json
 python scripts/sv_cli.py ci log --stage <G> --role all --json
 python scripts/sv_cli.py gate check <G> --json
 python scripts/sv_cli.py gate pass <G> --actor <orchestrator_id> --json
 ```
-A gate passes ONLY when all 5 pillars are green: **(1) Domain CI = 0 errors**, **(2) Executor Log-CI `LG-01..12` = 0 errors**, **(3) Reviewer Log-CI + blind reviews = 0 errors**, **(4) Orchestrator audit + `gates/G*.review.md` (+ `user_quote` on `G1/G2/G4`)**, and **(5) Hash lock + Antigravity `hooks/sv_guard.py` anti-bypass checks**.
+A gate passes ONLY when all 5 pillars are green: **(1) Domain CI = 0 errors** (including `AD-01..AD-08` on `G4`), **(2) Executor Log-CI `LG-01..13` = 0 errors**, **(3) Reviewer Log-CI + 8-axis `design score` (`G4`, `LG-13`) / blind reviews (`G5`) = 0 errors**, **(4) Orchestrator audit + `gates/G*.review.md` (+ `user_quote` on `G1/G2/G4`)**, and **(5) Hash lock + Antigravity `hooks/sv_guard.py` anti-bypass checks**.
 
 ## 5. References
 - Full command table: `references/commands.md`
-- JSON API envelope & `LG-01..LG-12` spec: `references/cli-api.md`
-- Formal schemas: `<suite>/schemas/{cli_envelope,role_log,review_record}.schema.json`
+- JSON API envelope & `LG-01..LG-13` spec: `references/cli-api.md`
+- Formal schemas: `<suite>/schemas/{cli_envelope,role_log,review_record,art_direction,g4_scores}.schema.json`

@@ -88,7 +88,7 @@ INPUTS = {
     "G1": ["brief.md"],
     "G2": ["script.json", "beats.md", "standards/pacing.json", "standards/voice_standard.json"],
     "G3": ["script.json", "audio/voice.wav", "src/data/words.json", "standards/voice_standard.json", "standards/pacing.json"],
-    "G4": ["src/episode/cast.ts", "src/episode/sets.tsx", "src/episode/geo.ts", "src/props.tsx", "src/sets", "src/episode/subjects.tsx", "src/subjects.ts", "public:plates"],
+    "G4": ["art_direction.json", "src/episode/cast.ts", "src/episode/sets.tsx", "src/episode/geo.ts", "src/props.tsx", "src/sets", "src/episode/subjects.tsx", "src/subjects.ts", "public:plates"],
     "G5": ["src/episode/shotlist.ts", "src/episode/cast.ts", "src/episode/sets.tsx", "src/data/words.json", "standards/pacing.json", "public:plates"],
     "G6": ["audio.json", "audio/voice.wav", "qa/timing.json", "standards/mix_targets.json", "scripts/theme.py"],
     "G7": ["out/final.mp4"],
@@ -194,6 +194,45 @@ def checks(g):
                 if "episode_long_16x9" not in _pa3:
                     bad.append("standards/pacing.json missing episode_long_16x9")
     elif g == "G4":
+        if (ROOT / "art_direction.json").is_file():
+            ad_code, ad_out = run([sys.executable, "scripts/art_direction_lint.py"])
+            if ad_code:
+                ad_err_lines = [l for l in ad_out.splitlines() if "ERROR" in l or "AD-" in l]
+                bad.append("art direction lint failed:\n" + ("\n".join(ad_err_lines) if ad_err_lines else ad_out[-400:]))
+            sc_g4 = jload("qa/design/g4_scores.json")
+            if not isinstance(sc_g4, dict):
+                bad.append("qa/design/g4_scores.json missing or invalid — reviewer must submit 8-axis G4 scores via `python scripts/sv_cli.py design score`")
+            else:
+                if sc_g4.get("verdict") != "pass":
+                    bad.append(f"qa/design/g4_scores.json verdict is {sc_g4.get('verdict')!r} (must be 'pass')")
+                try:
+                    g4_min_total = float(sc_g4.get("min_total", 0))
+                except (TypeError, ValueError):
+                    g4_min_total = 0.0
+                try:
+                    g4_min_dim = float(sc_g4.get("min_dim", 0))
+                except (TypeError, ValueError):
+                    g4_min_dim = 0.0
+                if g4_min_total < 82:
+                    bad.append(f"qa/design/g4_scores.json min_total={g4_min_total:g} < 82")
+                if g4_min_dim < 7:
+                    bad.append(f"qa/design/g4_scores.json min_dim={g4_min_dim:g} < 7")
+                f_sets = sc_g4.get("failed_sets")
+                if not isinstance(f_sets, list) or len(f_sets) > 0:
+                    bad.append(f"qa/design/g4_scores.json has failed_sets={f_sets} — fix failing sets and re-score before passing G4")
+                g4_sets = sc_g4.get("sets")
+                if not isinstance(g4_sets, dict) or not g4_sets:
+                    bad.append("qa/design/g4_scores.json has 0 scored sets")
+                else:
+                    bad_scored = [
+                        sid for sid, sd in g4_sets.items()
+                        if not isinstance(sd, dict)
+                        or sd.get("ok") is not True
+                        or float(sd.get("total", 0) or 0) < max(82.0, g4_min_total)
+                        or float(sd.get("min_axis", 0) or 0) < max(7.0, g4_min_dim)
+                    ]
+                    if bad_scored:
+                        bad.append(f"qa/design/g4_scores.json has failing set score(s): {bad_scored[:6]}")
         code, out = run(["node", "scripts/lint.mjs", "design"])
         if code:
             bad.append("design lint failed:\n" + "\n".join(l for l in out.splitlines() if l.startswith("ERROR")))

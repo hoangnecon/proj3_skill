@@ -1,0 +1,77 @@
+{
+  "schema_version": "6.2",
+  "episode_slug": "TODO-episode-slug",
+  "project_style_lock": {
+    "style_family": "TODO-storybook-visual-family",
+    "flat_2d_riso_characters": true,
+    "pal_tokens_only": true,
+    "nhim_canonical_ch11": true
+  },
+  "story_world_elements": {
+    "lighting_moods": [
+      "TODO: define the episode's primary lighting moods and time-of-day shifts"
+    ],
+    "recurring_motifs": [
+      "TODO: define visual motifs, signage, and world details that recur across locations"
+    ],
+    "material_and_organic_rules": [
+      "TODO: define surface textures, organic variation rules, and anti-clone-stamp guidance"
+    ]
+  },
+  "layer_architecture": {
+    "far": "TODO: describe distant sky, horizon, or architectural depth layer for this story world",
+    "mid": "TODO: describe mid-ground structures, props, and interactive surfaces for this story world",
+    "light_emissive": "TODO: describe practical light sources, volumetric glow, and rim-light cues",
+    "fg_staging": "TODO: describe foreground framing anchors and clean character staging plane",
+    "anti_shortcut_rules": [
+      "TODO: forbid flat solid fills, copy-pasted backdrops, and mismatched perspective shortcuts"
+    ]
+  },
+  "location_matrix": [
+    {
+      "id": "TODO-loc1-wide",
+      "location": "TODO-loc1",
+      "shotScale": "establishing",
+      "camera_angle": "front",
+      "horizon_and_perspective": "TODO: lock horizon height, camera pitch, and human-scale floor/tabletop separation",
+      "terrain_and_edge_transitions": "TODO: lock seamless surface integration, organic edges, and zero pasted cutoff artifacts",
+      "lighting_mood": "TODO-mood",
+      "weather_fx_mode": "none",
+      "mandatory_objects": [
+        "TODO-obj-01",
+        "TODO-obj-02",
+        "TODO-obj-03",
+        "TODO-obj-04",
+        "TODO-obj-05",
+        "TODO-obj-06",
+        "TODO-obj-07",
+        "TODO-obj-08",
+        "TODO-obj-09",
+        "TODO-obj-10",
+        "TODO-obj-11",
+        "TODO-obj-12"
+      ],
+      "landmarks": [
+        "TODO-landmark-1",
+        "TODO-landmark-2"
+      ],
+      "anti_spoiler_guards": [
+        "TODO: specify early concealment rules or write 'none: no early concealment required'"
+      ]
+    }
+  ],
+  "reviewer_rubric": {
+    "min_total": 82,
+    "min_dim": 7,
+    "axes": {
+      "style_cohesion": "TODO: define concrete grading criteria for visual style cohesion across plates and characters",
+      "depth_and_lighting": "TODO: define concrete grading criteria for atmospheric depth, light sources, and shadow contrast",
+      "perspective_and_scale": "TODO: define concrete grading criteria for horizon consistency, camera pitch, and human scale",
+      "composition_and_integration": "TODO: define concrete grading criteria for seamless terrain/edge transitions and framing balance",
+      "detail_density_and_variety": "TODO: define concrete grading criteria for mandatory object density and organic variation",
+      "staging_readability": "TODO: define concrete grading criteria for clear character staging zone and uncluttered focal plane",
+      "spatial_continuity": "TODO: define concrete grading criteria for shared landmarks and angle-to-angle spatial coherence",
+      "story_and_spoiler_fidelity": "TODO: define concrete grading criteria for beat accuracy and anti-spoiler concealment compliance"
+    }
+  }
+}

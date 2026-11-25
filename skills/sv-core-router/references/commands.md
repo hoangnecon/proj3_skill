@@ -1,4 +1,4 @@
-# Unified CLI & Engine Commands (`sv-v6.0`)
+# Unified CLI & Engine Commands (`sv-v6.2`)
 
 Always run from the episode root (the folder containing `.episode.json`, `script.json`, and `scripts/sv_cli.py`).
 
@@ -12,11 +12,13 @@ Always run from the episode root (the folder containing `.episode.json`, `script
 | `python scripts/sv_cli.py log complete --run <run_id> --verdict <pass\|fix\|blocked> --outputs "<p1,p2>" --note "<n>" [--json]` | Close role run with output SHA-256 hashes | `0` / `2` |
 | `python scripts/sv_cli.py ci script [--json]` | Run `script_lint.py` (`SC-01..27`, `SC-29..43`) | `0` / `1` |
 | `python scripts/sv_cli.py ci voice [--json]` | Verify `qa/voice_report.json` against `standards/voice_standard.json` + `pacing.json` | `0` / `1` |
-| `python scripts/sv_cli.py ci design [--json]` | Run `node scripts/lint.mjs design` (`CH-*`, `SE-*`, `PR-*`, `TK-*`) | `0` / `1` |
+| `python scripts/sv_cli.py ci art-direction [--json]` | Run `scripts/art_direction_lint.py` (`AD-01..AD-06`), write `qa/art_direction_lint.json` & unlock `H3` | `0` / `1` |
+| `python scripts/sv_cli.py ci design [--json]` | Run `node scripts/lint.mjs design` (`CH-*`, `SE-*`, `PR-*`, `TK-*`, `AD-07..AD-08`) | `0` / `1` |
+| `python scripts/sv_cli.py design score --input <file.json> --actor <id> --run <run_id> [--json]` | Validate Reviewer 8-axis G4 scores (`min_total >= 82`, `min_dim >= 7`) & write `qa/design/g4_scores.json` | `0` / `1` |
 | `python scripts/sv_cli.py ci shots [--json]` | Run `node scripts/lint.mjs shots` (`SH-*`, `MO-*`, `GE-15..21`, `LA-01..04`, `PR-10`, `PC-*`) | `0` / `1` |
 | `python scripts/sv_cli.py ci audio [--json]` | Verify `qa/mix_report.json` against `standards/mix_targets.json` | `0` / `1` |
 | `python scripts/sv_cli.py ci delivery [--json]` | Verify `qa/deliver_report.json` + `qa/video_audio.json` | `0` / `1` |
-| `python scripts/sv_cli.py ci log --stage <G> [--role all\|executor\|reviewer\|orchestrator] [--actor <id>] [--unit <U>] [--allow-fix] [--json]` | Run 12-rule Log-CI (`sv_log_lint.py`, `LG-01..LG-12`) | `0` / `2` |
+| `python scripts/sv_cli.py ci log --stage <G> [--role all\|executor\|reviewer\|orchestrator] [--actor <id>] [--unit <U>] [--allow-fix] [--json]` | Run 13-rule Log-CI (`sv_log_lint.py`, `LG-01..LG-13`) | `0` / `2` |
 | `python scripts/sv_cli.py review submit --batch <file.jsonl> --actor <id> [--run <run_id>] [--json]` | Submit validated blind shot reviews (`qa.mjs review --batch`) | `0` / `1` |
 | `python scripts/sv_cli.py gate check <G> [--unit <U>] [--json]` | Run full 5-Pillar Verification Gate without writing pass | `0` / `2` / `3` |
 | `python scripts/sv_cli.py gate pass <G> --actor <coord_id> [--unit <U>] [--json]` | Verify all 5 pillars and log immutable gate pass (`orchestrator` only) | `0` / `2` / `3` / `5` |

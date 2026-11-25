@@ -116,6 +116,7 @@ def test_2_track_scaffolding(tmp: Path) -> tuple[Path, Path]:
     vs_s = json.loads((ep_short / "standards" / "voice_standard.json").read_text(encoding="utf-8"))
     assert meta_s["track"] == "short" and meta_s["format"] == "9:16" and meta_s["resolution"] == [1080, 1920]
     assert (ep_short / "logs").is_dir()
+    assert (ep_short / "art_direction.json").is_file(), "starter/art_direction.json must be copied on short scaffold"
     assert pa_s["voice"]["overall_wps"] == [4.42, 4.74], f"unexpected short wps: {pa_s['voice']}"
     assert vs_s["rhythm"]["target_ups"] == 5.05 and vs_s["rhythm"]["pitch_ratio"] == 1.0
 
@@ -125,6 +126,7 @@ def test_2_track_scaffolding(tmp: Path) -> tuple[Path, Path]:
     pa_l = json.loads((ep_long / "standards" / "pacing.json").read_text(encoding="utf-8"))
     sc_l = json.loads((ep_long / "script.json").read_text(encoding="utf-8"))
     assert meta_l["track"] == "long" and meta_l["format"] == "16:9" and meta_l["resolution"] == [1920, 1080]
+    assert (ep_long / "art_direction.json").is_file(), "starter/art_direction.json must be copied on long scaffold"
     assert pa_l["voice"]["overall_wps"] == [4.40, 4.74], f"unexpected long wps: {pa_l['voice']}"
     assert sc_l["format"] == "16:9" and sc_l["length"] == "long_16x9"
 
@@ -173,6 +175,12 @@ def test_3_voice_corridor_ci(ep_short: Path) -> None:
 
 
 def test_4_role_logs_and_log_ci(ep_short: Path) -> None:
+    # Keep legacy unit-isolated Tests 4..11 focused on LG-01..12 & v6.0/v6.1 checks;
+    # Test 12 scaffolds a fresh v6.2.0 episode exercising the full art_direction.json + LG-13 pipeline.
+    ad_legacy = ep_short / "art_direction.json"
+    if ad_legacy.exists():
+        ad_legacy.unlink()
+
     img1 = ep_short / "qa" / "design" / "cast_episode_p1_v.jpg"
     img2 = ep_short / "qa" / "design" / "overview_sets.jpg"
     img1.parent.mkdir(parents=True, exist_ok=True)
@@ -977,6 +985,328 @@ def test_11_anti_bypass_hardening(ep_short: Path, tmp: Path) -> None:
     print("[PASS] Test 11: Anti-bypass hardening (H1/H2/H4/H6 + direct sv_gate block + LG-05/LG-11 disk cross-checks) verified")
 
 
+def test_12_v62_art_direction_gate_and_scored_rubric(tmp: Path) -> None:
+    """Verify v6.2.0 Pre-G4 Art Direction gate, H3 lock, AD-01..08, H2 protection, design score & LG-13."""
+    ep = tmp / "ep-v62"
+    r_sc = _run([PY, str(SUITE / "tools" / "new_episode.py"), str(ep), "--track", "short"], cwd=SUITE)
+    assert r_sc.returncode == 0, f"v6.2 short scaffold failed:\n{r_sc.stdout}\n{r_sc.stderr}"
+    assert (ep / "art_direction.json").is_file(), "starter art_direction.json must exist in fresh episode"
+
+    # Prepare brief.md with 2 core locations & pass G1 so H3 isolates the art_direction.json lock
+    brief_txt = "\n".join([
+        "# Episode Brief",
+        "## Archetype", "Slice-of-Life Mystery",
+        "## Premise", "A missing sketchbook leaves subtle chalk clues across a neighborhood cafe and alley.",
+        "## Spine", "Setup -> Clue -> Detour -> Reveal -> Resolution -> Button",
+        "## Why it is funny", "Deadpan detective seriousness over a lost doodle.",
+        "## Characters", "- Nhim: curious ten-year-old protagonist\n- Lan: cafe owner",
+        "## Locations", "- cornerCafe: neighborhood corner cafe\n- backAlley: narrow tiled alley behind the cafe",
+        "## Ending", "Nhim finds the sketchbook tucked neatly beside the cafe menu board.",
+        "## Not copying", "Original neighborhood clue structure.",
+    ]) + "\n"
+    (ep / "brief.md").write_text(brief_txt, encoding="utf-8")
+    (ep / "gates" / "G1.review.md").write_text(
+        'verdict: pass\napproval: user\nuser_quote: "duyet brief tap v62 nay nhe"\n',
+        encoding="utf-8",
+    )
+    script_skill = str(SUITE / "skills" / "sv-short-script" / "SKILL.md")
+    bible_skill = str(SUITE / "skills" / "sv-core-bible" / "SKILL.md")
+    r_o1 = _log_init(ep, "orchestrator", "coord-1", "G1", "Orchestrate G1 for v6.2 test")
+    r_e1 = _log_init(ep, "executor", "exec-brief", "G1", "Author brief.md")
+    _log_step(ep, r_e1, "read_skill", target=script_skill, note="Read Short script skill for brief structure")
+    _log_complete(ep, r_e1, "pass", "brief.md", "Completed brief.md with two core locations")
+    r_r1 = _log_init(ep, "reviewer", "rev-brief", "G1", "Review brief.md")
+    _log_step(ep, r_r1, "read_skill", target=bible_skill, note="Verified brief against series bible rules")
+    _log_complete(ep, r_r1, "pass", "brief.md", "Brief meets all seven premise checks")
+    _log_step(ep, r_o1, "user_approval", approval="user", user_quote="duyet brief tap v62 nay nhe", note="Recorded user approval for G1 brief")
+    _log_complete(ep, r_o1, "pass", "gates/G1.review.md", "G1 verified and ready to pass")
+    r_g1 = _run([PY, "scripts/sv_cli.py", "gate", "pass", "G1", "--actor", "coord-1", "--json"], cwd=ep)
+    assert r_g1.returncode == 0, f"G1 pass failed in Test 12: {r_g1.stdout}\n{r_g1.stderr}"
+
+    # (a) H3 DENIES editing src/episode/sets.tsx & plates/foo.mjs while starter art_direction.json has TODOs / unlinted
+    for locked_rel in ("src/episode/sets.tsx", "plates/foo.mjs"):
+        res_deny = _invoke_hook({
+            "hookEventName": "PreToolUse",
+            "cwd": str(ep),
+            "toolCall": {"name": "edit_file", "args": {"Path": str(ep / locked_rel)}},
+        })
+        assert res_deny["decision"] == "deny" and "H3" in res_deny["reason"], (
+            f"H3 must deny editing {locked_rel} before ci art-direction passes: {res_deny}"
+        )
+
+    # (b) sv_cli.py ci art-direction catches AD-01 on starter TODOs, then AD-02..06 on malformed plan, then exits 0 on valid plan
+    r_todo = _run([PY, "scripts/sv_cli.py", "ci", "art-direction", "--json"], cwd=ep)
+    d_todo = json.loads(r_todo.stdout)
+    assert r_todo.returncode == 1 and any("[AD-01]" in e for e in d_todo["errors"]), (
+        f"starter art_direction.json TODOs must fail AD-01: {d_todo}"
+    )
+
+    bad_ad = {
+        "schema_version": "6.2",
+        "episode_slug": "ep-v62",
+        "project_style_lock": {
+            "style_family": "flat 2D Risograph ink",
+            "flat_2d_riso_characters": False,
+            "pal_tokens_only": True,
+            "nhim_canonical_ch11": True,
+        },
+        "story_world_elements": {
+            "lighting_moods": [],
+            "recurring_motifs": ["tiled floor"],
+            "material_and_organic_rules": ["vary silhouettes"],
+        },
+        "layer_architecture": {
+            "far": "too short",
+            "mid": "Primary architectural stage and walkable zones matching floor lane",
+            "light_emissive": "Warm morning window bounce across counter and doorway",
+            "fg_staging": "Clean foreground framing edges clear of walking lane",
+            "anti_shortcut_rules": ["Zero identical clone-stamped clouds or foliage silhouettes anywhere"],
+        },
+        "location_matrix": [
+            {
+                "id": "cafeFront",
+                "location": "cornerCafe",
+                "shotScale": "establishing",
+                "camera_angle": "front",
+                "horizon_and_perspective": "short horizon",
+                "terrain_and_edge_transitions": "short edge",
+                "lighting_mood": "warm morning",
+                "weather_fx_mode": "none",
+                "mandatory_objects": ["awning", "door", "sign"],
+                "landmarks": ["awning"],
+                "anti_spoiler_guards": [],
+            }
+        ],
+        "reviewer_rubric": {
+            "min_total": 70,
+            "min_dim": 5,
+            "axes": {
+                "style_cohesion": "Consistent Risograph ink weight and PAL harmony throughout",
+            },
+        },
+    }
+    (ep / "art_direction.json").write_text(json.dumps(bad_ad, indent=2), encoding="utf-8")
+    r_bad_ad = _run([PY, "scripts/sv_cli.py", "ci", "art-direction", "--json"], cwd=ep)
+    d_bad_ad = json.loads(r_bad_ad.stdout)
+    bad_blob = "\n".join(d_bad_ad["errors"])
+    assert r_bad_ad.returncode == 1, f"invalid art_direction.json must fail ci art-direction: {d_bad_ad}"
+    for code in ("AD-02", "AD-03", "AD-04", "AD-05", "AD-06"):
+        assert f"[{code}]" in bad_blob, f"expected [{code}] in art_direction errors:\n{bad_blob}"
+
+    def _sub(sid: str, loc: str, scale: str, angle: str, n_objs: int) -> dict:
+        return {
+            "id": sid,
+            "location": loc,
+            "shotScale": scale,
+            "camera_angle": angle,
+            "horizon_and_perspective": "Eye-level horizon locked at sixty percent height separating sidewalk curb from interior floor plane",
+            "terrain_and_edge_transitions": "Weathered stone pavers curve naturally into the asphalt curb with subtle grit and doorway mat seam",
+            "lighting_mood": "warm morning key",
+            "weather_fx_mode": "none",
+            "mandatory_objects": [f"{sid}_detail_{i}" for i in range(1, n_objs + 1)],
+            "landmarks": [f"{loc}_arch", f"{loc}_sign"],
+            "anti_spoiler_guards": ["none: no early concealment required"],
+        }
+
+    axes_8 = [
+        "style_cohesion",
+        "depth_and_lighting",
+        "perspective_and_scale",
+        "composition_and_integration",
+        "detail_density_and_variety",
+        "staging_readability",
+        "spatial_continuity",
+        "story_and_spoiler_fidelity",
+    ]
+    valid_ad = {
+        "schema_version": "6.2",
+        "episode_slug": "ep-v62",
+        "project_style_lock": {
+            "style_family": "flat 2D Risograph ink with warm paper tooth",
+            "flat_2d_riso_characters": True,
+            "pal_tokens_only": True,
+            "nhim_canonical_ch11": True,
+        },
+        "story_world_elements": {
+            "lighting_moods": ["warm morning key", "cool shaded alley"],
+            "recurring_motifs": ["scuffed tiled thresholds", "hand-painted enamel signs"],
+            "material_and_organic_rules": [
+                "Vary foliage, clutter, and surface wear silhouettes organically across every plate",
+                "Soften structural edges and terrain boundaries where distinct materials meet",
+            ],
+        },
+        "layer_architecture": {
+            "far": "Atmospheric backdrop plane with restrained contrast so foreground Risograph keylines stay crisp",
+            "mid": "Primary architectural stage, shared landmarks, and walkable floor lanes matching zones.mgY",
+            "light_emissive": "Story-motivated morning sunlight and warm interior lamp bounce without muddying silhouettes",
+            "fg_staging": "Subtle foreground framing anchors kept clear of actor walking lanes and captions",
+            "anti_shortcut_rules": [
+                "Zero identical clone-stamped clouds, tiles, plants, or props repeated across plates",
+                "Zero ruler-straight unintegrated horizon cuts or floating pasted foreground decals",
+            ],
+        },
+        "location_matrix": [
+            _sub("cafeFront", "cornerCafe", "establishing", "front", 12),
+            _sub("cafeCounter", "cornerCafe", "medium", "front", 12),
+            _sub("cafeMenuInsert", "cornerCafe", "insert", "detail", 8),
+            _sub("alleyWide", "backAlley", "establishing", "front", 12),
+            _sub("alleyDoor", "backAlley", "medium", "side", 12),
+            _sub("alleyChalk", "backAlley", "closeup", "macro_low", 8),
+        ],
+        "reviewer_rubric": {
+            "min_total": 82,
+            "min_dim": 7,
+            "axes": {
+                ax: f"Concrete grading rubric verifying {ax.replace('_', ' ')} across every rendered design plate"
+                for ax in axes_8
+            },
+        },
+    }
+    (ep / "art_direction.json").write_text(json.dumps(valid_ad, indent=2), encoding="utf-8")
+    r_ok_ad = _run([PY, "scripts/sv_cli.py", "ci", "art-direction", "--json"], cwd=ep)
+    d_ok_ad = json.loads(r_ok_ad.stdout)
+    assert r_ok_ad.returncode == 0 and d_ok_ad["ok"], f"valid art_direction.json must pass ci art-direction: {d_ok_ad}"
+
+    # (c) H3 ALLOWS editing src/episode/sets.tsx once ci art-direction passes, and DENIES again if mutated!
+    res_allow = _invoke_hook({
+        "hookEventName": "PreToolUse",
+        "cwd": str(ep),
+        "toolCall": {"name": "edit_file", "args": {"Path": str(ep / "src" / "episode" / "sets.tsx")}},
+    })
+    assert res_allow["decision"] == "allow", f"H3 must allow sets.tsx after passing ci art-direction: {res_allow}"
+
+    mutated_ad = dict(valid_ad, episode_slug="ep-v62-mutated")
+    (ep / "art_direction.json").write_text(json.dumps(mutated_ad, indent=2), encoding="utf-8")
+    res_relock = _invoke_hook({
+        "hookEventName": "PreToolUse",
+        "cwd": str(ep),
+        "toolCall": {"name": "edit_file", "args": {"Path": str(ep / "src" / "episode" / "sets.tsx")}},
+    })
+    assert res_relock["decision"] == "deny" and "H3" in res_relock["reason"], (
+        f"H3 must re-lock sets.tsx when art_direction.json is mutated without re-running ci art-direction: {res_relock}"
+    )
+    # Restore & re-run ci art-direction so SHA matches disk cleanly
+    (ep / "art_direction.json").write_text(json.dumps(valid_ad, indent=2), encoding="utf-8")
+    r_reok = _run([PY, "scripts/sv_cli.py", "ci", "art-direction", "--json"], cwd=ep)
+    assert r_reok.returncode == 0, f"re-running ci art-direction failed: {r_reok.stdout}"
+
+    # (d) lint.mjs design fails AD-08 when a sub-scene declared in art_direction.json is missing from EPISODE_SETS
+    (ep / "src" / "episode" / "cast.ts").write_text(
+        "import {NHIM_LOOK, type Look} from '../chars';\n"
+        "export const CAST: Record<string, Look> = { nhim: {...NHIM_LOOK, name: 'nhim'} };\n"
+        "export const CAST_ROLES = { nhim: {role: 'principal' as const, vi: 'Nhím học sinh tiểu học'} };\n",
+        encoding="utf-8",
+    )
+    (ep / "src" / "episode" / "sets.tsx").write_text(
+        "import React from 'react';\n"
+        "import {R, S} from '../kit';\n"
+        "import type {SetDef} from '../sets/types';\n"
+        "export const EPISODE_SETS: Record<string, SetDef> = {\n"
+        "  cafeFront: {\n"
+        "    title: 'Mặt tiền quán cà phê',\n"
+        "    bed: 'street',\n"
+        "    location: 'cornerCafe',\n"
+        "    landmarks: ['cornerCafe_arch', 'cornerCafe_sign'],\n"
+        "    bounds: [-200, -200, 1280, 2120],\n"
+        "    shotScale: 'establishing',\n"
+        "    zones: {bgY: 1100, mgY: [1540, 1760], fgY: 1860},\n"
+        "    render: () => ({back: <g><S d={R(-200, -200, 1480, 1740)} f='sky2' /><S d={R(-200, 1540, 1480, 580)} f='asphalt' /></g>, mid: []}),\n"
+        "  },\n"
+        "};\n",
+        encoding="utf-8",
+    )
+    _run(["node", "scripts/lint.mjs", "design"], cwd=ep)
+    d_ad08 = json.loads((ep / "qa" / "lint.json").read_text(encoding="utf-8"))
+    assert any("[AD-08]" in e for e in d_ad08.get("errors", [])), (
+        f"lint.mjs design must fail AD-08 when art_direction sub-scenes are missing from EPISODE_SETS: {d_ad08}"
+    )
+
+    # (e) H2 DENIES direct writes to qa/art_direction_lint.json and qa/design/g4_scores.json (draft remains writable)
+    for prot_rel in ("qa/art_direction_lint.json", "qa/design/g4_scores.json"):
+        res_h2 = _invoke_hook({
+            "hookEventName": "PreToolUse",
+            "cwd": str(ep),
+            "toolCall": {"name": "write_file", "args": {"Path": str(ep / prot_rel)}},
+        })
+        assert res_h2["decision"] == "deny" and "H2" in res_h2["reason"], (
+            f"H2 must deny direct write to {prot_rel}: {res_h2}"
+        )
+    res_draft_ok = _invoke_hook({
+        "hookEventName": "PreToolUse",
+        "cwd": str(ep),
+        "toolCall": {"name": "write_file", "args": {"Path": str(ep / "qa" / "design" / "scores_draft.json")}},
+    })
+    assert res_draft_ok["decision"] == "allow", f"Reviewer draft scores_draft.json must stay writable: {res_draft_ok}"
+
+    # Prepare G4 design sheets & reviewer run for (f) and (g)
+    cast_img = ep / "qa" / "design" / "cast_episode_p1_v.jpg"
+    sets_img = ep / "qa" / "design" / "overview_sets.jpg"
+    cast_img.parent.mkdir(parents=True, exist_ok=True)
+    cast_img.write_bytes(b"\xff\xd8\xff\xe0FAKECASTV62")
+    sets_img.write_bytes(b"\xff\xd8\xff\xe0FAKESETSV62")
+    design_skill = str(SUITE / "skills" / "sv-short-design" / "SKILL.md")
+
+    def _make_draft(override_set: str | None = None, override_axis: str | None = None, override_val: int = 9) -> dict:
+        sets_map = {}
+        for item in valid_ad["location_matrix"]:
+            sid = item["id"]
+            ax_map = {}
+            for ax in axes_8:
+                val = override_val if (sid == override_set and ax == override_axis) else 9
+                ax_map[ax] = {
+                    "score": val,
+                    "reason": f"Audited rendered plate {sid} for {ax.replace('_', ' ')} with grounded horizon and clean contrast",
+                }
+            sets_map[sid] = {"axes": ax_map}
+        return {"sets": sets_map}
+
+    # (f) sv_cli.py design score rejects (verdict: "fix") when any single axis < 7 (perspective_and_scale: 5),
+    #     and ci log --stage G4 --role reviewer fails LG-13!
+    r_rev_fix = _log_init(ep, "reviewer", "rev-design-v62", "G4", "Score G4 design plates (failing axis test)")
+    _log_step(ep, r_rev_fix, "read_skill", target=design_skill, note="Loaded Short 9:16 art direction and rubric rules")
+    _log_step(ep, r_rev_fix, "inspect_visual", target="qa/design/cast_episode_p1_v.jpg", note="Checked cast sheet p1 silhouettes and canonical Nhim red cap")
+    _log_step(ep, r_rev_fix, "inspect_visual", target="qa/design/overview_sets.jpg", note="Checked overview sets sheet and spotted perspective tilt on cafeFront")
+
+    draft_p = ep / "qa" / "design" / "scores_draft.json"
+    draft_p.write_text(json.dumps(_make_draft("cafeFront", "perspective_and_scale", 5), indent=2), encoding="utf-8")
+    r_sc_fix = _run(
+        [PY, "scripts/sv_cli.py", "design", "score", "--input", "qa/design/scores_draft.json", "--actor", "rev-design-v62", "--run", r_rev_fix, "--json"],
+        cwd=ep,
+    )
+    assert r_sc_fix.returncode == 0, f"valid draft submission should exit 0 even with verdict=fix: {r_sc_fix.stdout}\n{r_sc_fix.stderr}"
+    g4_fix = json.loads((ep / "qa" / "design" / "g4_scores.json").read_text(encoding="utf-8"))
+    assert g4_fix["verdict"] == "fix" and "cafeFront" in g4_fix["failed_sets"], f"expected verdict=fix for perspective_and_scale=5: {g4_fix}"
+    _log_complete(ep, r_rev_fix, "pass", "qa/design/g4_scores.json", "Submitted 8-axis scores with one failing perspective axis")
+
+    r_lg13_fail = _run([PY, "scripts/sv_cli.py", "ci", "log", "--stage", "G4", "--role", "reviewer", "--actor", "rev-design-v62", "--json"], cwd=ep)
+    d_lg13_fail = json.loads(r_lg13_fail.stdout)
+    assert r_lg13_fail.returncode == 2 and any("[LG-13]" in e for e in d_lg13_fail["errors"]), (
+        f"ci log G4 reviewer must fail LG-13 when g4_scores verdict is fix: {d_lg13_fail}"
+    )
+
+    # (g) When all sets score >= 82 and every axis >= 7, design score writes verdict: "pass" and LG-13 PASSES!
+    r_rev_pass = _log_init(ep, "reviewer", "rev-design-v62", "G4", "Re-score fixed G4 design plates")
+    _log_step(ep, r_rev_pass, "read_skill", target=design_skill, note="Loaded Short 9:16 art direction and rubric rules for re-audit")
+    _log_step(ep, r_rev_pass, "inspect_visual", target="qa/design/cast_episode_p1_v.jpg", note="Re-verified cast sheet p1 silhouettes and canonical Nhim proportions")
+    _log_step(ep, r_rev_pass, "inspect_visual", target="qa/design/overview_sets.jpg", note="Re-verified fixed cafeFront perspective horizon and all six sets cleanly grounded")
+
+    draft_p.write_text(json.dumps(_make_draft(), indent=2), encoding="utf-8")
+    r_sc_pass = _run(
+        [PY, "scripts/sv_cli.py", "design", "score", "--input", "qa/design/scores_draft.json", "--actor", "rev-design-v62", "--run", r_rev_pass, "--json"],
+        cwd=ep,
+    )
+    assert r_sc_pass.returncode == 0, f"passing design score failed: {r_sc_pass.stdout}\n{r_sc_pass.stderr}"
+    g4_pass = json.loads((ep / "qa" / "design" / "g4_scores.json").read_text(encoding="utf-8"))
+    assert g4_pass["verdict"] == "pass" and g4_pass["failed_sets"] == [], f"expected verdict=pass with 0 failed_sets: {g4_pass}"
+    _log_complete(ep, r_rev_pass, "pass", "qa/design/g4_scores.json", "All six sets passed 8-axis rubric above minimum thresholds")
+
+    r_lg13_ok = _run([PY, "scripts/sv_cli.py", "ci", "log", "--stage", "G4", "--role", "reviewer", "--actor", "rev-design-v62", "--json"], cwd=ep)
+    d_lg13_ok = json.loads(r_lg13_ok.stdout)
+    assert r_lg13_ok.returncode == 0 and d_lg13_ok["ok"], f"LG-13 should PASS when all sets >= 82 and every axis >= 7: {d_lg13_ok}"
+
+    print("[PASS] Test 12: v6.2.0 Pre-G4 Art Direction gate (H3 lock/relock, AD-01..08, H2 protection, 8-axis design score & LG-13) verified")
+
+
 def main() -> int:
     t0 = time.perf_counter()
     test_1_validate_skills()
@@ -992,8 +1322,9 @@ def main() -> int:
         test_9_long_unit_gate_cli_and_lg10(ep_long)
         test_10_v61_raster_plate_and_squash_stretch(ep_short)
         test_11_anti_bypass_hardening(ep_short, tmp)
+        test_12_v62_art_direction_gate_and_scored_rubric(tmp)
     finally:
-        for sub in ("ep-short", "ep-long"):
+        for sub in ("ep-short", "ep-long", "ep-v62"):
             nm = tmp / sub / "node_modules"
             if nm.exists():
                 if os.name == "nt":
@@ -1003,7 +1334,7 @@ def main() -> int:
         shutil.rmtree(tmp, ignore_errors=True)
 
     dt = time.perf_counter() - t0
-    print(f"\nALL 11/11 v6.1.0 END-TO-END VERIFICATION TESTS PASSED in {dt:.2f}s!")
+    print(f"\nALL 12/12 v6.2.0 END-TO-END VERIFICATION TESTS PASSED in {dt:.2f}s!")
     return 0
 
 

@@ -10,7 +10,14 @@ Default episode sets use pure vector SVG (`sets.md`). When a story genuinely ben
    - `videoPlate: {src, x, y, width, height, dur}` verifies a local `public/` `.mp4`/`.webm` loop (`>= 1024 B`, covering `>= 85%` of `bounds`) and mounts it via Remotion `<Loop>` + `<OffthreadVideo muted>` inside `Film.tsx` and `SetPlate` (`Sheets.tsx`).
    - Rendered perceptual checks (`SE-13` plate freshness vs `public/` mtime & `empty_mid`, `SE-16` clutter/contrast/balance, `SE-14` live SVG sign clipping) remain active so low-detail or muddy plates fail CI.
 
-## 2. Story-Motivation Restraint Rule (Zero Visual Clutter)
+## 2. 4-Layer Composition, Optical Clarity & Anti-Cramming Split
+Every `rasterPlate` or `videoPlate` MUST obey the episode's locked `art_direction.json` (`references/art-direction.md`, `AD-01..AD-08`):
+1. **4-Layer Depth Separation:** Compose plates in four intentional passes — **Far** (sky/distant plane), **Mid** (architecture, landmarks, walkable `zones.mgY`), **Light / Emissive** (story-motivated key light, window beams, practical lamps), and **FG Staging** (subtle framing edges clear of `zones.mgY` and captions).
+2. **Far-Layer Optical Softening (`KawaseBlurFilter` `0.8..1.4`):** Apply a gentle `KawaseBlurFilter` (`0.8..1.4`) to the **far** layer only so distant edges recede softly while foreground 2D Risograph character keylines remain razor-sharp on top and `SE-13` / `AD-07` perceptual clarity stays high. Never blur the mid walkable surface or characters.
+3. **Organic Variety vs Geometric Shortcuts:** Vary silhouettes, brush/paper grain, contours, and color clusters organically (`AD-07`). Never stamp identical oval clouds, repeated tree/bush polygons, ruler-straight horizontal ground cuts, or duplicated wall/floor tiles across plates — `plate_check.py` measures `color_clusters` and `cross_set_max_sim` to flag flat or copy-pasted backdrops.
+4. **Anti-Cramming Parallel Pack Split (`plates/pack_*.mjs`):** Whenever an episode has **`>= 6` `rasterPlate` sets**, split generator scripts into modular packs (`plates/pack_<location_or_mood>.mjs`) with **`<= 5–6` plates per worker**. Never cram 10+ plates into one giant script or single worker turn.
+
+## 3. Story-Motivation Restraint Rule (Zero Visual Clutter)
 Atmospheric FX exist to serve the story's light, weather, and mood — never to decorate every frame:
 - **Static PNG by default:** Bake a static `.png` plate unless continuous atmospheric motion directly serves the beat.
 - **At most ONE particle mode per scene (`0` or `1`):**
@@ -20,7 +27,7 @@ Atmospheric FX exist to serve the story's light, weather, and mood — never to 
   - `'petals'` — spring, festive, or poetic beats only (NEVER over mundane rooms, sad scenes, arguments, or deadpan gags).
 - **Never stack unrelated particle modes** (e.g. rain + petals + fireflies) or crank bloom/vignette so high that 2D character silhouettes lose readability.
 
-## 3. Reference Toolkit (`rough.js + PixiJS v8`)
+## 4. Reference Toolkit (`rough.js + PixiJS v8`)
 Four generalized, aspect-agnostic (`9:16` & `16:9`) scripts ship in `engine/scripts/`:
 - `scripts/rough_helpers.mjs` — pure hand-drawn canvas primitives (`createSketchLayer`, `addPaperTooth`, `sketchRect`, `sketchPolygon`, `sketchPath`, `sketchEllipse`, `sketchHatchRect`, `drawSoftGlow`, `drawStarSparkle`, `drawText`, `createGradientMaskCanvas`).
 - `scripts/pixi_stage.mjs` — WebGL atmospheric compositor (`createPixiApp`, `addDepthLayer`, `addEmissiveBloomLayer`, `addWindowGodrayBeam`, `addAtmosphereVignette`).
@@ -61,7 +68,7 @@ For animated loop bakes, the scene HTML exposes `window.__RENDER_FRAME__(frame, 
 ### PixiJS v8 `GodrayFilter` Safety Rule
 Attach `GodrayFilter` directly onto the visible sky/backdrop sprite or container (`addDepthLayer(app, skyCanvas, {PIXI, filters, godray: {...}})`), or use `addWindowGodrayBeam` (sprite-level `blendMode = 'add'` with stage-level mask). Never put `GodrayFilter` on an opaque black sprite inside an additive container — in PixiJS v8 that turns the upper sky black.
 
-## 4. Mounting Static (`rasterPlate`) vs Looped Video (`videoPlate`) in `src/episode/sets.tsx`
+## 5. Mounting Static (`rasterPlate`) vs Looped Video (`videoPlate`) in `src/episode/sets.tsx`
 ```tsx
 import {staticFile} from 'remotion';
 import type {SetDef} from '../sets/types';

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Log-CI / Log-Lint Gate (LG-01..LG-12) for story-video-skills v6.0.0.
+"""Log-CI / Log-Lint Gate (LG-01..LG-13) for story-video-skills v6.2.0.
 
 Every Executor run, Reviewer run, and Orchestrator audit run MUST pass Log-CI BEFORE
 its stage output can enter the Verification Gate (`sv_gate.py pass` / `sv_cli.py gate pass`).
 
-Rules implemented (LG-01..LG-12):
+Rules implemented (LG-01..LG-13):
   LG-01  Log file presence & JSON schema validity (`schemas/role_log.schema.json`)
   LG-02  SHA-256 hash-chain integrity (`prev_sha` -> `entry_sha`, tamper detection)
   LG-03  Mandatory `read_skill` logged matching the episode track (`sv-core-*` / `sv-short-*` / `sv-long-*`)
@@ -17,6 +17,7 @@ Rules implemented (LG-01..LG-12):
   LG-10  Orchestrator G5 Cross-Check (`contact_p*.jpg` + >= max(3, ceil(10% * N_shots)) shot cards + HOT crops)
   LG-11  Orchestrator user approval proof on G1/G2/G4 (`user_approval` matching `gates/G#.review.md`)
   LG-12  Chronological causal ordering (Executor complete <= Reviewer complete <= Orchestrator pass)
+  LG-13  Art Direction Pre-G4 & Scored G4 Design Rubric Gate (`art_direction_lint.json` + 8-axis `g4_scores.json`)
 
 Usage:
   python scripts/sv_log_lint.py --stage G5 [--role executor|reviewer|orchestrator|all] [--actor <id>] [--unit U1] [--json]
@@ -93,6 +94,17 @@ REQUIRED_SKILLS_BY_TRACK = {
 # Stages that require an independent Reviewer log before Verification Gate PASS
 REVIEWER_REQUIRED_STAGES = {"G1", "G2", "G4", "G5", "G7"}
 USER_APPROVAL_STAGES = {"G1", "G2", "G4"}
+
+MANDATORY_G4_AXES = (
+    "style_cohesion",
+    "depth_and_lighting",
+    "perspective_and_scale",
+    "composition_and_integration",
+    "detail_density_and_variety",
+    "staging_readability",
+    "spatial_continuity",
+    "story_and_spoiler_fidelity",
+)
 
 
 def _is_meaningful_note(note: str, min_words: int = 6) -> bool:
@@ -530,6 +542,172 @@ def audit_logs(
                 else f"orchestrator missing `user_approval` step (approval=user|delegated, verbatim user_quote matching gates/{sbase}.review.md)",
             )
 
+        # LG-13: Art Direction Pre-G4 & Scored G4 Design Rubric Gate
+        if sbase == "G4" and (root / "art_direction.json").is_file():
+            if rname == "executor":
+                ad_issues: list[str] = []
+                cur_ad_sha = L.sha256_rel(root, "art_direction.json")
+                ad_lint_p = root / "qa" / "art_direction_lint.json"
+                if not ad_lint_p.is_file():
+                    ad_issues.append("qa/art_direction_lint.json missing — run `python scripts/sv_cli.py ci art-direction --json`")
+                else:
+                    try:
+                        ad_rep = json.loads(ad_lint_p.read_text(encoding="utf-8"))
+                        if not isinstance(ad_rep, dict):
+                            ad_issues.append("qa/art_direction_lint.json is not a JSON object")
+                        else:
+                            if ad_rep.get("ok") is not True:
+                                ad_issues.append(f"qa/art_direction_lint.json ok={ad_rep.get('ok')!r} (expected True)")
+                            rep_errs = ad_rep.get("errors")
+                            if not isinstance(rep_errs, list) or len(rep_errs) > 0:
+                                ad_issues.append(f"qa/art_direction_lint.json has {len(rep_errs) if isinstance(rep_errs, list) else 'invalid'} error(s)")
+                            if ad_rep.get("art_direction_sha") != cur_ad_sha:
+                                ad_issues.append("qa/art_direction_lint.json art_direction_sha does not match current art_direction.json on disk")
+                    except Exception as exc:
+                        ad_issues.append(f"unreadable qa/art_direction_lint.json: {exc}")
+                ad_ci_recs = [c for c in ci_entries if c.get("event") == "ci_result" and c.get("target") == "art-direction"]
+                if ad_ci_recs and ad_ci_recs[-1].get("exit_code") != 0:
+                    ad_issues.append(f"logs/ci_lint.jsonl last art-direction CI record failed (exit_code={ad_ci_recs[-1].get('exit_code')})")
+                ok_lg13_exec = len(ad_issues) == 0
+                add_check(
+                    "LG-13",
+                    rname,
+                    ok_lg13_exec,
+                    f"executor ({actor_id}) passed Pre-G4 art_direction.json lint (SHA verified, 0 errors)"
+                    if ok_lg13_exec
+                    else f"executor ({actor_id}) Pre-G4 art-direction check failed: {'; '.join(ad_issues[:3])}",
+                )
+
+            elif rname == "reviewer":
+                sc_issues: list[str] = []
+                scores_p = root / "qa" / "design" / "g4_scores.json"
+                submit_score_steps = [
+                    s for s in steps
+                    if s.get("action") == "submit_design_scores" and s.get("exit_code") == 0
+                ]
+                if not submit_score_steps:
+                    sc_issues.append("reviewer missing `submit_design_scores` step — run `sv_cli.py design score --input <draft.json> --actor <id> --run <run_id>`")
+
+                expected_sets: set[str] = set()
+                min_total_floor = 82.0
+                min_dim_floor = 7.0
+                try:
+                    ad_obj = json.loads((root / "art_direction.json").read_text(encoding="utf-8"))
+                    if isinstance(ad_obj, dict):
+                        for item in (ad_obj.get("location_matrix") or []):
+                            if isinstance(item, dict) and item.get("id"):
+                                expected_sets.add(str(item["id"]).strip())
+                        rub = ad_obj.get("reviewer_rubric") or {}
+                        if isinstance(rub, dict):
+                            if isinstance(rub.get("min_total"), (int, float)):
+                                min_total_floor = max(min_total_floor, float(rub["min_total"]))
+                            if isinstance(rub.get("min_dim"), (int, float)):
+                                min_dim_floor = max(min_dim_floor, float(rub["min_dim"]))
+                except Exception:
+                    pass
+                vs_p = root / "qa" / "design" / "visual_spec.json"
+                if vs_p.is_file():
+                    try:
+                        vs_obj = json.loads(vs_p.read_text(encoding="utf-8"))
+                        if isinstance(vs_obj, dict):
+                            vs_sets = vs_obj.get("sets")
+                            if isinstance(vs_sets, dict):
+                                expected_sets.update(str(k).strip() for k in vs_sets.keys() if str(k).strip())
+                            elif isinstance(vs_sets, list):
+                                for item in vs_sets:
+                                    if isinstance(item, str) and item.strip():
+                                        expected_sets.add(item.strip())
+                                    elif isinstance(item, dict) and (item.get("id") or item.get("name")):
+                                        expected_sets.add(str(item.get("id") or item.get("name")).strip())
+                    except Exception:
+                        pass
+
+                if not scores_p.is_file():
+                    sc_issues.append("qa/design/g4_scores.json missing — submit 8-axis scores via `sv_cli.py design score`")
+                else:
+                    try:
+                        sc_data = json.loads(scores_p.read_text(encoding="utf-8"))
+                        if not isinstance(sc_data, dict):
+                            sc_issues.append("qa/design/g4_scores.json is not a JSON object")
+                        else:
+                            raw_rid = str(sc_data.get("reviewer_id") or "").strip()
+                            try:
+                                norm_rid = L.sanitize_actor_id(raw_rid) if raw_rid else ""
+                            except Exception:
+                                norm_rid = raw_rid
+                            if raw_rid != actor_id and norm_rid != actor_id:
+                                sc_issues.append(f"g4_scores.json reviewer_id={raw_rid!r} does not match actor_id={actor_id!r}")
+
+                            try:
+                                file_min_total = max(min_total_floor, float(sc_data.get("min_total", min_total_floor)))
+                            except (TypeError, ValueError):
+                                file_min_total = min_total_floor
+                            try:
+                                file_min_dim = max(min_dim_floor, float(sc_data.get("min_dim", min_dim_floor)))
+                            except (TypeError, ValueError):
+                                file_min_dim = min_dim_floor
+
+                            scored_sets = sc_data.get("sets")
+                            if not isinstance(scored_sets, dict) or not scored_sets:
+                                sc_issues.append("g4_scores.json has 0 scored sets")
+                            else:
+                                missing_sets = sorted(expected_sets - set(scored_sets.keys()))
+                                if missing_sets:
+                                    sc_issues.append(f"g4_scores.json missing set(s): {missing_sets[:6]}")
+                                failing_sets: list[str] = []
+                                malformed_sets: list[str] = []
+                                for sid, srec in sorted(scored_sets.items()):
+                                    if not isinstance(srec, dict) or not isinstance(srec.get("axes"), dict):
+                                        malformed_sets.append(f"{sid} (missing axes)")
+                                        continue
+                                    axes_d = srec["axes"]
+                                    miss_ax = [ax for ax in MANDATORY_G4_AXES if ax not in axes_d]
+                                    if miss_ax:
+                                        malformed_sets.append(f"{sid} (missing axes {miss_ax[:3]})")
+                                        continue
+                                    vals: list[float] = []
+                                    bad_ax = False
+                                    for ax in MANDATORY_G4_AXES:
+                                        aobj = axes_d.get(ax)
+                                        if not isinstance(aobj, dict):
+                                            malformed_sets.append(f"{sid}.{ax} invalid")
+                                            bad_ax = True
+                                            break
+                                        sv = aobj.get("score")
+                                        if isinstance(sv, bool) or not isinstance(sv, (int, float)) or not (0.0 <= float(sv) <= 10.0):
+                                            malformed_sets.append(f"{sid}.{ax} score invalid")
+                                            bad_ax = True
+                                            break
+                                        if not _is_meaningful_note(str(aobj.get("reason") or ""), min_words=6):
+                                            malformed_sets.append(f"{sid}.{ax} reason <6w/boilerplate")
+                                            bad_ax = True
+                                            break
+                                        vals.append(float(sv))
+                                    if not bad_ax:
+                                        tot = round(sum(vals) / 80.0 * 100.0, 1)
+                                        mn = min(vals)
+                                        if tot < file_min_total or mn < file_min_dim:
+                                            failing_sets.append(f"{sid}(total={tot},min={mn:g})")
+                                if malformed_sets:
+                                    sc_issues.append(f"malformed 8-axis score(s): {malformed_sets[:4]}")
+                                if not allow_fix_verdict:
+                                    if sc_data.get("verdict") != "pass":
+                                        sc_issues.append(f"g4_scores.json verdict={sc_data.get('verdict')!r} (must be 'pass')")
+                                    if failing_sets:
+                                        sc_issues.append(f"set(s) below G4 floor (min_total={file_min_total:g}, min_dim={file_min_dim:g}): {failing_sets[:5]}")
+                    except Exception as exc:
+                        sc_issues.append(f"unreadable qa/design/g4_scores.json: {exc}")
+
+                ok_lg13_rev = len(sc_issues) == 0
+                add_check(
+                    "LG-13",
+                    rname,
+                    ok_lg13_rev,
+                    f"reviewer ({actor_id}) submitted valid 8-axis G4 design scores (verdict={sc_data.get('verdict') if scores_p.is_file() else 'n/a'})"
+                    if ok_lg13_rev
+                    else f"reviewer ({actor_id}) G4 8-axis rubric gate failed: {'; '.join(sc_issues[:3])}",
+                )
+
     # LG-08 & LG-12: Cross-role checks when checking "all"
     if role == "all":
         exec_actor = found_actors.get("executor")
@@ -595,7 +773,7 @@ def audit_logs(
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Story Video Skills v6.0 Log-CI / Log-Lint Gate (LG-01..LG-12).")
+    ap = argparse.ArgumentParser(description="Story Video Skills v6.2 Log-CI / Log-Lint Gate (LG-01..LG-13).")
     ap.add_argument("--root", default=None, help="Episode directory root")
     ap.add_argument("--stage", required=True, help="Gate stage (G1..G7 or G5.U1)")
     ap.add_argument("--role", default="all", choices=["all", "executor", "reviewer", "orchestrator"])

@@ -146,7 +146,7 @@ if (ROOT / "roles").is_dir():
 
 # ---------------------------------------------------------------- 2. lint IDs
 impl = ""
-for s in ("scripts/lint.mjs", "scripts/script_lint.py", "scripts/sv_log_lint.py"):
+for s in ("scripts/lint.mjs", "scripts/script_lint.py", "scripts/sv_log_lint.py", "scripts/art_direction_lint.py"):
     p = ENG / s
     if p.exists():
         impl += p.read_text(encoding="utf-8")
@@ -177,7 +177,7 @@ REQUIRED = {
         "src/math.ts", "src/subjects.ts", "src/design/Sheets.tsx", "src/sets/index.ts", "src/sets/types.ts",
     ] + [
         f"scripts/{x}" for x in (
-            "audio_qa.py", "audiolib.py", "blind_pack.mjs", "deliver.mjs", "design.mjs", "entry.tsx",
+            "art_direction_lint.py", "audio_qa.py", "audiolib.py", "blind_pack.mjs", "deliver.mjs", "design.mjs", "entry.tsx",
             "geom.mjs", "lint.mjs", "load.mjs", "mix.py", "plate_check.py", "qa.mjs", "script_lint.py",
             "sv_cli.py", "sv_doctor.py", "sv_gate.py", "sv_log.py", "sv_log_lint.py", "theme.py",
             "tile.py", "times.mjs", "voice.py",
@@ -190,9 +190,12 @@ REQUIRED = {
     ],
     "hooks": ["sv_guard.py"],
     "roles": ["orchestrator.md", "executor.md", "reviewer.md"],
-    "schemas": ["cli_envelope.schema.json", "role_log.schema.json", "review_record.schema.json"],
+    "schemas": [
+        "cli_envelope.schema.json", "role_log.schema.json", "review_record.schema.json",
+        "art_direction.schema.json", "g4_scores.schema.json",
+    ],
     "starter": [
-        "README.md", ".gitignore", "brief.md", "beats.md", "script.json", "audio.json",
+        "README.md", ".gitignore", "brief.md", "beats.md", "script.json", "audio.json", "art_direction.json",
         "src/episode/cast.ts", "src/episode/geo.ts", "src/episode/sets.tsx", "src/episode/shotlist.ts",
         "src/data/words.json", "src/data/cues.json", "src/data/events.json",
     ] + [f"gates/G{i}.review.md" for i in range(1, 8)],

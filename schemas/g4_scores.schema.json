@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://story-video-skills.local/schemas/g4_scores.schema.json",
+  "title": "Story Video Skills v6.2 G4 Design Plate 8-Axis Score Record",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "reviewer_id",
+    "min_total",
+    "min_dim",
+    "verdict",
+    "failed_sets",
+    "sets",
+    "submitted_at_utc"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "6.2"
+    },
+    "reviewer_id": {
+      "type": "string",
+      "minLength": 2
+    },
+    "min_total": {
+      "type": "number",
+      "minimum": 82,
+      "maximum": 100
+    },
+    "min_dim": {
+      "type": "number",
+      "minimum": 7,
+      "maximum": 10
+    },
+    "verdict": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "fix"
+      ]
+    },
+    "failed_sets": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "submitted_at_utc": {
+      "type": "string",
+      "minLength": 10
+    },
+    "art_direction_sha": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "sets": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "axes",
+          "total",
+          "min_axis",
+          "ok",
+          "failed_axes"
+        ],
+        "properties": {
+          "axes": {
+            "type": "object",
+            "required": [
+              "style_cohesion",
+              "depth_and_lighting",
+              "perspective_and_scale",
+              "composition_and_integration",
+              "detail_density_and_variety",
+              "staging_readability",
+              "spatial_continuity",
+              "story_and_spoiler_fidelity"
+            ],
+            "properties": {
+              "style_cohesion": { "$ref": "#/$defs/axis_entry" },
+              "depth_and_lighting": { "$ref": "#/$defs/axis_entry" },
+              "perspective_and_scale": { "$ref": "#/$defs/axis_entry" },
+              "composition_and_integration": { "$ref": "#/$defs/axis_entry" },
+              "detail_density_and_variety": { "$ref": "#/$defs/axis_entry" },
+              "staging_readability": { "$ref": "#/$defs/axis_entry" },
+              "spatial_continuity": { "$ref": "#/$defs/axis_entry" },
+              "story_and_spoiler_fidelity": { "$ref": "#/$defs/axis_entry" }
+            }
+          },
+          "total": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "min_axis": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "failed_axes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "style_cohesion",
+                "depth_and_lighting",
+                "perspective_and_scale",
+                "composition_and_integration",
+                "detail_density_and_variety",
+                "staging_readability",
+                "spatial_continuity",
+                "story_and_spoiler_fidelity"
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "axis_entry": {
+      "type": "object",
+      "required": [
+        "score",
+        "reason"
+      ],
+      "properties": {
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 15
+        }
+      }
+    }
+  }
+}

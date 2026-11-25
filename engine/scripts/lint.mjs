@@ -425,6 +425,24 @@ if (phase !== 'shots') {
           }
         }
       }
+      // AD-07: Cross-Plate Visual Richness & Anti-Copy-Paste Backdrop Gate (v6.2)
+      if (d.rasterPlate && pl && !lineWaived(setsSrc, 'AD-07', id)) {
+        if (typeof pl.color_clusters === 'number' && Number.isFinite(pl.color_clusters)) {
+          if (pl.color_clusters < 6) {
+            err('AD-07', `${id} (rasterPlate): color_clusters=${pl.color_clusters} < 6 — flat/under-detailed placeholder plate; enrich palette, lighting, and layered details`);
+          } else if (pl.color_clusters < 10) {
+            warn('AD-07', `${id} (rasterPlate): color_clusters=${pl.color_clusters} < 10 — low chromatic richness; verify depth and tonal variety`);
+          }
+        }
+        if (typeof pl.cross_set_max_sim === 'number' && Number.isFinite(pl.cross_set_max_sim)) {
+          const simPeer = pl.cross_set_most_similar ? ` with '${pl.cross_set_most_similar}'` : '';
+          if (pl.cross_set_max_sim > 0.985) {
+            err('AD-07', `${id} (rasterPlate): cross_set_max_sim=${pl.cross_set_max_sim.toFixed(4)} > 0.985 — near-identical copy-paste backdrop${simPeer}; redraw distinct camera angle and staging`);
+          } else if (pl.cross_set_max_sim > 0.965) {
+            warn('AD-07', `${id} (rasterPlate): cross_set_max_sim=${pl.cross_set_max_sim.toFixed(4)} > 0.965 — very similar backdrop${simPeer}; verify camera angle and framing differentiation`);
+          }
+        }
+      }
       if (!st.moves) warn('SE-12', `${id}: nothing in the set changes over time — add life driven by o.t (LED pulse, fan, smoke, leaves, clock; sets.md §7)`);
       if (!isBakedPlate && st.glow < TH.glow) err('SE-10', `${id}: no light source glow (url(#glowY)) — every location has a visible light source`);
       // SE-14: diegetic sign clipped on set plate camera
@@ -596,6 +614,33 @@ if (phase !== 'shots') {
     }
     if (d.stateless !== undefined && typeof d.stateless !== 'boolean') {
       err('SE-20', `${id}: stateless must be a boolean`);
+    }
+  }
+  // AD-08: 1-to-1 Sync between art_direction.json location_matrix and EPISODE_SETS (v6.2)
+  if (fs.existsSync('art_direction.json')) {
+    let adPlan = null;
+    try {
+      adPlan = JSON.parse(fs.readFileSync('art_direction.json', 'utf8'));
+    } catch (e) {
+      err('AD-08', `art_direction.json is not valid JSON (${e.message}) — run sv_cli.py ci art-direction`);
+    }
+    if (adPlan && Array.isArray(adPlan.location_matrix)) {
+      for (const spec of adPlan.location_matrix) {
+        if (!spec || typeof spec !== 'object' || typeof spec.id !== 'string' || !spec.id.trim()) continue;
+        const sid = spec.id.trim();
+        if (lineWaived(setsSrc, 'AD-08', sid)) continue;
+        if (!Object.prototype.hasOwnProperty.call(P.EPISODE_SETS, sid)) {
+          err('AD-08', `art_direction.json declares sub-scene '${sid}' (location='${spec.location ?? ''}', shotScale='${spec.shotScale ?? ''}') which is missing from EPISODE_SETS in src/episode/sets.tsx`);
+          continue;
+        }
+        const d = P.EPISODE_SETS[sid];
+        if (typeof spec.location === 'string' && spec.location.trim() && d.location !== spec.location.trim()) {
+          err('AD-08', `${sid}: EPISODE_SETS location '${d.location ?? ''}' does not match art_direction.json '${spec.location.trim()}'`);
+        }
+        if (typeof spec.shotScale === 'string' && spec.shotScale.trim() && d.shotScale !== spec.shotScale.trim()) {
+          err('AD-08', `${sid}: EPISODE_SETS shotScale '${d.shotScale ?? ''}' does not match art_direction.json '${spec.shotScale.trim()}'`);
+        }
+      }
     }
   }
   // PR-01, PR-02, PR-03 & PR-05: human-scale guard, internal text collision, disembodied head & partial-body continuity check on custom episode WORLD_PROPS

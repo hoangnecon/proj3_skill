@@ -1,16 +1,18 @@
-# Standardized CLI JSON API & Log-CI Specification (`sv-v6.0`)
+# Standardized CLI JSON API & Log-CI Specification (`sv-v6.2`)
 
 Formal JSON Schemas live at `<suite>/schemas/`:
 - `schemas/cli_envelope.schema.json`
 - `schemas/role_log.schema.json`
 - `schemas/review_record.schema.json`
+- `schemas/art_direction.schema.json`
+- `schemas/g4_scores.schema.json`
 
 ## 1. Standardized CLI Exit Codes
 | Code | Meaning |
 |---|---|
 | `0` | Success / PASS — all requested checks or gate transitions succeeded |
-| `1` | Domain CI / Lint Failure (`ci script\|voice\|design\|shots\|audio\|delivery`, `review submit`) |
-| `2` | Log-CI Failure (`ci log`, `LG-01..LG-12`, or malformed `log` call) |
+| `1` | Domain CI / Lint Failure (`ci script\|voice\|art-direction\|design\|shots\|audio\|delivery`, `design score`, `review submit`) |
+| `2` | Log-CI Failure (`ci log`, `LG-01..LG-13`, or malformed `log` call) |
 | `3` | Verification Gate Blocked (`gate check\|pass`: missing upstream gate, review, or cooldown) |
 | `4` | Environment / Preflight Doctor Failure (`doctor`, `status`) |
 | `5` | Role / Hook Policy Violation (`SV_ACTOR_ROLE != orchestrator` attempting `gate pass`) |
@@ -46,7 +48,7 @@ Every `sv_cli.py` subcommand with `--json` returns ONE JSON object conforming to
 }
 ```
 
-## 3. 12-Rule Log-CI (`LG-01..LG-12`, `scripts/sv_log_lint.py`)
+## 3. 13-Rule Log-CI (`LG-01..LG-13`, `scripts/sv_log_lint.py`)
 | ID | Enforced Invariant |
 |---|---|
 | `LG-01` | Role log file presence & JSON schema validity (`schemas/role_log.schema.json`) |
@@ -61,3 +63,4 @@ Every `sv_cli.py` subcommand with `--json` returns ONE JSON object conforming to
 | `LG-10` | Orchestrator G5 Cross-Check (`contact_p*.jpg` + `>= max(3, ceil(10% * N_shots))` cards + all HOT crops) |
 | `LG-11` | Orchestrator user approval proof on `G1`/`G2`/`G4` (`user_approval` matching `gates/G#.review.md`) |
 | `LG-12` | Chronological causal ordering (`Executor complete <= Reviewer complete <= Orchestrator complete`) |
+| `LG-13` | Pre-G4 `art_direction.json` SHA-locked lint pass (`qa/art_direction_lint.json`) & Reviewer 8-axis G4 design rubric pass (`qa/design/g4_scores.json`, `total >= 82`, every axis `>= 7`) |

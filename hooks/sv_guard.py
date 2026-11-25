@@ -13,6 +13,7 @@ Safe pass-through outside episode workspaces (never blocks editing the plugin it
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sys
@@ -55,6 +56,7 @@ IMMUTABLE_CI_FILES = {
     "qa/state.json",
     "qa/lint.json",
     "qa/script_lint.json",
+    "qa/art_direction_lint.json",
     "qa/voice_report.json",
     "qa/mix_report.json",
     "qa/deliver_report.json",
@@ -68,6 +70,7 @@ IMMUTABLE_CI_FILES = {
     "qa/strips_needed.json",
     "qa/blind_review/manifest.json",
     "qa/design/plate_stats.json",
+    "qa/design/g4_scores.json",
     "qa/design/visual_spec.json",
     "qa/design/cache.json",
 }
@@ -273,11 +276,42 @@ def _check_write_or_edit(payload: dict) -> None:
             f"Complete brief.md, get user approval, and pass G1 via sv_cli.py gate pass G1 first."
         )
         return
-    if rel in ("src/episode/cast.ts", "src/episode/sets.tsx", "src/episode/subjects.tsx", "src/episode/geo.ts") and "G1" not in passed:
+    if rel == "art_direction.json" and "G1" not in passed:
         _deny(
-            f"[SV-GUARD H3] Cannot edit design file '{rel}' before Gate G1 (brief) passes."
+            "[SV-GUARD H3] Cannot edit 'art_direction.json' before Gate G1 (brief) passes. "
+            "Complete brief.md, get user approval, and pass G1 via sv_cli.py gate pass G1 first."
         )
         return
+    if rel in ("src/episode/cast.ts", "src/episode/sets.tsx", "src/episode/subjects.tsx", "src/episode/geo.ts") or rel.startswith("plates/"):
+        if "G1" not in passed:
+            _deny(
+                f"[SV-GUARD H3] Cannot edit design/plate file '{rel}' before Gate G1 (brief) passes."
+            )
+            return
+        ad_p = ep_root / "art_direction.json"
+        if ad_p.is_file():
+            ad_lint_p = ep_root / "qa" / "art_direction_lint.json"
+            ad_ok = False
+            if ad_lint_p.is_file():
+                try:
+                    ad_rep = json.loads(ad_lint_p.read_text(encoding="utf-8"))
+                    cur_sha = hashlib.sha256(ad_p.read_bytes()).hexdigest()
+                    if (
+                        isinstance(ad_rep, dict)
+                        and ad_rep.get("ok") is True
+                        and isinstance(ad_rep.get("errors"), list)
+                        and len(ad_rep["errors"]) == 0
+                        and ad_rep.get("art_direction_sha") == cur_sha
+                    ):
+                        ad_ok = True
+                except Exception:
+                    ad_ok = False
+            if not ad_ok:
+                _deny(
+                    f"[SV-GUARD H3] Cannot edit design/plate file '{rel}' until art_direction.json passes "
+                    f"'python scripts/sv_cli.py ci art-direction --json' with 0 errors and matches current disk SHA."
+                )
+                return
     if (rel == "src/episode/shotlist.ts" or rel.startswith("src/episode/shots/")) and not ({"G3", "G4"} <= passed):
         missing = sorted({"G3", "G4"} - passed)
         _deny(
@@ -327,7 +361,8 @@ def _check_run_command(payload: dict) -> None:
     # H4: Shell & inline-script tampering guard against logs, gate records, reviews, standards, and suite scripts
     protected_target_re = (
         r'(?:gates[\\/]log\.jsonl|logs[\\/][^\s"\']+\.jsonl|qa[\\/]review[\\/]|'
-        r'qa[\\/]design[\\/]plate_stats\.json|qa[\\/](?:lint|script_lint|voice_report|mix_report|deliver_report|qa_status|layout_report)\.json|'
+        r'qa[\\/]design[\\/](?:plate_stats|g4_scores)\.json|'
+        r'qa[\\/](?:lint|script_lint|art_direction_lint|voice_report|mix_report|deliver_report|qa_status|layout_report)\.json|'
         r'standards[\\/][^\s"\']+\.json)'
     )
     tamper_re = re.compile(
@@ -378,6 +413,7 @@ def _check_run_command(payload: dict) -> None:
             re.search(r'\bqa\.mjs\s+review\b', cmd)
             or re.search(r'\bsv_cli\.py\s+review\s+submit\b', cmd)
         )
+        is_design_score = bool(re.search(r'\bsv_cli\.py\s+design\s+score\b', cmd))
         m_gate = re.search(
             r'\b(?:sv_gate\.py\s+(pass-unit|pass)\s+([A-Za-z0-9._-]+)|sv_cli\.py\s+gate\s+pass\s+([A-Za-z0-9._-]+))',
             cmd,
@@ -387,6 +423,11 @@ def _check_run_command(payload: dict) -> None:
             visual_req = (
                 "shot review submission",
                 ("qa/contact_p", "_contact.jpg", "qa/cards/", "qa/crops/", "qa/shots/", "qa/strips/"),
+            )
+        elif is_design_score:
+            visual_req = (
+                "G4 design score submission",
+                ("qa/design/set_", "qa/design/overview_sets"),
             )
         elif m_gate:
             subcmd = (m_gate.group(1) or "").lower()
