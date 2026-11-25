@@ -127,7 +127,9 @@ def _strip_markup(s: str) -> str:
 
 def _episode_profile(script: dict | None) -> dict:
     sc = script or {}
-    is_16x9 = sc.get("format") == "16:9" or sc.get("length") == "long_16x9"
+    ep_meta = jload(".episode.json") or {}
+    pa = jload("standards/pacing.json") or {}
+    is_16x9 = ep_meta.get("track") == "long" or sc.get("format") == "16:9" or sc.get("length") == "long_16x9"
     fmt = "16:9" if is_16x9 else "9:16"
     length = sc.get("length") or ("long_16x9" if is_16x9 else "short_9x16")
     sla_min = 45 if is_16x9 else 15
@@ -149,8 +151,11 @@ def _episode_profile(script: dict | None) -> dict:
             duration_s = float(vr["total"])
     if duration_s <= 0.0 and segs:
         total_words = sum(len(_strip_markup(str(s.get("tts_text", s.get("text", "")))).split()) for s in segs if isinstance(s, dict))
-        pause_after = float(sc.get("pause_after", 0.18))
-        duration_s = round(total_words / 5.25 + len(segs) * pause_after, 1)
+        pa_voice = pa.get("voice") if isinstance(pa.get("voice"), dict) else {}
+        wps_band = pa_voice.get("overall_wps")
+        target_wps = (float(wps_band[0]) + float(wps_band[1])) / 2.0 if isinstance(wps_band, list) and len(wps_band) == 2 else 4.57
+        pause_after = float(sc.get("pause_after", pa_voice.get("default_pause_after_s", 0.22)))
+        duration_s = round(total_words / max(target_wps, 3.0) + max(0, len(segs) - 1) * pause_after * 0.35, 1)
 
     total_frames = max(0, round(duration_s * 30))
 

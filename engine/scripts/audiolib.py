@@ -1,4 +1,4 @@
-"""Shared DSP + measurement for the mix/master standard (sv-42-mix-master). Pure numpy/scipy, 48 kHz.
+"""Shared DSP + measurement for the mix/master standard (sv-core-audio). Pure numpy/scipy, 48 kHz.
 
 Measurement follows ITU-R BS.1770-4 / EBU R128: K-weighting, momentary 400 ms, short-term 3 s,
 integrated with -70 LUFS absolute and -10 LU relative gates, LRA (10-95 % of gated short-term),

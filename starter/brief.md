@@ -1,14 +1,14 @@
 # Brief — TODO tên tập
 
-> Gate G1. Điền mọi mục, xoá hết TODO, rồi đưa người dùng duyệt. Xem `sv-01-series-bible` và `sv-10-script` (`premise-ideation.md`, `craft.md`).
+> Gate G1. Điền mọi mục, xoá hết TODO, rồi đưa người dùng duyệt. Xem `sv-core-bible` và `sv-short-script` / `sv-long-script` (`premise-ideation.md`, `craft.md`).
 
 ## Archetype
 - Chọn 1: TODO `Personal Rule-Trap | Systemic Satire | Hybrid VN Trap`
-- Generative lens: TODO (1 trong 4 lăng kính trong `sv-10/references/premise-ideation.md`: Đảo tiên đề vật lý-tri giác | Đồ vật có luật trạng thái | Hai nửa nhân loại đối lập/cộng sinh | Dị biệt cá nhân ngược đời)
+- Generative lens: TODO (1 trong 4 lăng kính trong `sv-short-script/references/premise-ideation.md`: Đảo tiên đề vật lý-tri giác | Đồ vật có luật trạng thái | Hai nửa nhân loại đối lập/cộng sinh | Dị biệt cá nhân ngược đời)
 
 ## Premise
 - Câu mở `s1` (`≤ 16–20` từ, tạo ngay câu hỏi "Khoan, sống kiểu gì?!"): TODO
-- Cơ chế & hình ảnh vẽ được 1 khung (`sv-20`): TODO
+- Cơ chế & hình ảnh vẽ được 1 khung (`sv-short-design` / `sv-long-design`): TODO
 - Bịt cửa thoát miễn phí (`s2–s3` — vì sao không thể tắt hay né dễ): TODO
 
 ## Spine
@@ -24,10 +24,10 @@ TODO — Nút thắt 5 điểm (viết ngược từ Điểm Mở trước, `cra
 TODO cơ chế hài deadpan chính (luật ngược đời thi hành nghiêm túc, thích nghi đời thường ở xóm/trường/chợ) và tối đa 2–3 gag Hồi 1 ngắn gọn.
 
 ## Characters
-TODO 2–3 nhân vật chính (principal) + phụ: tên, vai + nơi ở (`"Bà Hạnh tầng năm"`), một nét tính cách, một nét ngoại hình `sv-20` dễ nhận ra từ xa.
+TODO 2–3 nhân vật chính (principal) + phụ: tên, vai + nơi ở (`"Bà Hạnh tầng năm"`), một nét tính cách, một nét ngoại hình `sv-short-design` dễ nhận ra từ xa.
 
 ## Locations
-TODO 3–6 bối cảnh thuộc bank `sv-20`; mỗi bối cảnh một dòng: là nơi nào, đồ vật đặc trưng, một chữ/biển hiệu gây cười.
+TODO 3–6 bối cảnh (`sv-short-design` / `sv-long-design`); mỗi bối cảnh một dòng: là nơi nào, đồ vật đặc trưng, một chữ/biển hiệu gây cười.
 
 ## Ending
 TODO câu chốt cuối (`Button` `≤ 12` từ, deadpan, 0 giảng đạo lý) và hình ảnh chốt lật lại câu mở đầu.

@@ -217,6 +217,15 @@ const entries = orderedShots.map((r) => {
   };
 });
 
+// Attach 3-shot continuity context window (prev_shot / next_shot) without exposing any code or coordinates
+const briefCtx = (e) => (e ? {shot: e.shot, name: e.name, set_title: e.set_title, narration: e.narration, card: e.images.card} : null);
+for (let idx = 0; idx < entries.length; idx++) {
+  entries[idx].context_window = {
+    prev_shot: idx > 0 ? briefCtx(entries[idx - 1]) : null,
+    next_shot: idx + 1 < entries.length ? briefCtx(entries[idx + 1]) : null,
+  };
+}
+
 const formatSliceShot = (e) => ({
   shot: e.shot,
   ...(e.seg ? {seg: e.seg} : {}),
@@ -229,6 +238,7 @@ const formatSliceShot = (e) => ({
   set_streak: e.set_streak,
   prev_set: e.prev_set,
   narration: e.narration,
+  context_window: e.context_window,
   is_hot: e.is_hot,
   hot_reasons: e.hot_reasons,
   layout: e.layout,
@@ -258,6 +268,7 @@ const formatUnitShot = (e, unitContactFile) => ({
   set_streak: e.set_streak,
   prev_set: e.prev_set,
   narration: e.narration,
+  context_window: e.context_window,
   is_hot: e.is_hot,
   hot_reasons: e.hot_reasons,
   layout: e.layout,
@@ -281,8 +292,8 @@ const manifestPath = path.join(outDir, 'manifest.json');
 const prevManifest = readJson(manifestPath, null);
 
 const checksKeys = isLong16x9
-  ? ['acting', 'contact', 'overlap', 'set', 'text', 'caption', 'beat', 'model', 'framing', 'variety']
-  : ['acting', 'contact', 'overlap', 'set', 'text', 'caption', 'beat', 'model'];
+  ? ['acting', 'contact', 'overlap', 'set', 'text', 'caption', 'beat', 'model', 'continuity', 'framing', 'variety']
+  : ['acting', 'contact', 'overlap', 'set', 'text', 'caption', 'beat', 'model', 'continuity'];
 const reviewSchema = {
   format: 'JSONL — one JSON object per line, committed via: node scripts/qa.mjs review --batch <file.jsonl>',
   required_fields: ['i', 'shot', 'hash', 'blind_sha', 'builder', 'reviewer', 'saw_strip', 'saw_crop', 'looked', 'verdict', 'checks', 'note'],
@@ -465,7 +476,7 @@ const rubric = isLong16x9
    - **HOT Shots (\`is_hot: true\`)**: Also open \`images.card\` and \`images.crop\` (if non-null), and include \`"crops"\` in \`looked\`. Only open \`images.card_fallback\` for non-HOT shots if a frame on the contact sheet is ambiguous.
    - In \`looked\`, include \`"contact"\` (or \`"card"\`) for every shot, \`"shot_strip"\` / \`"strips"\` whenever motion strips exist, plus \`"crops"\` for HOT shots.
 4. **Include \`"blind_sha"\`** from the slice entry verbatim in each JSONL review line.
-5. **Check ALL 10 criteria** (\`acting\`, \`contact\`, \`overlap\`, \`set\`, \`text\`, \`caption\`, \`beat\`, \`model\`, \`framing\`, \`variety\`) formatted as \`"ok — ..."\` or \`"fix — ..."\`, with a \`note\` of >= 6 words describing what you actually saw:
+5. **Check ALL 11 criteria** (\`acting\`, \`contact\`, \`overlap\`, \`set\`, \`text\`, \`caption\`, \`beat\`, \`model\`, \`continuity\`, \`framing\`, \`variety\`) formatted as \`"ok — ..."\` or \`"fix — ..."\`, with a \`note\` of >= 6 words describing what you actually saw:
    - \`acting\`: expression, gesture, posture, and gaze match the narration beat; **verify articulated bent knees/elbows and dynamic physics** (no stiff, board-like standing on mounts or mid-action!). **Pasted-Sticker & Airborne / Jump / Flight Realism Check (MANDATORY \`fix\`):** flag automatic \`fix\` if (a) limbs/torso read as a rigid brick with zero spine curve, knee flexion, or secondary hair/FX life, (b) ANY frame in the 8-frame \`shot_strip\` or \`strips\` shows a character walking/running in mid-air or moon-floating without takeoff/landing squash, or (c) a flying creature (\`ladybug\`, etc.) is occluded behind ground/tabletop props!
    - \`contact\`: feet planted on ground/floor, hands actually meet props/targets, seated bodies rest on seats; **verify mounted riders sit physically on their mount facing the travel direction, and verify non-OTS creatures are not half-sliced off the frame edge**. **Pasted-Sticker & Airborne / Jump / Flight Realism Check (MANDATORY \`fix\`):** flag automatic \`fix\` if (a) ANY frame in the 8-frame \`shot_strip\` or \`strips\` shows a character walking/running in mid-air, moon-floating without takeoff/landing squash, or a grounded character floating with no contact shadow, (b) a flying creature (\`ladybug\`, etc.) is occluded behind ground/tabletop props instead of flying clearly above them, (c) hands in \`push\`/\`hold\`/\`ride\` grab empty air instead of the physical target/grip point, or (d) riders sit pasted flat on one side of a creature instead of straddling with a seat shadow.
    - \`overlap\`: no unintended character/prop collisions or faces hidden behind props/overlays.
@@ -474,6 +485,7 @@ const rubric = isLong16x9
    - \`caption\`: caption band is clear of faces, hands, and hero props.
    - \`beat\`: visual action and timing match the spoken \`narration\` for this shot.
    - \`model\`: character proportions, outfits, and identity stay on-model.
+   - \`continuity\` (**3-shot cross-shot continuity — MANDATORY \`fix\` trigger**): inspect \`context_window.prev_shot\` and \`context_window.next_shot\` alongside the rendered frames. Flag automatic \`fix\` if (a) physical distance between actors/objects contradicts the action or narration (e.g. warning from afar while standing shoulder-to-shoulder, or impact shown BEFORE the spoken approach/collision), (b) a moving vehicle/prop loses or gains its operator inconsistently between consecutive shots, (c) a ground-bound object floats off the floor plane, or (d) a closeup-only detached limb appears next to the full character in a wide shot!
    - \`framing\` (**16:9 cinematic framing — MANDATORY \`fix\` trigger**): check depth, angle, frame edges, and the shot's \`layout\` telemetry (\`layout.occ_pct\`, \`layout.scale_err\`, \`layout.cutoff_err\`, \`layout.max_cell\`) alongside the rendered frame. Flag **cluttered/chaotic cells ("rối mắt / búa xua")**, **fake over-zoomed low-detail backgrounds**, and **any severed or floating giant limb** (arm, hand, leg, tentacle, creature appendage) terminating mid-air inside the frame — all are automatic \`fix\`!
    - \`variety\` (**visual freshness — MANDATORY \`fix\` trigger**): inspect \`set_streak\` and \`prev_set\` on each shot entry alongside the rendered contact page. **Same-wall / same-prop copy-paste fatigue**, repeating the same static wall framing/pose/prop layout across consecutive shots, or **recurring hero creatures/subjects failing to vary their poses/expressions across shots (copy-pasted static stickers!)** is an automatic \`fix\`!
 6. Submit reviews via \`node scripts/qa.mjs review --batch <file.jsonl>\`.
@@ -489,7 +501,7 @@ const rubric = isLong16x9
    - **HOT Shots (\`is_hot: true\`)**: Also open \`images.card\` and \`images.crop\` (if non-null), and include \`"crops"\` in \`looked\`. Only open \`images.card_fallback\` for non-HOT shots if a frame on the contact sheet is ambiguous.
    - In \`looked\`, include \`"contact"\` (or \`"card"\`) for every shot, \`"shot_strip"\` / \`"strips"\` whenever motion strips exist, plus \`"crops"\` for HOT shots.
 4. **Include \`"blind_sha"\`** from the slice entry verbatim in each JSONL review line.
-5. **Check ALL 8 criteria** (\`acting\`, \`contact\`, \`overlap\`, \`set\`, \`text\`, \`caption\`, \`beat\`, \`model\`) formatted as \`"ok — ..."\` or \`"fix — ..."\`, with a \`note\` of >= 6 words describing what you actually saw:
+5. **Check ALL 9 criteria** (\`acting\`, \`contact\`, \`overlap\`, \`set\`, \`text\`, \`caption\`, \`beat\`, \`model\`, \`continuity\`) formatted as \`"ok — ..."\` or \`"fix — ..."\`, with a \`note\` of >= 6 words describing what you actually saw:
    - \`acting\`: expression, gesture, posture, and gaze match the narration beat. **Pasted-Sticker & Airborne / Jump / Flight Realism Check (MANDATORY \`fix\`):** flag automatic \`fix\` if (a) limbs/torso read as a rigid brick with zero spine curve, knee flexion, or secondary hair/FX life, (b) ANY frame in the 8-frame \`shot_strip\` or \`strips\` shows a character walking/running in mid-air or moon-floating without takeoff/landing squash, or (c) a flying creature (\`ladybug\`, etc.) is occluded behind ground/tabletop props!
    - \`contact\`: feet planted on ground/floor, hands actually meet props/targets, seated bodies rest on seats. **Pasted-Sticker & Airborne / Jump / Flight Realism Check (MANDATORY \`fix\`):** flag automatic \`fix\` if (a) ANY frame in the 8-frame \`shot_strip\` or \`strips\` shows a character walking/running in mid-air, moon-floating without takeoff/landing squash, or a grounded character floating with no contact shadow, (b) a flying creature (\`ladybug\`, etc.) is occluded behind ground/tabletop props instead of flying clearly above them, (c) hands in \`push\`/\`hold\`/\`ride\` grab empty air instead of the physical target/grip point, or (d) riders sit pasted flat on one side of a creature instead of straddling with a seat shadow.
    - \`overlap\`: no unintended character/prop collisions or faces hidden behind props/overlays.
@@ -498,6 +510,7 @@ const rubric = isLong16x9
    - \`caption\`: caption band is clear of faces, hands, and hero props.
    - \`beat\`: visual action and timing match the spoken \`narration\` for this shot.
    - \`model\`: character proportions, outfits, and identity stay on-model.
+   - \`continuity\` (**3-shot cross-shot continuity — MANDATORY \`fix\` trigger**): inspect \`context_window.prev_shot\` and \`context_window.next_shot\` alongside the rendered frames. Flag automatic \`fix\` if (a) physical distance between actors/objects contradicts the action or narration, (b) chronological event order contradicts spoken narration (e.g. aftermath/impact shown before approach), (c) moving objects lose/gain their operator across adjacent shots, (d) ground-bound objects float off the floor plane, or (e) a closeup-only detached limb appears next to the full character in a wide shot!
 6. Submit reviews via \`node scripts/qa.mjs review --batch <file.jsonl>\`.
 `;
 fs.writeFileSync(path.join(outDir, 'RUBRIC.md'), rubric);

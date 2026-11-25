@@ -461,7 +461,7 @@ def maybe_write_audio_json(ep_dir: Path, suggested_accents: list[dict[str, Any]]
         return f"updated ({len(suggested_accents)} accents written to audio.json)"
 
     fresh = {
-        "_doc": "Episode audio plan (sv-40-audio). Auto-seeded by scripts/plan_audio.py.",
+        "_doc": "Episode audio plan (sv-core-audio). Auto-seeded by scripts/plan_audio.py.",
         "music": {"theme": "series", "under_voice_db": 16, "sections": []},
         "keys": {},
         "accents": suggested_accents,

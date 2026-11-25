@@ -19,7 +19,7 @@ TODO chỉ rõ cặp gài–mở có thật trong `script.json` (`SC-22`):
 TODO (s1: `≤ 16–20` từ đặt ra điều ngược đời ngay giây 0–3)
 
 ## Setup
-TODO (s2–s3: cơ chế + hình ảnh `sv-20` + bịt cửa thoát miễn phí; tối đa 2–3 world gags và `Pivot` cá nhân vào `≤ s7`)
+TODO (s2–s3: cơ chế + hình ảnh 2D + bịt cửa thoát miễn phí; tối đa 2–3 world gags và `Pivot` cá nhân vào `≤ s7`)
 
 ## Escalation
 TODO (Hồi 2 `~38%–72%`: `Crisis` đánh vào `Plant` + đồng hồ đếm ngược + 2–3 cách thường thất bại + `Bind` thế kẹt hai chiều; với `Systemic Satire`, mỗi nấc phải do hành động chủ động của nhân vật/đối thủ)
@@ -35,6 +35,6 @@ TODO (1 segment cuối `≤ 12` từ, deadpan, 0 đạo lý, `SC-24`)
 
 ## Segment map
 Nhãn `beat` chuẩn: `Hook`, `Setup`, `World`, `Pivot`, `Plant`, `Crisis`, `Bind`, `Hack`, `Turn`, `Button` (hoặc `Escalation`, `Payoff` cho `Systemic Satire`).
-| seg | beat | hình ảnh chính (1 dòng `sv-20`) |
+| seg | beat | hình ảnh chính (1 dòng 2D) |
 |-----|------|-------------------------------|
 | s1 | Hook | TODO |

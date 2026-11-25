@@ -39,6 +39,7 @@ export type SubjectDef = {
   poseSegs?: Record<string, [string, string][]>; // allowed [startSeg, endSeg] windows for stateful poses like 'trapped' with sticky tape
   scaleWithTinyActor?: [number, number]; // strict allowed [minRatio, maxRatio] of rendered subject px height / tiny-actor px height in the same shot
   partialOf?: string;           // parent creature key (e.g. 'giantCat') for close-up partial anatomy subjects like giantCatPaw / giantCatHead
+  airborne?: boolean;           // true only for inherently flying vehicles/machines/creatures (skips GE-21 floor-contact check)
   render: (pose: string, opts: SubjectRenderOpts) => React.ReactNode;
 };
 

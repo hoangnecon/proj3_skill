@@ -1,5 +1,5 @@
 // EPISODE SETS — one function per location, registered in EPISODE_SETS at the bottom.
-// Before writing a set, read sv-20-design-system/references/sets.md and open the exemplar plates
+// Before writing a set, read sv-short-design/references/sets.md and open the exemplar plates
 // (qa/design/set_ex-*.png). A set must pass `node scripts/lint.mjs` (detail density, tokens, text gag).
 //
 // Skeleton (copy, rename, then build it out to exemplar density):

@@ -1,4 +1,4 @@
-"""Measure a mix (or a delivered video) against the house standard standards/mix_targets.json (sv-42-mix-master).
+"""Measure a mix (or a delivered video) against the house standard standards/mix_targets.json (sv-core-audio).
 
   python scripts/audio_qa.py                  measure public/mix.wav + audio/stems/*  -> qa/audio_qa.json, qa/mix/overview.png,
                                               qa/mix/segments.png (merged into qa/mix_report.json as "qa")

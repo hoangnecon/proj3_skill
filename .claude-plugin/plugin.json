@@ -1,7 +1,7 @@
 {
   "name": "story-video-skills",
-  "version": "5.9.0",
-  "description": "Gated production suite for 1.75-2.65 minute vertical Shorts and opt-in 6.5-15.0 minute 16:9 widescreen Long-Form Vietnamese 2D story videos (Remotion, riso-ink illustration, corpus-calibrated Script DNA DB, native 1.0x 4.70 ups Hai Dang narration with 20-24% pause breathing): series bible, 10yo storytelling script (SC-38..43 anti-ramble/breathability), Connected Spatial Sub-Scenes, distance-locked studio 2D motion, blind QA and gates G1-G7 with 164 lint rules.",
+  "version": "6.0.0",
+  "description": "Anti-bypass 3-track production suite (Core + Short 9:16 + Long 16:9) for Vietnamese 2D story videos (Remotion, riso-ink, canonical New Nhim, empirically calibrated v4.0 Hai Dang voice ~4.57 wps, hash-chained role logs LG-01..12, unified sv_cli.py JSON API, native PreToolUse hooks, 5-pillar verification gates G1-G7 and general physics/continuity CI).",
   "author": {
     "name": "PROJ3"
   },

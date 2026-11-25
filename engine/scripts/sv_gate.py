@@ -25,11 +25,16 @@ Review files live in gates/G<n>.review.md (templates are there). Rules every rev
 import hashlib
 import importlib.util
 import json
+import os
 import re
 import subprocess
 import sys
 import time
 from pathlib import Path
+
+for _st in (sys.stdout, sys.stderr):
+    if hasattr(_st, "reconfigure"):
+        _st.reconfigure(encoding="utf-8", errors="replace")
 
 ROOT = Path(__file__).resolve().parent.parent
 G = ROOT / "gates"
@@ -56,11 +61,11 @@ def sha(p):
 
 def jload(p):
     p = ROOT / p
-    return json.loads(p.read_text()) if p.exists() else None
+    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
 
 
 def run(cmd):
-    r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
+    r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace")
     return r.returncode, (r.stdout + r.stderr).strip()
 
 
@@ -107,7 +112,7 @@ def checks(g):
     bad = []
     if g == "G1":
         b = ROOT / "brief.md"
-        txt = b.read_text() if b.exists() else ""
+        txt = b.read_text(encoding="utf-8") if b.exists() else ""
         if not txt or "TODO" in txt:
             bad.append("brief.md missing or has TODO")
         for h in ["## Archetype", "## Premise", "## Spine", "## Why it is funny", "## Characters", "## Locations", "## Ending", "## Not copying"]:
@@ -121,7 +126,7 @@ def checks(g):
         if _sc.get("length") == "long_16x9":
             r = jload("qa/story_doctor.json")
             if not isinstance(r, dict):
-                bad.append("qa/story_doctor.json missing — run independent Adversarial Story Doctor audit before passing G2 (sv-02-long-form)")
+                bad.append("qa/story_doctor.json missing — run independent Adversarial Story Doctor audit before passing G2 (sv-long-script)")
             else:
                 if r.get("script_sha") != sha("script.json"):
                     bad.append("qa/story_doctor.json script_sha does not match current script.json — re-run Adversarial Story Doctor audit")
@@ -157,8 +162,11 @@ def checks(g):
                     bad.append(f"{f} changed after the voice was made — re-run voice.py")
             e = r["engine"]
             rh = r.get("rhythm", {})
-            if e.get("clone") or e.get("mode") != "per_sentence_rhythm" or e.get("takes") != 1 or rh.get("target_ups") != 5.25 or rh.get("pitch_ratio") != 1.02:
-                bad.append(f"engine/rhythm settings off-standard: {e} / {rh}")
+            exp_rh = (jload("standards/voice_standard.json") or {}).get("rhythm", {})
+            exp_ups = exp_rh.get("target_ups", 5.05)
+            exp_pitch = exp_rh.get("pitch_ratio", 1.00)
+            if e.get("clone") or e.get("mode") != "per_sentence_rhythm" or e.get("takes") != 1 or rh.get("target_ups") != exp_ups or rh.get("pitch_ratio") != exp_pitch:
+                bad.append(f"engine/rhythm settings off-standard: {e} / {rh} (expected target_ups={exp_ups}, pitch_ratio={exp_pitch})")
             for sid, fails in r["failed_lines"].items():
                 bad.append(f"{sid} fails {fails} after all attempts — fix its tts_text / sentences (numbers in words, <en>...</en> for English, split a long line), then voice.py --only {sid}")
             if r["stale_lines"]:
@@ -195,7 +203,7 @@ def checks(g):
                     bad.append(f"qa/design/subject_{sid}.png missing — node scripts/design.mjs")
         # CH-10 waivers (a character that cannot be a <Person>: animal, food-bodied citizen, printed photo) are on no
         # design sheet: the G4 review must name each and say it was compared with the cast sheet (>= 6 words)
-        rv = (ROOT / "gates/G4.review.md").read_text() if (ROOT / "gates/G4.review.md").exists() else ""
+        rv = (ROOT / "gates/G4.review.md").read_text(encoding="utf-8") if (ROOT / "gates/G4.review.md").exists() else ""
         for rig in (jload("qa/lint.json") or {}).get("rigs", []):
             line = next((l for l in rv.splitlines() if rig["name"] in l and re.search(r"cast", l, re.I) and "CH-10" in l), None)
             if line is None or len(re.findall(r"\w+", line.split(rig["name"], 1)[1])) < 6:
@@ -254,7 +262,7 @@ def checks(g):
             if missing_units:
                 bad.append(
                     f"episodic unit gate(s) not yet passed: {missing_units} — every unit in script.json must pass "
-                    f"sequentially before G5 (next: python3 scripts/sv_gate.py pass-unit {missing_units[0]})"
+                    f"sequentially before G5 (next: python scripts/sv_cli.py gate pass G5.{missing_units[0]} --actor <coord_id>)"
                 )
         bad += shot_reviews(st)
     elif g == "G6":
@@ -272,7 +280,7 @@ def checks(g):
             if r["processing"].get("voice_peak_limit_max_gr_db") is None:
                 bad.append("mix_report.json has no voice peak limit — made by an older mix.py: re-run scripts/mix.py")
             elif r["processing"]["voice_peak_limit_max_gr_db"] > 10:
-                bad.append(f"voice peak limiter works {r['processing']['voice_peak_limit_max_gr_db']} dB: a click or pop in a take — find it, re-take the line (sv-12)")
+                bad.append(f"voice peak limiter works {r['processing']['voice_peak_limit_max_gr_db']} dB: a click or pop in a take — find it, re-take the line (sv-core-voice)")
             if r["processing"]["limiter_max_gr_db"] > 6:
                 bad.append(f"limiter works too hard ({r['processing']['limiter_max_gr_db']} dB): something in the mix spikes — check sfx/voice peaks")
             if r["warnings"]:
@@ -320,12 +328,33 @@ def _get_carry():
     return _CARRY_MOD
 # "model" (v3.7): every character comes from the cast rig and matches its cast sheet — v3.6 dropped the
 # "same look as the design sheets?" question and a hand-drawn Bình passed 66 reviews
-REVIEW_CHECKS = ["acting", "contact", "overlap", "set", "text", "caption", "beat", "model"]
+# "continuity" (v6.0): 3-shot spatial distance, event timing vs narration, persistent operator/floor contact
+REVIEW_CHECKS = ["acting", "contact", "overlap", "set", "text", "caption", "beat", "model", "continuity"]
 REVIEW_CHECKS_16X9 = REVIEW_CHECKS + ["framing", "variety"]
 
 
+def _audit_v6_logs(stage: str, unit_id: str | None = None) -> list[str]:
+    """Enforce v6.0 Log-CI (LG-01..LG-12) when episode uses .episode.json."""
+    if not (ROOT / ".episode.json").exists():
+        return []
+    lint_path = Path(__file__).resolve().parent / "sv_log_lint.py"
+    if not lint_path.exists():
+        return []
+    spec = importlib.util.spec_from_file_location("_sv_log_lint_gate", lint_path)
+    mod = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    spec.loader.exec_module(mod)
+    res = mod.audit_logs(ROOT, stage=stage, role="all", unit=unit_id)
+    if res.get("ok"):
+        return []
+    return [
+        f"log-ci {e}" if isinstance(e, str) else f"log-ci {e.get('id', e.get('code', ''))}: {e.get('message', e)}"
+        for e in res.get("errors", [])
+    ]
+
+
 def shot_reviews(st, only_shots=None, unit_id=None):
-    """Per-shot review files qa/review/NN.json (sv-22 "review cards"). Each must match the shot's CURRENT hash,
+    """Per-shot review files qa/review/NN.json (sv-short-production "review cards"). Each must match the shot's CURRENT hash,
     come from a reviewer who is not the builder, answer every check, and — for a HOT shot (geometry lint,
     reach, key event) — say it opened the measurement crops, which must be current."""
     bad, miss, old, notok, thin, nocrop, nomodel, noblind, missing_shot_strip, nostrip_looked, nolooked = (
@@ -415,8 +444,8 @@ def shot_reviews(st, only_shots=None, unit_id=None):
                    f"to qa/design/cast_episode_p*_v.jpg and adds checks.model to qa/review/NN.json: every character drawn by the "
                    f"cast rig, same face / hair / outfit / proportions as its sheet (a character drawn as a prop is a fix)")
     if notok:
-        extra_hint = " (16:9 requires all 10 checks incl. framing & variety)" if is_16x9 else ""
-        bad.append(f"shots {fmt(notok)} are not ok in review (verdict/checks{extra_hint}) — fix them (sv-22 fix loop), re-review")
+        extra_hint = " (16:9 requires all 11 checks incl. continuity, framing & variety)" if is_16x9 else " (requires all 9 checks incl. continuity)"
+        bad.append(f"shots {fmt(notok)} are not ok in review (verdict/checks{extra_hint}) — fix them (production fix loop), re-review")
     if thin:
         bad.append(f"review note too thin for shots {fmt(thin)} (say what you saw, >= 6 words)")
     if nolooked:
@@ -436,7 +465,7 @@ def review_problems(g):
     p = G / f"{g}.review.md"
     if not p.exists():
         return [f"gates/{g}.review.md missing (copy the template)"]
-    txt = p.read_text()
+    txt = p.read_text(encoding="utf-8")
     bad = []
     # a placeholder is <words like this> from a template; inline code and known tags (<en>, <br>) are not
     bare = re.sub(r"`[^`\n]*`", "", txt)
@@ -469,7 +498,7 @@ def review_problems(g):
 def log_entries():
     if not LOG.exists():
         return []
-    return [json.loads(l) for l in LOG.read_text().splitlines() if l.strip()]
+    return [json.loads(l) for l in LOG.read_text(encoding="utf-8").splitlines() if l.strip()]
 
 
 def _norm_seg_id(val):
@@ -579,7 +608,7 @@ def unit_review_problems(unit_id):
     p = G / rev_name
     if not p.exists():
         return [f"gates/{rev_name} missing — write review after inspecting qa/units/{unit_id}_contact.jpg"]
-    txt = p.read_text()
+    txt = p.read_text(encoding="utf-8")
     bad = []
     bare = re.sub(r"`[^`\n]*`", "", txt)
     bare = re.sub(r"</?(en|br|b|i|em|strong|sub|sup)>", "", bare)
@@ -805,10 +834,10 @@ def status(brief=False):
         for g in nxt:
             if g == "G5" and next_u:
                 hints.append(
-                    f"G5.{next_u} (next episodic unit): node scripts/qa.mjs pass --unit {next_u} && python3 scripts/sv_gate.py check-unit {next_u}"
+                    f"G5.{next_u} (next episodic unit): node scripts/qa.mjs pass --unit {next_u} && python scripts/sv_cli.py gate check G5.{next_u}"
                 )
             else:
-                hints.append(f"{g} ({NAMES[g]}): python3 scripts/sv_doctor.py --stage {g} && python3 scripts/sv_gate.py check {g}")
+                hints.append(f"{g} ({NAMES[g]}): python scripts/sv_cli.py doctor --stage {g} && python scripts/sv_cli.py gate check {g}")
         print("next:", " | ".join(hints) or "all gates pass")
     (ROOT / "qa").mkdir(exist_ok=True)
     state_payload = {
@@ -818,7 +847,7 @@ def status(brief=False):
         "next": nxt,
         "activity": activity(),
     }
-    (ROOT / "qa/state.json").write_text(json.dumps(state_payload, ensure_ascii=False, indent=1))
+    (ROOT / "qa/state.json").write_text(json.dumps(state_payload, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
 # files whose modification time shows the episode is moving (renders write frames, voice writes takes)
@@ -894,8 +923,13 @@ def main():
         if len(sys.argv) < 3:
             sys.exit("usage: python3 scripts/sv_gate.py check-unit|pass-unit <unitId>")
         cmd_u, raw_uid = sys.argv[1], sys.argv[2]
+        if cmd_u == "pass-unit":
+            actor_role = os.environ.get("SV_ACTOR_ROLE", "orchestrator").strip().lower()
+            if actor_role != "orchestrator":
+                sys.exit(f"ROLE_VIOLATION: SV_ACTOR_ROLE={actor_role!r} cannot pass unit gates (only orchestrator may run pass-unit)")
         unit_id, unit, unit_shot_set, probs = check_unit(raw_uid)
         gname = f"G5.{unit_id}"
+        probs = probs + _audit_v6_logs(gname, unit_id=unit_id)
         unit_ev = f"qa/units/{unit_id}_contact.jpg"
         span = f" ({unit.get('seg_start')}..{unit.get('seg_end')})" if isinstance(unit, dict) else ""
         print(f"{gname} episodic unit {unit_id}{span}")
@@ -932,7 +966,7 @@ def main():
                 "evidence": {unit_ev: sha(unit_ev)},
                 "review": sha(f"gates/{gname}.review.md"),
             }
-            with LOG.open("a") as f:
+            with LOG.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
             print(f"{gname} PASSED and logged")
             status(brief=True)
@@ -942,12 +976,16 @@ def main():
     cmd, g = sys.argv[1], sys.argv[2].upper()
     if g not in ORDER:
         sys.exit(f"unknown gate {g}")
+    if cmd == "pass":
+        actor_role = os.environ.get("SV_ACTOR_ROLE", "orchestrator").strip().lower()
+        if actor_role != "orchestrator":
+            sys.exit(f"ROLE_VIOLATION: SV_ACTOR_ROLE={actor_role!r} cannot pass gates (only orchestrator may pass {g})")
     memo = {}
     for d in DEPS[g]:
         st, info = state(d, memo)
         if st != "pass":
             sys.exit(f"{d} ({NAMES[d]}) is {st} {info or ''} — {g} depends on it")
-    probs = checks(g) + review_problems(g)
+    probs = checks(g) + review_problems(g) + _audit_v6_logs(g)
     print(f"{g} {NAMES[g]}")
     print("evidence:", *(evidence(g) or ["(none)"]), sep="\n  ")
     if probs:
@@ -969,7 +1007,7 @@ def main():
         G.mkdir(exist_ok=True)
         e = {"gate": g, "at": time.strftime("%Y-%m-%d %H:%M:%S"), "t": time.time(), "inputs": {p: sha(p) for p in INPUTS[g]},
              "evidence": {f: sha(f) for f in evidence(g)}, "review": sha(f"gates/{g}.review.md")}
-        with LOG.open("a") as f:
+        with LOG.open("a", encoding="utf-8") as f:
             f.write(json.dumps(e, ensure_ascii=False) + "\n")
         print(f"{g} PASSED and logged")
         status(brief=True)

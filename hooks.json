@@ -1,0 +1,39 @@
+{
+  "sv-anti-bypass": {
+    "enabled": true,
+    "PreToolUse": [
+      {
+        "matcher": "write_file|edit_file",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python hooks/sv_guard.py",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python hooks/sv_guard.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "write_file|edit_file",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python hooks/sv_guard.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

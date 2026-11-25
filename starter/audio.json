@@ -1,5 +1,5 @@
 {
- "_doc": "Episode audio plan (sv-40-audio). sections: mood per story part, anchored to the word where the mood turns. keys: sound for each animated set option (\"none\" = silent). accents: extra SFX anchored to words — only for things the picture shows.",
+ "_doc": "Episode audio plan (sv-core-audio). sections: mood per story part, anchored to the word where the mood turns. keys: sound for each animated set option (\"none\" = silent). accents: extra SFX anchored to words — only for things the picture shows.",
  "music": {
   "theme": "series",
   "under_voice_db": 16,

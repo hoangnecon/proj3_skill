@@ -33,15 +33,15 @@ import time
 from pathlib import Path
 
 SUITE_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_SHORT = Path("/Users/hoangnguyen142/Work/PROJ3/bench-v39-loop2")
-DEFAULT_LONG = Path("/Users/hoangnguyen142/Work/PROJ3-2/v42-showcase-5a")
-DEFAULT_LONG_SCRIPT = Path("/Users/hoangnguyen142/Work/PROJ3-2/ca-lop-5a-bi-thu-nho-3cm")
-VENV_PYTHON = Path("/Users/Shared/Tools/VieNeu-TTS/.venv/bin/python")
-VENV_BIN = "/Users/Shared/Tools/VieNeu-TTS/.venv/bin"
+DEFAULT_SHORT = Path("C:/Work/nhim-la-lop") if os.name == "nt" else Path("/Users/hoangnguyen142/Work/PROJ3/bench-v39-loop2")
+DEFAULT_LONG = Path("C:/Work/long-bench") if os.name == "nt" else Path("/Users/hoangnguyen142/Work/PROJ3-2/v42-showcase-5a")
+DEFAULT_LONG_SCRIPT = Path("C:/Work/long-script-bench") if os.name == "nt" else Path("/Users/hoangnguyen142/Work/PROJ3-2/ca-lop-5a-bi-thu-nho-3cm")
+VENV_PYTHON = Path("C:/Work/Tools/VieNeu-TTS/.venv/Scripts/python.exe") if os.name == "nt" else Path("/Users/Shared/Tools/VieNeu-TTS/.venv/bin/python")
+VENV_BIN = "C:/Work/Tools/VieNeu-TTS/.venv/Scripts" if os.name == "nt" else "/Users/Shared/Tools/VieNeu-TTS/.venv/bin"
 
 
 def resolve_python() -> str:
-    env_py = os.environ.get("SV_PYTHON")
+    env_py = os.environ.get("SV_PY") or os.environ.get("SV_PYTHON")
     if env_py and Path(env_py).exists():
         return env_py
     if VENV_PYTHON.exists():
@@ -52,7 +52,7 @@ def resolve_python() -> str:
 def make_env() -> dict[str, str]:
     env = os.environ.copy()
     if Path(VENV_BIN).is_dir():
-        env["PATH"] = f"{VENV_BIN}:{env.get('PATH', '')}"
+        env["PATH"] = f"{VENV_BIN}{os.pathsep}{env.get('PATH', '')}"
     return env
 
 

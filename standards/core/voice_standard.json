@@ -1,0 +1,105 @@
+{
+ "_doc": "House voice standard v4.0 (empirically calibrated 2026-11-25 on 54 real raw VieNeu Hai Dang sentences vs 28 SCRIPT_YOUTUBE ref Shorts): lively natural Hai Dang at pitch_ratio 1.00 (zero pitch warp), target_ups 5.05, phonation_ups 5.45, blend_raw 0.30, tempo_clamp [0.95, 1.20], inside_pause >0.38s -> 0.18s, sentence_gap_s 0.15s, clause_pad_s 0.03s, short_sentence_pad_s 0.00s. Measured real output: 4.57 overall wps (vs ref median 4.59 [4.52-4.71]), 20.1% RMS audio pause share (vs ref 19.6-22.0%), median tempo 1.11x.",
+ "version": "4.0",
+ "engine": {
+  "voice": "Hải Đăng",
+  "clone": false,
+  "use_ref_codes": true,
+  "precision": "fp32",
+  "mode": "per_sentence_rhythm",
+  "temperature": 0.7,
+  "top_k": 25,
+  "top_p": 0.95,
+  "repetition_penalty": 1.2,
+  "seed": 20261111,
+  "takes": 1,
+  "max_attempts": 3,
+  "_why": "VieNeu V3 Turbo preset Hai Dang with use_ref_codes=True, calibrated empirically against real raw sentences to hit exact 4.55-4.62 overall wps and ~20% RMS pause breathing room at pitch_ratio=1.00 without robotic >1.20x rushing or sluggish 4.02 wps drag."
+ },
+ "rhythm": {
+  "target_ups": 5.05,
+  "phonation_ups": 5.45,
+  "blend_raw": 0.30,
+  "pitch_ratio": 1.00,
+  "inside_pause_threshold_s": 0.38,
+  "inside_pause_target_s": 0.18,
+  "sentence_gap_s": 0.15,
+  "clause_pad_s": 0.03,
+  "short_sentence_pad_s": 0.00,
+  "emotion_cue_s": 0.36,
+  "tempo_clamp": [
+   0.95,
+   1.20
+  ],
+  "_doc": "v4.0 Empirically Calibrated Hai Dang Rhythm: hits 4.57 wps overall and 20.1% RMS pause share at pitch 1.00 with gentle [0.95, 1.20] WSOLA clamp. Eliminates both v2.0 frantic 1.39x spikes and v3.0 sluggish 4.02 wps drag."
+ },
+ "text": {
+  "_doc": "Rules for spoken text (tts_text if present, else text). script_lint SC-15..SC-17 and voice.py enforce them.",
+  "no_digits": true,
+  "no_ellipsis": false,
+  "max_words_per_call": 45,
+  "bilingual_tag": "en",
+  "allowed_tags": [
+   "cười",
+   "thở dài",
+   "hắng giọng",
+   "chuckle",
+   "sigh",
+   "clear throat"
+  ],
+  "_why": "Numbers must be written in words; '...' / '…' / '—' / '–' are allowed and receive 0.03s clause_pad_s while internal pauses >0.38s trim gently to 0.18s; VieNeu V3 Turbo native inline emotion tokens are allowed and stripped from captions; English proper nouns use <en>...</en> or top-level 'english': [...]."
+ },
+ "line_checks": {
+  "_doc": "Every segment is measured against profile (below). [min, max]. Offending sentences regenerate with next deterministic seed up to engine.max_attempts.",
+  "asr_similarity": [
+   0.85,
+   1.0
+  ],
+  "rate_vs_profile": [
+   -0.18,
+   0.18
+  ],
+  "f0_vs_profile_st": [
+   -2.2,
+   2.2
+  ],
+  "timbre_vs_profile": [
+   -0.2,
+   0.2
+  ],
+  "max_hole_s": [
+   0,
+   0.65
+  ]
+ },
+ "episode_checks": {
+  "f0_spread_st": [
+   0,
+   1.1
+  ],
+  "rate_cv": [
+   0,
+   0.13
+  ],
+  "timbre_cv": [
+   0,
+   0.12
+  ],
+  "retry_share": [
+   0,
+   0.25
+  ],
+  "between_words_db": [
+   -99,
+   -50.0
+  ],
+  "_between_words_why": "Same chain and measure as G6 (audiolib.voice_chain + between_words_db). Measured at G3 so noisy takes are caught before shots are timed."
+ },
+ "profile": {
+  "_doc": "Empirically calibrated v4.0 Hai Dang profile (target_ups 5.05, pitch_ratio 1.00, inside holes >0.38s -> 0.18s, measured overall_wps 4.57, RMS pause 20.1%).",
+  "rate_wps": 5.05,
+  "f0_hz": 155.4,
+  "centroid_hz": 1295.0,
+  "calibrated": "2026-11-25, VieNeu V3 Turbo Hai Dang preset empirically calibrated on 54 real raw sentences vs 28 SCRIPT_YOUTUBE ref Shorts (overall_wps 4.57 vs ref median 4.59)."
+ }
+}

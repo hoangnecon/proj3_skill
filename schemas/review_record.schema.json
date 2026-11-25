@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://story-video-skills.local/schemas/review_record.schema.json",
+  "title": "Story Video Skills v6.0 Blind Shot Review Record",
+  "type": "object",
+  "required": ["shot", "hash", "blind_sha", "builder", "reviewer", "looked", "verdict", "checks", "note"],
+  "properties": {
+    "shot": { "type": "integer", "minimum": 0 },
+    "hash": { "type": "string", "minLength": 8 },
+    "blind_sha": { "type": "string", "minLength": 8 },
+    "builder": { "type": "string", "minLength": 2 },
+    "reviewer": { "type": "string", "minLength": 2 },
+    "looked": {
+      "type": "array",
+      "items": { "type": "string", "enum": ["card", "crops", "shot_strip", "strips", "contact", "contact_page", "unit_contact", "prev_next"] },
+      "minItems": 1
+    },
+    "verdict": { "type": "string", "enum": ["ok", "fix"] },
+    "checks": {
+      "type": "object",
+      "required": ["acting", "contact", "overlap", "set", "text", "caption", "beat", "model", "continuity"],
+      "properties": {
+        "acting": { "type": "string", "pattern": "^(ok|fix)\\s*[—:-]\\s*.{6,}" },
+        "contact": { "type": "string", "pattern": "^(ok|fix)\\s*[—:-]\\s*.{6,}" },
+        "overlap": { "type": "string", "pattern": "^(ok|fix)\\s*[—:-]\\s*.{6,}" },
+        "set": { "type": "string", "pattern": "^(ok|fix)\\s*[—:-]\\s*.{6,}" },
+        "text": { "type": "string", "pattern": "^(ok|fix)\\s*[—:-]\\s*.{6,}" },
+        "caption": { "type": "string", "pattern": "^(ok|fix)\\s*[—:-]\\s*.{6,}" },
+        "beat": { "type": "string", "pattern": "^(ok|fix)\\s*[—:-]\\s*.{6,}" },
+        "model": { "type": "string", "pattern": "^(ok|fix)\\s*[—:-]\\s*.{6,}" },
+        "continuity": { "type": "string", "pattern": "^(ok|fix)\\s*[—:-]\\s*.{6,}" },
+        "framing": { "type": "string", "pattern": "^(ok|fix)\\s*[—:-]\\s*.{6,}" },
+        "variety": { "type": "string", "pattern": "^(ok|fix)\\s*[—:-]\\s*.{6,}" }
+      }
+    },
+    "note": { "type": "string", "minLength": 20 }
+  }
+}

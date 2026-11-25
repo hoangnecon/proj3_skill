@@ -3,4 +3,5 @@ audio/
 public/
 out/
 qa/
+logs/
 gates/log.jsonl

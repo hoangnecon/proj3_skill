@@ -1,5 +1,5 @@
 // EPISODE CAST — every character that appears on screen, designed BEFORE any shot is written.
-// Rules (sv-20-design-system/references/characters.md, enforced by scripts/lint.mjs):
+// Rules (sv-short-design/references/characters.md, enforced by scripts/lint.mjs):
 //  • key = camelCase role name (baTu, chuBao). name must equal the key.
 //  • every look is listed in CAST_ROLES with a role: 'principal' | 'support' | 'extra'.
 //  • principals: ≥ 3 distinguishing traits (glasses, hat, mustache/beard, pattern, earrings, chain,

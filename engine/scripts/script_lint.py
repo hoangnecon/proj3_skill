@@ -1,8 +1,7 @@
 """Script checks for gate G2. Writes qa/script_lint.json; exit 1 on any error.
 Run: python3 scripts/script_lint.py
-Calibrated on standards/pacing.json v3.0 (20-36 segments, 450-660 spoken words, 105-160 s at native 1.0x 4.70 ups Hải Đăng),
-standards/voice_standard.json v3.0 (bilingual <en>...</en>, '...'/'…'/'—' and emotion tags allowed, natural 20-24% pauses),
-and standards/script_dna_db.json v1.0 (41-folder SCRIPT_YOUTUBE DNA corpus: SC-38..43). See sv-10-script/references/script-dna-playbook.md.
+Calibrated on standards/pacing.json (v4.0 empirical corridor), standards/voice_standard.json (v4.0 Hải Đăng
+native pitch 1.00, 4.57 overall wps), and standards/script_dna_db.json (v2.0 41-folder YouTube DNA corpus: SC-38..43).
 """
 import json
 import re
@@ -78,19 +77,28 @@ nums = [int(m.group(1)) if (m := re.fullmatch(r"s(\d+)[a-z]?", i)) else -1 for i
 if -1 in nums or len(set(ids)) != len(ids) or nums != sorted(nums) or (nums and nums[0] != 1):
     err("SC-03", f"segment ids must be s1, s2, ... (an inserted segment may be s3b), unique and in order (got {ids[:8]}...)")
 
-# ---- length + pacing (standards/pacing.json & standards/voice_standard.json v2.0) ----
+# ---- length + pacing (standards/pacing.json & standards/voice_standard.json v4.0) ----
 PA = json.loads((ROOT / "standards/pacing.json").read_text())
-# SC-27: a longer episode is allowed only when the user asked for it, in writing, in brief.md
+_ep_meta = json.loads((ROOT / ".episode.json").read_text(encoding="utf-8")) if (ROOT / ".episode.json").exists() else {}
+_track = _ep_meta.get("track") or PA.get("track")
+# SC-27: track alignment & explicit length override
 _len = script.get("length")
-if _len in ("long", "long_16x9"):
+if _track == "long":
+    if script.get("format") != "16:9" or _len != "long_16x9":
+        err("SC-27", f'.episode.json declares track="long" — script.json must set "format": "16:9" and "length": "long_16x9" (got format={script.get("format")!r}, length={_len!r})')
+    elif "episode_long_16x9" in PA:
+        PA["episode"] = PA["episode_long_16x9"]
+elif _len in ("long", "long_16x9"):
     _b = (ROOT / "brief.md").read_text() if (ROOT / "brief.md").exists() else ""
     _m = re.search(r"^## Length override\s*\n(.*?)(?=^## |\Z)", _b, re.M | re.S)
     if not _m or not re.search(r'^user_quote:\s*"(.{4,})"\s*$', _m.group(1), re.M):
         err("SC-27", f'script.json length "{_len}" needs brief.md "## Length override" with a line user_quote: "<the user\'s words>"')
     elif _len == "long_16x9" and script.get("format") != "16:9":
         err("SC-27", 'script.json length "long_16x9" requires "format": "16:9"')
-    else:
-        PA["episode"] = PA["episode_long_16x9"] if _len == "long_16x9" else PA["episode_long"]
+    elif _len == "long_16x9" and "episode_long_16x9" in PA:
+        PA["episode"] = PA["episode_long_16x9"]
+    elif _len == "long" and "episode_long" in PA:
+        PA["episode"] = PA["episode_long"]
 VS_FULL = json.loads((ROOT / "standards/voice_standard.json").read_text())
 VS = VS_FULL["text"]
 RH = dict(VS_FULL["rhythm"])
@@ -417,9 +425,9 @@ if _len == "long_16x9" and segs:
         )
 
 # SC-35: Native 1.0x Voice Integrity (v3.0 target_ups 4.70) — Ban Artificial Speed Warping!
-_base_ups = float(RH.get("target_ups", 4.70))
-_top_lo, _top_hi = round(_base_ups - 0.25, 2), round(_base_ups + 0.20, 2)
-_seg_lo, _seg_hi = round(_base_ups - 0.55, 2), round(_base_ups + 0.35, 2)
+_base_ups = float(RH.get("target_ups", 5.05))
+_top_lo, _top_hi = round(_base_ups - 0.30, 2), round(_base_ups + 0.25, 2)
+_seg_lo, _seg_hi = round(_base_ups - 0.70, 2), round(_base_ups + 0.35, 2)
 if script_wps is not None:
     try:
         top_wps_val = float(script_wps)
@@ -469,10 +477,10 @@ if segs:
 
     pa_list = [float(s.get("pause_after", dflt)) for s in segs]
     mean_pa = sum(pa_list) / len(pa_list)
-    if mean_pa > 0.55 or mean_pa < 0.16:
+    if mean_pa > 0.50 or mean_pa < 0.14:
         err(
             "SC-35",
-            f"mean pause_after is {mean_pa:.2f}s (outside [0.16, 0.55]s; house default is {PA['voice']['default_pause_after_s']}s)",
+            f"mean pause_after is {mean_pa:.2f}s (outside [0.14, 0.50]s; house default is {PA['voice']['default_pause_after_s']}s)",
         )
 
 # SC-36: Crystal-Clear Spoken Hook & Plain Kid-Friendly Sentences (long_16x9)
@@ -988,10 +996,10 @@ if segs and lens:
 
     # SC-41: Peak Segment WPS Cap & Dramatic Breath Pause Budget
     eff_cfg = DNA_S.get("effective_wps", {})
-    peak_max = float(eff_cfg.get("seg_peak_max", 4.85))
-    clim_max = float(eff_cfg.get("climactic_beat_max", 4.35))
-    dram_thr = float(DNA_DLG.get("dramatic_pause_threshold_s", 0.45))
-    min_dram = int(DNA_DLG.get("min_dramatic_pauses_ge_045s", 3))
+    peak_max = float(eff_cfg.get("seg_peak_max", 5.15))
+    clim_max = float(eff_cfg.get("climactic_beat_max", 4.65))
+    dram_thr = float(DNA_DLG.get("dramatic_pause_threshold_s", 0.38))
+    min_dram = int(DNA_DLG.get("min_dramatic_pauses_ge_038s", DNA_DLG.get("min_dramatic_pauses_ge_045s", 3)))
     beat_by_sid = {sid: bt for sid, bt in (map_rows if beats else [])}
     if _is_short:
         for sid, swps in seg_est_wps.items():

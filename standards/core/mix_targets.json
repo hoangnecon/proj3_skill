@@ -1,0 +1,206 @@
+{
+ "_doc": "House mix/master standard (sv-core-audio). Shared by every episode; do not edit per episode. Changing it is a series decision (user request), done in the suite template, with a CHANGELOG line. Each check: [min, max]. audio_qa.py measures, sv_gate G6/G7 enforce.",
+ "version": "1.1",
+ "master": {
+  "integrated_lufs": [
+   -14.5,
+   -13.5
+  ],
+  "true_peak_dbtp": [
+   -99,
+   -1.0
+  ],
+  "lra_lu": [
+   1.0,
+   8.0
+  ],
+  "max_short_term_lufs": [
+   -99,
+   -9.0
+  ],
+  "clipped_samples": [
+   0,
+   0
+  ],
+  "dc_offset": [
+   -0.001,
+   0.001
+  ],
+  "head_silence_s": [
+   0,
+   0.15
+  ],
+  "tail_fade_s": [
+   0.3,
+   3.5
+  ]
+ },
+ "voice": {
+  "segment_spread_lu": [
+   0,
+   2.0
+  ],
+  "speech_short_term_p10_p90_lu": [
+   0,
+   6.0
+  ],
+  "sibilance_ratio_db": [
+   -99,
+   -14.0
+  ],
+  "between_words_db": [
+   -99,
+   -50.0
+  ]
+ },
+ "music": {
+  "under_voice_speaking_db": [
+   15.0,
+   18.0
+  ],
+  "under_voice_pauses_db": [
+   7.0,
+   13.0
+  ],
+  "presence_masking_db": [
+   -99,
+   -22.0
+  ],
+  "max_under_voice_window_db": [
+   12.0,
+   99
+  ]
+ },
+ "sfx": {
+  "peak_over_voice_db": [
+   -99,
+   3.0
+  ]
+ },
+ "spectrum_bands": {
+  "sub_20_60": [
+   -99,
+   -18.0
+  ],
+  "low_60_250": [
+   -14.0,
+   -3.0
+  ],
+  "lowmid_250_2k": [
+   -6.0,
+   -0.5
+  ],
+  "presence_2k_5k": [
+   -18.0,
+   -7.0
+  ],
+  "air_5k_16k": [
+   -28.0,
+   -13.0
+  ]
+ },
+ "delivery": {
+  "lufs_drift_lu": [
+   0,
+   0.5
+  ],
+  "true_peak_dbtp": [
+   -99,
+   -0.5
+  ],
+  "av_duration_diff_s": [
+   0,
+   0.07
+  ],
+  "sync_offset_ms": [
+   -20,
+   20
+  ]
+ },
+ "processing": {
+  "voice": {
+   "_doc": "voice chain v2 (2026-11-16). Raw VieNeu output: no energy above ~14 kHz (codec), boxy 100-300 Hz, thin 3-6 kHz, reverb-like tail between words. The v1.0 chain's 3:1 compressor lifted noise and tails ~10 dB (user: 'noise, eco'). Order: clean -> tone -> gentle dynamics -> expander -> peak limit (crest 15 dB over the speech RMS: the chain lifts the crest 19.8 -> 23 dB, and those spikes made the master limiter work 7.8 dB).",
+   "hpf_hz": 75,
+   "denoise": {
+    "max_reduction_db": 18,
+    "over_subtract": 1.6
+   },
+   "mud_cut": [
+    220,
+    -3.0,
+    1.1
+   ],
+   "presence": [
+    3500,
+    2.5,
+    0.8
+   ],
+   "air_shelf": [
+    8000,
+    1.5
+   ],
+   "lpf_hz": 15000,
+   "deess": {
+    "band": [
+     5000,
+     9000
+    ],
+    "thresh_db": -30,
+    "max_cut_db": 5
+   },
+   "comp": {
+    "thresh_db": -22,
+    "ratio": 2.0,
+    "attack_ms": 10,
+    "release_ms": 160,
+    "knee_db": 8
+   },
+   "segment_level_clamp_db": 4.0,
+   "expander": {
+    "thresh_below_peak_db": -28,
+    "ratio": 4.0,
+    "floor_db": -40,
+    "release": 0.85
+   },
+   "peak_limit": {
+    "crest_db": 15.0,
+    "lookahead_ms": 5,
+    "release_ms": 60
+   }
+  },
+  "music": {
+   "hpf_hz": 60,
+   "carve": [
+    2500,
+    -6.0,
+    0.7
+   ],
+   "duck": {
+    "depth_db": 7.0,
+    "attack_ms": 40,
+    "release_ms": 300
+   },
+   "target_under_voice_db": 16.0
+  },
+  "ambience": {
+   "hpf_hz": 40,
+   "under_voice_db": 30.0
+  },
+  "master": {
+   "glue": {
+    "thresh_db": -18,
+    "ratio": 1.5,
+    "attack_ms": 30,
+    "release_ms": 250
+   },
+   "target_lufs": -14.0,
+   "ceiling_dbtp": -1.3,
+   "tail_fade_s": 1.2
+  },
+  "sfx": {
+   "hpf_hz": 90,
+   "release_ms": 200,
+   "peak_vs_voice_rms_db": 4.0
+  }
+ }
+}

@@ -264,7 +264,7 @@ const report = {
   final_sha: sha(final), shots_sha: sha('qa/shots.json'),
 };
 fs.writeFileSync('qa/deliver_report.json', JSON.stringify(report, null, 1));
-// audio inside the delivered files: loudness drift after AAC, true peak, A/V length, sync (sv-42-mix-master)
+// audio inside the delivered files: loudness drift after AAC, true peak, A/V length, sync (sv-core-audio)
 const PY = process.env.SV_PYTHON || PY_VIENEU;
 if (fs.existsSync('qa/video_audio.json')) fs.unlinkSync('qa/video_audio.json');
 for (const f of [final]) {

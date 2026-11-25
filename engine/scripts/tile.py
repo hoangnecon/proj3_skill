@@ -63,7 +63,7 @@ if os.path.exists(out):
     except Exception:
         prev = None
 if out.lower().endswith((".jpg", ".jpeg")):
-    # QA sheets are for a model to read: light JPEG, long side <= 1600 px, normally 100-400 KB (sv-41 QA-IMG)
+    # QA sheets are for a model to read: light JPEG, long side <= 1600 px, normally 100-400 KB (sv-core-delivery QA-IMG)
     m = max(sheet.size)
     if m > 1600:
         sheet = sheet.resize((round(sheet.size[0] * 1600 / m), round(sheet.size[1] * 1600 / m)), Image.LANCZOS)

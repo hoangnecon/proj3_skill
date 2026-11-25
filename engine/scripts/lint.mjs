@@ -1312,6 +1312,77 @@ if (phase !== 'design') {
         }
       }
     }
+    // GE-21: General Ground-Plane Contact Invariant for non-airborne SUBJECTS
+    // PR-10: General Disembodied Partial-Body Placement Guard in wide/medium shots
+    {
+      const setDef = P.SETS[s.set];
+      const isGroundedStage = Boolean(setDef)
+        && !setDef.insert
+        && setDef.shotScale !== 'closeup'
+        && setDef.shotScale !== 'insert'
+        && setDef.angle !== 'closeup'
+        && setDef.angle !== 'pov'
+        && setDef.angle !== 'high'
+        && setDef.cameraDir !== 'top';
+      const isWideOrMedium = Boolean(setDef)
+        && !setDef.insert
+        && setDef.shotScale !== 'closeup'
+        && setDef.shotScale !== 'insert'
+        && setDef.angle !== 'closeup'
+        && setDef.angle !== 'pov';
+      const hasFullActor = (s.actors ?? []).some((a) => !a.fg);
+      const AIRBORNE_POSE_RE = /^(fly|hover|jump|leap|fall|tumble|soar|float|glide|dive)/i;
+      const PARTIAL_BODY_ASSET_RE = /(shoe|foot|leg|hand|arm|paw|finger|bantay|canhtay|ngontay|banchan|tayvay)/i;
+      const GROUND_KINDS = new Set(['vehicle', 'creature', 'machine']);
+
+      let floorMinY = H === 1080 ? 740 : 1460;
+      if (Array.isArray(setDef?.zones?.mgY) && typeof setDef.zones.mgY[0] === 'number') {
+        floorMinY = setDef.zones.mgY[0];
+      } else {
+        const actorYs = (r.actors ?? [])
+          .filter((a) => {
+            const da = (s.actors ?? []).find((q) => q.id === a.id);
+            return !da?.fg && !da?.mount && Number.isFinite(a.y);
+          })
+          .map((a) => a.y);
+        if (actorYs.length > 0) floorMinY = Math.min(...actorYs) - 80;
+      }
+
+      for (const ex of s.extras ?? []) {
+        const def = P.SUBJECTS?.[ex.k];
+        // GE-21: ground-bound SUBJECT anchored significantly above floor plane without airborne pose/altitude
+        if (isGroundedStage && def && GROUND_KINDS.has(def.kind) && !def.airborne && !ex.fg && !((ex.altitude ?? 0) > 0)) {
+          const poses = keyVals(ex.pose);
+          const isAirbornePose = poses.some((pv) => AIRBORNE_POSE_RE.test(String(pv)));
+          if (!isAirbornePose && !waived('GE-21', r.name) && !lineWaived(subjectsSrc, 'GE-21', ex.k)) {
+            const ySamples = [];
+            if (Number.isFinite(ex.y)) ySamples.push(ex.y);
+            if (Array.isArray(ex.path)) {
+              for (const wp of ex.path) {
+                if (Array.isArray(wp) && Number.isFinite(wp[1])) ySamples.push(wp[1]);
+              }
+            }
+            const minY = ySamples.length ? Math.min(...ySamples) : Infinity;
+            if (minY < floorMinY - 90) {
+              err(
+                'GE-21',
+                `${tag}: ground-bound ${def.kind} subject '${ex.k}' at y=${Math.round(minY)} (${Math.round(floorMinY - minY)} px above floor plane y>=${Math.round(floorMinY)}) without airborne pose or altitude — anchor on the floor plane or declare airborne/altitude`,
+              );
+              markHot(r.i, 'GE-21');
+            }
+          }
+        }
+        // PR-10: partial-body asset placed in wide/medium shot alongside full <Person> actor(s)
+        const isPartialBody = Boolean(def?.partialOf) || PARTIAL_BODY_ASSET_RE.test(String(ex.k ?? ''));
+        if (isPartialBody && isWideOrMedium && hasFullActor && !ex.fg && !waived('PR-10', r.name) && !lineWaived(subjectsSrc, 'PR-10', ex.k)) {
+          err(
+            'PR-10',
+            `${tag}: partial-body asset '${ex.k}' placed in wide/medium set '${s.set}' alongside full <Person> actor(s) — use a dedicated closeup/insert plate or animate the actor's own limb instead of a disembodied body part`,
+          );
+          markHot(r.i, 'PR-10');
+        }
+      }
+    }
     // MO-18: Anti-Frozen-Statue & Frozen-Attack Guard
     {
       const resolveShotTT = (tt) => {
@@ -1716,7 +1787,7 @@ if (phase !== 'design') {
     }
   }
   // ---- screen geometry (GE-*, LA-*): measured from the shot table, no render. Each hit makes the shot HOT:
-  // its review must open the measurement crops (node scripts/qa.mjs crops <i>) — see sv-22 "review cards".
+  // its review must open the measurement crops (node scripts/qa.mjs crops <i>) — see sv-short-production "review cards".
   const looks = {...(P.EX_LOOKS ?? {}), ...P.CAST};
   const seen = new Set();
   const flag = (r, rule, msg, who = '', makeHot = rule !== 'GE-10') => {

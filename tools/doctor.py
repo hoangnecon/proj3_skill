@@ -39,6 +39,8 @@ def find_ffmpeg_dir() -> str | None:
         home = Path.home()
         local_app = Path(os.environ.get("LOCALAPPDATA", home / "AppData/Local"))
         for d in (
+            home / ".local/bin",
+            Path("C:/Work/Tools/ffmpeg/bin"),
             Path("D:/mmo/tools/heo-video-runtime/bin"),
             Path("C:/ffmpeg/bin"),
             Path("C:/Tools/ffmpeg/bin"),
@@ -58,6 +60,7 @@ def find_vieneu_python() -> Path | None:
     home = Path.home()
     candidates = (
         [
+            Path("C:/Work/Tools/VieNeu-TTS/.venv/Scripts/python.exe"),
             Path("D:/mmo/tools/VieNeu-TTS/.venv/Scripts/python.exe"),
             Path("C:/Tools/VieNeu-TTS/.venv/Scripts/python.exe"),
             home / "Tools/VieNeu-TTS/.venv/Scripts/python.exe",

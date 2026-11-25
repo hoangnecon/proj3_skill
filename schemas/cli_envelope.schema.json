@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://story-video-skills.local/schemas/cli_envelope.schema.json",
+  "title": "Story Video Skills v6.0 Unified CLI JSON API Envelope",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "ok",
+    "exit_code",
+    "command",
+    "episode",
+    "stage",
+    "actor",
+    "timestamp_utc",
+    "duration_ms",
+    "inputs_sha",
+    "outputs_sha",
+    "metrics",
+    "checks",
+    "errors",
+    "warnings",
+    "next_actions"
+  ],
+  "properties": {
+    "schema_version": { "const": "6.0" },
+    "ok": { "type": "boolean" },
+    "exit_code": {
+      "type": "integer",
+      "enum": [0, 1, 2, 3, 4, 5],
+      "description": "0=OK, 1=Domain CI Fail, 2=Log-CI Fail, 3=Verification Gate Blocked, 4=Env/Doctor Error, 5=Hook/Policy Violation"
+    },
+    "command": { "type": "string", "minLength": 1 },
+    "episode": {
+      "type": "object",
+      "required": ["slug", "root", "track", "format", "suite_version"],
+      "properties": {
+        "slug": { "type": "string" },
+        "root": { "type": "string" },
+        "track": { "type": "string", "enum": ["short", "long", "unknown"] },
+        "format": { "type": "string", "enum": ["9:16", "16:9", "unknown"] },
+        "suite_version": { "type": "string" }
+      }
+    },
+    "stage": { "type": ["string", "null"] },
+    "unit": { "type": ["string", "null"] },
+    "actor": {
+      "type": "object",
+      "required": ["role", "id"],
+      "properties": {
+        "role": { "type": "string", "enum": ["orchestrator", "executor", "reviewer", "ci", "system"] },
+        "id": { "type": "string" }
+      }
+    },
+    "timestamp_utc": { "type": "string" },
+    "duration_ms": { "type": "integer", "minimum": 0 },
+    "inputs_sha": { "type": "object", "additionalProperties": { "type": ["string", "null"] } },
+    "outputs_sha": { "type": "object", "additionalProperties": { "type": ["string", "null"] } },
+    "metrics": { "type": "object" },
+    "pillars": { "type": ["object", "null"] },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "group", "ok", "message"],
+        "properties": {
+          "id": { "type": "string" },
+          "group": { "type": "string" },
+          "ok": { "type": "boolean" },
+          "severity": { "type": "string", "enum": ["error", "warning", "info"] },
+          "value": {},
+          "expected": {},
+          "message": { "type": "string" }
+        }
+      }
+    },
+    "errors": { "type": "array", "items": { "type": "string" } },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "next_actions": { "type": "array", "items": { "type": "string" } },
+    "log_ref": { "type": ["string", "null"] }
+  }
+}

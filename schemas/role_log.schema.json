@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://story-video-skills.local/schemas/role_log.schema.json",
+  "title": "Story Video Skills v6.0 Hash-Chained Immutable Role Log Entry",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "seq",
+    "timestamp_utc",
+    "run_id",
+    "role",
+    "actor_id",
+    "track",
+    "stage",
+    "event",
+    "prev_sha",
+    "entry_sha"
+  ],
+  "properties": {
+    "schema_version": { "const": "6.0" },
+    "seq": { "type": "integer", "minimum": 1 },
+    "timestamp_utc": { "type": "string" },
+    "run_id": { "type": "string", "minLength": 8 },
+    "role": { "type": "string", "enum": ["orchestrator", "executor", "reviewer", "ci"] },
+    "actor_id": { "type": "string", "minLength": 2 },
+    "track": { "type": "string", "enum": ["short", "long"] },
+    "stage": { "type": "string", "pattern": "^G[1-7](\\.U\\d+)?$" },
+    "unit": { "type": ["string", "null"] },
+    "event": { "type": "string", "enum": ["init", "step", "complete", "ci_result", "gate_pass", "gate_fail"] },
+    "action": {
+      "type": ["string", "null"],
+      "enum": [
+        null,
+        "read_skill",
+        "read_evidence",
+        "edit",
+        "run_tool",
+        "inspect_visual",
+        "inspect_audio",
+        "submit_review",
+        "cross_check",
+        "user_approval",
+        "decision",
+        "handoff"
+      ]
+    },
+    "target": { "type": ["string", "null"] },
+    "target_sha": { "type": ["string", "null"] },
+    "command": { "type": ["string", "null"] },
+    "exit_code": { "type": ["integer", "null"] },
+    "result": { "type": ["string", "null"], "enum": [null, "ok", "fail", "fix", "blocked", "pass"] },
+    "verdict": { "type": ["string", "null"], "enum": [null, "pass", "fix", "blocked"] },
+    "scope": { "type": ["string", "null"] },
+    "approval": { "type": ["string", "null"], "enum": [null, "user", "delegated"] },
+    "user_quote": { "type": ["string", "null"] },
+    "inputs_sha": { "type": "object", "additionalProperties": { "type": ["string", "null"] } },
+    "outputs_sha": { "type": "object", "additionalProperties": { "type": ["string", "null"] } },
+    "metrics": { "type": "object" },
+    "note": { "type": "string" },
+    "prev_sha": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "entry_sha": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}

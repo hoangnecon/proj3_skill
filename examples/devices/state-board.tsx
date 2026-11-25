@@ -1,4 +1,4 @@
-// STATE BOARD — reference device from "Nước mắt chia đất" (2026-11-16), see sv-20 sets.md §8.
+// STATE BOARD — reference device from "Nước mắt chia đất" (2026-11-16), see sv-short-design sets.md §8.
 // Copy into src/episode/sets.tsx, rename the owners/colours/title, register it as an insert set:
 //   plot: {title: '…', bed: 'paper', insert: true, render: cast(plotInsert), bounds: [-400, -400, 1480, 2320]}
 // Shot: set: 'plot', cam: [540, 930, 1.08], keys: {ca: [[106, 0], [214, 's1@word', 0.6]], ut: …, bo: …}

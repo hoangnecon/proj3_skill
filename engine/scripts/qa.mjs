@@ -296,7 +296,7 @@ if (mode === 'review') {
       }
     }
   }
-  const BASE_CHECK_KEYS = ['acting', 'contact', 'overlap', 'set', 'text', 'caption', 'beat', 'model'];
+  const BASE_CHECK_KEYS = ['acting', 'contact', 'overlap', 'set', 'text', 'caption', 'beat', 'model', 'continuity'];
   const CHECK_KEYS = geom.FORMAT === '16:9' ? [...BASE_CHECK_KEYS, 'framing', 'variety'] : BASE_CHECK_KEYS;
   const CHECK_RE = /^(ok|fix)\s*(?:—|–|-)\s*\S+/u;
   const errs = [];

@@ -1,0 +1,47 @@
+{
+ "_doc": "Short 9:16 Track Pacing Standard v4.0 (strictly vertical 1080x1920, 1.7-2.5 min). Empirically calibrated against 28 SCRIPT_YOUTUBE reference Shorts (median 595w, 4.59 eff. wps [4.52-4.71], 19.6-22.0% RMS pauses, 2.98 s/shot). CI REJECTS sluggish <4.42 wps AND rushed >4.74 wps.",
+ "version": "4.0",
+ "track": "short",
+ "format": "9:16",
+ "resolution": [1080, 1920],
+ "fps": 30,
+ "calibration": {
+  "ref_short_vn_median": {"n_scripts": 28, "n_mp4": 25, "words": 595, "words_iqr": [470, 684], "video_s": 144.2, "eff_wps": 4.59, "eff_wps_iqr": [4.52, 4.71], "w_per_sent": 7.83, "short_le6_pct": 43.5, "audio_pause_rms_pct": 19.6, "shots": 50, "shot_mean_s": 2.98, "shots_per_min": 20.1},
+  "empirical_v4_test": {"n_sents": 54, "words": 516, "dur_s": 112.92, "overall_wps": 4.57, "seg_pause_share": 0.064, "rms_pause_pct_25db": 20.1, "tempo_median": 1.11, "tempo_range": [0.98, 1.20]}
+ },
+ "voice": {
+  "mode": "per_sentence_rhythm",
+  "target_ups": 5.05,
+  "pitch_ratio": 1.00,
+  "overall_wps": [4.42, 4.74],
+  "sentence_gap_s": 0.15,
+  "default_pause_after_s": 0.22,
+  "pause_after_s": [0.12, 0.90],
+  "pause_share": [0.05, 0.14],
+  "_why": "Hard CI corridor [4.42, 4.74] locks actual output tightly around the 4.59 wps YouTube reference median. Inter-segment pause_share [5%, 14%] combines with 0.15s intra-sentence gaps and natural 0.18s breath pauses to yield ~20% real RMS pause breathing."
+ },
+ "episode": {
+  "voice_s_target": 125,
+  "voice_s": [96, 150],
+  "voice_s_hard": [88, 160],
+  "words": [450, 660],
+  "segments": [20, 36],
+  "_why": "Concise 1.6-2.5 minute vertical Short (sweet spot 500-620 words -> ~110-136 s at 4.57 overall wps)."
+ },
+ "episode_long": {
+  "_doc": "OPT-IN extended vertical Short (needs script.json length='long' + brief.md '## Length override' user_quote).",
+  "voice_s_target": 180,
+  "voice_s": [150, 225],
+  "voice_s_hard": [140, 240],
+  "words": [660, 980],
+  "segments": [30, 50]
+ },
+ "shots": {
+  "mean_s": [2.2, 3.6],
+  "shots_per_min": [16.5, 27.0],
+  "p10_s_min": 1.2,
+  "max_s": 6.5,
+  "_why": "Snappy yet breathable 9:16 cutting pace matching ref median 2.98 s/shot (20.1 shots/min) with 2-4 deliberate visual hold beats."
+ },
+ "music": {"bpm": 118, "theme": "series"}
+}

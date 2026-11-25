@@ -1,4 +1,4 @@
-// EXEMPLAR sets from "Thang máy ăn bí mật" — the detail benchmark for every new set (see sv-20-design-system/references/sets.md).
+// EXEMPLAR sets from "Thang máy ăn bí mật" — the detail benchmark for every new set (see sv-short-design/references/sets.md).
 // Registered as ex-* ids so the design sheet can render them next to your sets. Episode shots must not use ex-* sets.
 // Layers: far (depth 0.5) · back (1) · mid (1, depth-sorted with actors by y) · fg (1.3).
 import React from 'react';

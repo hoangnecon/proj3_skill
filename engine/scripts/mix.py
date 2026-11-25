@@ -4,10 +4,10 @@ Run:  /Users/Shared/Tools/VieNeu-TTS/.venv/bin/python scripts/mix.py
 Reads  audio.json (episode audio plan), qa/shots.json (node scripts/times.mjs), src/data/words.json, src/data/cues.json, audio/voice.wav
 Writes public/mix.wav (48 kHz stereo, -14 LUFS, TP <= -1.3), audio/stems/*.wav, qa/mix_report.json, then runs audio_qa.py (gate G6).
 
-House rules (sv-40-audio) are enforced here, not left to taste:
+House rules (sv-core-audio) are enforced here, not left to taste:
   * music: "theme": "series" uses scripts/theme.py (the one series theme, 118 BPM, melody from 0 s);
     otherwise the mood engine: tempo <= 80 BPM, at most ONE melodic note per beat, no drums/hi-hats
-  * levels, processing and mastering follow sv-42-mix-master (mix_targets.json); audio_qa.py measures the result
+  * levels, processing and mastering follow sv-core-audio (mix_targets.json); audio_qa.py measures the result
   * every SFX comes from something visible: an overlay, a reach (press), a set key event, a cut to a card,
     or an explicit accent in audio.json anchored to a word
 """
@@ -377,7 +377,7 @@ if "end" in M and not THEME:
 if music.ndim == 1:
     music = np.stack([music, music], axis=1)
 
-# ============================ mix + master (sv-42-mix-master; standard in standards/mix_targets.json) ============================
+# ============================ mix + master (sv-core-audio; standard in standards/mix_targets.json) ============================
 import audiolib as A  # noqa: E402
 
 TG = json.loads((ROOT / "standards/mix_targets.json").read_text())

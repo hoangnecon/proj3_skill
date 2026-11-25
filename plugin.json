@@ -1,12 +1,12 @@
 {
   "name": "story-video-skills",
   "displayName": "Story Video Skills",
-  "version": "5.9.0",
-  "description": "Gated production suite for 1.75-2.65 minute vertical Shorts and 6.5-15.0 minute 16:9 widescreen Vietnamese 2D story videos (Remotion, riso-ink, canonical New Nhim, corpus-calibrated Script DNA DB, native 1.0x 4.70 ups Hai Dang narration with natural 20-24% pauses, 164 lint rules).",
+  "version": "6.0.0",
+  "description": "Anti-bypass 3-track production suite (Core + Short 9:16 + Long 16:9) for Vietnamese 2D story videos (Remotion, riso-ink, canonical New Nhim, empirically calibrated v4.0 Hai Dang voice ~4.57 wps, hash-chained role logs LG-01..12, unified sv_cli.py JSON API, native PreToolUse hooks, general physics/continuity CI).",
   "suggestedPrompts": [
-    "Pitch 5-10 Short premises with New Nhim for approval",
-    "Scaffold a new story-video episode and run doctor check",
-    "Write brief.md, beats.md, and script.json passing G1-G2"
+    "Scaffold a new Short 9:16 episode (--track short) and pitch 5 premises",
+    "Scaffold a new Long 16:9 adventure episode (--track long) and run doctor",
+    "Run sv_cli.py status and audit the next verification gate"
   ],
   "author": {
     "name": "PROJ3"

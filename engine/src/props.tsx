@@ -1,5 +1,5 @@
 // PROP LIBRARY. Origin = bottom centre of the object, y up is negative. Same ink line (LINE) and
-// halftone shade (Sh) as everything else. Rules: sv-20-design-system/references/props-overlays.md.
+// halftone shade (Sh) as everything else. Rules: sv-short-design/references/props-overlays.md.
 // Register a prop in HAND_PROPS / SIDE_PROPS / WORLD_PROPS at the bottom so shots can name it.
 import React from 'react';
 import {E, L, PAL, R, Rr, S, Sh, Smoke, Txt} from './kit';

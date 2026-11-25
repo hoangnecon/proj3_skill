@@ -57,7 +57,7 @@ export type Actor = {
   hop?: number; // bouncing (joy/anger), px
   shake?: number; // trembling, px
   z?: number; // depth-sort nudge
-  // ---- detailed motion (see sv-21-motion) ----
+  // ---- detailed motion (see sv-short-production) ----
   path?: [number, number, TT][]; // waypoints (x, y, arrival time). Walks with planted feet, trapezoid speed.
   view?: Keys<'front' | 'side' | 'back' | '3q'>; // default: side when path/ride is set, else front
   face?: Keys<1 | -1>; // side/3q view facing (default: travel direction or flip)
@@ -128,7 +128,7 @@ export type ShotDef = {
   keys?: Record<string, KeyTrack>; // animated set options (door: [[0,0],[1,'s5@mở']])
   of?: (u: number, ts: number, t: number) => Record<string, unknown>; // escape hatch: computed options
   cam: [number, number, number]; // [centreX, centreY, zoom] in world px; zoom 1 = 1080 px wide
-  cam2?: [number, number, number]; // end of the move (motivated moves only, see sv-22)
+  cam2?: [number, number, number]; // end of the move (motivated moves only, see sv-short-production)
   camKeys?: [number, number, number, TT][]; // multi-waypoint camera choreography [cx, cy, zoom, at] (overrides cam->cam2 when >= 2 waypoints)
   ease?: 'io' | 'out' | 'in' | 'lin';
   actors?: Actor[];

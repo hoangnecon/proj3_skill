@@ -1,4 +1,4 @@
-// Screen graphics on top of the picture. Allowed kinds and when to use each: sv-22-shots-camera/references/shot-grammar.md §Overlays.
+// Screen graphics on top of the picture. Allowed kinds and when to use each: sv-short-production/references/shot-grammar.md §Overlays.
 // Never add a new kind for one gag — draw diegetic text in the set instead.
 import React from 'react';
 import {E, L, PAL, R, Rr, S, Txt, FONT} from './kit';

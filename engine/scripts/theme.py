@@ -1,4 +1,4 @@
-"""Series theme music (sv-40-audio): one theme shared by every episode, generated to the exact length needed.
+"""Series theme music (sv-core-audio): one theme shared by every episode, generated to the exact length needed.
 
 The music is not stored as audio. This file is the theme: the same notes, instruments and seed always give
 the same sound, so git holds about 5 KB of code instead of a long WAV, and every episode gets music that

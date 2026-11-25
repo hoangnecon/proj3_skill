@@ -1,10 +1,10 @@
-"""Giọng VieNeu V3 Turbo theo chuẩn nhà v2.0 (standards/voice_standard.json, skill sv-12-voice):
+"""Giọng VieNeu V3 Turbo theo chuẩn nhà v4.0 (standards/voice_standard.json, skill sv-core-voice):
 - Thu từng câu bằng preset Hải Đăng (use_ref_codes=True, t=0.7, top_k=25, top_p=0.95, không clone).
 - Hỗ trợ song ngữ Việt-Anh (<en>...</en> hoặc khai báo "english": [...] trong script.json), dấu '...'/'…',
   và các tag biểu cảm nội dòng của VieNeu ([cười], [thở dài], [hắng giọng]).
-- Nhịp nhanh theo từng câu (offline 5.25 đơn vị âm tiết/giây, cắt khoảng lặng nội câu >0.32s về 0.16s,
-  nâng cao độ pitch_ratio=1.02 qua FFmpeg WSOLA), cho phép tinh chỉnh wps / pause_after / tts_text / seed
-  cho từng segment hoặc từng câu cụ thể trong script.json.
+- Nhịp chuẩn thực nghiệm v4.0 đọc từ standards/voice_standard.json (target_ups=5.05, phonation_ups=5.45,
+  pitch_ratio=1.00 tự nhiên, overall_wps ~4.57 khớp YouTube median 4.59 wps), cho phép tinh chỉnh
+  wps / pause_after / tts_text / seed cho từng segment hoặc từng câu cụ thể trong script.json.
 - Đo tự động từng câu & từng đoạn với faster-whisper + librosa; câu trượt tự đổi seed thu lại (tối đa 3 lần).
 
 Chạy: /Users/Shared/Tools/VieNeu-TTS/.venv/bin/python scripts/voice.py [--only s3,s7.2] [--missing] [--reuse]
@@ -46,10 +46,11 @@ def _load_std() -> dict:
     for cand in (
         ROOT / "standards/voice_standard.json",
         _SCRIPT_ROOT / "standards/voice_standard.json",
+        _SCRIPT_ROOT.parent / "standards/core/voice_standard.json",
         _SCRIPT_ROOT.parent / "standards/voice_standard.json",
     ):
         if cand.exists():
-            return json.loads(cand.read_text())
+            return json.loads(cand.read_text(encoding="utf-8"))
     raise FileNotFoundError(f"standards/voice_standard.json not found from {ROOT}")
 
 
@@ -57,10 +58,11 @@ def _load_pacing() -> dict:
     for cand in (
         ROOT / "standards/pacing.json",
         _SCRIPT_ROOT / "standards/pacing.json",
+        _SCRIPT_ROOT.parent / "standards/short/pacing.json",
         _SCRIPT_ROOT.parent / "standards/pacing.json",
     ):
         if cand.exists():
-            return json.loads(cand.read_text())
+            return json.loads(cand.read_text(encoding="utf-8"))
     raise FileNotFoundError(f"standards/pacing.json not found from {ROOT}")
 
 
@@ -68,7 +70,7 @@ STD = _load_std()
 
 
 def _effective_rhythm(script: dict | None = None, pa: dict | None = None) -> dict:
-    """Luôn giữ nguyên chuẩn nhịp 5.25 ups Hải Đăng tinh khiết từ standards/voice_standard.json cho mọi định dạng."""
+    """Luôn đọc chuẩn nhịp trực tiếp từ standards/voice_standard.json (Single Source of Truth v4.0)."""
     return dict(STD["rhythm"])
 EN_SPAN_RE = re.compile(r"<en>(.*?)</en>", re.I | re.S)
 TAG_RE = re.compile(r"\[([^\]]+)\]")
@@ -222,7 +224,7 @@ def style_sentence(
     pitch_override: float | None = None,
     rhythm: dict | None = None,
 ):
-    """Áp nhịp theo từng câu (v3.0 native 1.0x Hải Đăng 4.70 ups + pitch 1.00 qua FFmpeg WSOLA)."""
+    """Áp nhịp theo từng câu từ standards/voice_standard.json (v4.0: pitch 1.00 tự nhiên + gentle WSOLA)."""
     R = rhythm or STD["rhythm"]
     tr = rhythm_trim(raw_wav, R["inside_pause_threshold_s"], R["inside_pause_target_s"])
     raw_dur = max(len(tr) / SR, 0.08)
@@ -786,7 +788,7 @@ def main():
     PA = _load_pacing()
     if script.get("length") == "long":  # opt-in band, approved in brief.md (script_lint SC-27)
         PA["episode"] = PA["episode_long"]
-    elif script.get("length") == "long_16x9":  # 10-min 16:9 band (sv-02-long-form)
+    elif script.get("length") == "long_16x9":  # 10-min 16:9 band (sv-long-script)
         PA["episode"] = PA["episode_long_16x9"]
     ep_cfg = PA["episode"]
     eff_rhythm = _effective_rhythm(script, PA)

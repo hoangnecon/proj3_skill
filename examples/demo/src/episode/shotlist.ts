@@ -1,5 +1,5 @@
 // DEMO SHOTLIST — shows every motion feature on exemplar sets/looks so you can render and study it.
-// REPLACE THIS FILE with the episode's shots (sv-22-shots-camera). The lint fails while any shot
+// REPLACE THIS FILE with the episode's shots (sv-short-production). The lint fails while any shot
 // uses an ex-* set or ex_* look, so the demo can never ship by accident.
 import type {ShotDef} from '../engine';
 import {carBtn, stairY} from '../exemplar/geo';
