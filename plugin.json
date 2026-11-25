@@ -1,15 +1,17 @@
 {
   "name": "story-video-skills",
   "displayName": "Story Video Skills",
-  "version": "6.2.1",
-  "description": "Anti-bypass 3-track production suite (Core + Short 9:16 + Long 16:9) for Vietnamese 2D story videos (Remotion, riso-ink + zero-flicker RasterPlate rough.js/PixiJS atmospheric plates, mandatory Pre-G4 art_direction.json AD-01..08 & 8-axis G4 rubric scoring LG-13, native 2D squash-and-stretch, anti-treadmill PR-11, 30fps post-encode transition QA DL-01..02, canonical New Nhim, v4.0 Hai Dang voice ~4.57 wps, hash-chained role logs LG-01..13, unified sv_cli.py JSON API, native PreToolUse hooks).",
+  "version": "6.3.0",
+  "description": "Multi-provider anti-bypass 2D Vietnamese story-video studio plugin (Short 9:16 + Long 16:9) with 8 intent-first slash commands (/sv-create-short, /sv-create-long, /sv-write-script, /sv-design, /sv-produce, /sv-voice-audio, /sv-audit, /sv-fix), native subagents, Pre-G4 art_direction.json (AD-01..08), zero-flicker RasterPlate, PR-11 anti-treadmill CI, 30fps transition QA (DL-01..02), v4.0 Hai Dang voice, and hash-chained verification gates G1-G7.",
+  "logo": "assets/logo.svg",
   "suggestedPrompts": [
-    "Scaffold a new Short 9:16 episode (--track short) and pitch 5 premises",
-    "Scaffold a new Long 16:9 adventure episode (--track long) and run doctor",
-    "Run sv_cli.py status and audit the next verification gate"
+    "/sv-create-short Scaffold a new Short 9:16 episode and pitch 5 premises",
+    "/sv-create-long Scaffold a new Long 16:9 adventure episode and design its 5-chapter spine",
+    "/sv-fix Investigate and fix a visual, motion, timeline, or audio issue in the current episode"
   ],
   "author": {
     "name": "PROJ3"
   },
+  "homepage": "https://github.com/hoangnecon/proj3_skill",
   "repository": "https://github.com/hoangnecon/proj3_skill"
 }

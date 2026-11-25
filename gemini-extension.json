@@ -1,0 +1,6 @@
+{
+  "name": "story-video-skills",
+  "version": "6.3.0",
+  "description": "Vietnamese 2D story-video studio plugin (Short 9:16 & Long 16:9) with 8 intent-first /sv-* commands, anti-bypass verification gates G1-G7, zero-flicker RasterPlate, PR-11 anti-treadmill CI, and 30fps transition QA.",
+  "contextFileName": "rules/AGENTS.md"
+}

@@ -175,7 +175,7 @@ def main() -> None:
         print("WARNING: fix the doctor issues above before starting helpers")
     print()
     print(f"episode project ready: {dest} [track={args.track}, format={ep_meta['format']}]{'  (with the demo)' if args.demo else ''}")
-    print("next: read skills/sv-core-router/SKILL.md; run: python scripts/sv_cli.py status")
+    print("next: invoke /sv-write-script (or /sv-create-short / /sv-create-long); run: python scripts/sv_cli.py status")
 
 
 if __name__ == "__main__":

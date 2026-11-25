@@ -1,5 +1,26 @@
 # Changelog
 
+## `v6.3.0` — 2026-11-26 · Intent-First Plugin Architecture (`8` User-Invocable `/sv-*` Slash Commands), Progressive-Disclosure `guides/`, Native Multi-Provider `agents/` & Manifest Parity (`Antigravity` + `Claude Code` + `Gemini CLI`)
+- **Two-Layer Intent-First Command Surface (`skills/sv-*/SKILL.md` + `guides/{core,short,long}/`):**
+  - Replaced the 11 internal architecture-named skills (`sv-core-*`, `sv-short-*`, `sv-long-*`) with **`8` crisp, verb-first user-invocable slash commands** following the `agentskills.io` & Superpowers pattern:
+    - `/sv-create-short` — scaffold & launch a brand-new Short `9:16` episode (`G1 → G7`).
+    - `/sv-create-long` — scaffold & launch a brand-new Long `16:9` adventure (`5` chapters + `U1..Uk`).
+    - `/sv-write-script` — author, revise, and validate `brief.md`, `beats.md`, `script.json` (`G1–G2`, auto Short/Long).
+    - `/sv-design` — lock Pre-G4 `art_direction.json` (`AD-01..08`), build cast/`<RasterPlate>` sets/`PR-11` subjects, and pass 8-axis `design score` (`LG-13`).
+    - `/sv-produce` — inspect `sv_cli.py status` and drive the next active production gate (`G3 / G5 / G5.U* / G6 / G7`).
+    - `/sv-voice-audio` — record/fix `v4.0` Hải Đăng narration (`G3`) or design/mix `-14 LUFS` audio (`G6`).
+    - `/sv-audit` — strict read-only independent multi-layer QA audit (CI + 30fps `transition_qa.py` + real JPEG inspection; report only, zero source edits).
+    - `/sv-fix` — root-cause investigation & targeted minimal-blast-radius fix protocol (Iron Law: evidence before edits; skips unnecessary `mix.py` when `qa/timing.json` is unchanged; requires visual + CI verification before completion).
+  - Migrated all 11 deep track manuals and 22 craft reference sheets intact into progressive-disclosure `guides/{core,short,long}/` so the user's `/` slash menu stays clean without losing a single craft rule or lint reference.
+- **Native Multi-Provider Plugin Packaging (`agents/`, `assets/logo.svg`, `plugin.json`, `.claude-plugin/plugin.json`, `gemini-extension.json`):**
+  - Added native Antigravity/Claude Code subagent definitions `agents/{sv-orchestrator,sv-executor,sv-reviewer}.md` (explicit `subagent: true`, `mainAgent: false`, and `tools:` allowlists), keeping `roles/*.md` synchronized as backwards-compatible mirrors.
+  - Added custom square riso-ink badge `assets/logo.svg` (`256×256`, 10% safe margin, dark/light contrast safe) wired into `plugin.json`, updated `suggestedPrompts` to showcase `/sv-create-short`, `/sv-create-long`, and `/sv-fix`, added `"agents": "./agents"` to `.claude-plugin/plugin.json`, and shipped `gemini-extension.json` for Gemini CLI.
+  - Upgraded `rules/AGENTS.md` with an explicit Intent-First Command Table and Superpowers-style announce discipline (`Using sv-<name> to <purpose>`).
+- **CI, Log-Lint & Automated Suite Updates (`sv_log_lint.py`, `validate_skills.py`, `tests/test_v6_suite.py` — 14/14 Passing):**
+  - Updated `LG-03` in `engine/scripts/sv_log_lint.py` (with Windows backslash normalization) to validate the new `sv-*` action skills and `guides/{core,short,long}/*.md` paths (while retaining backwards compatibility for in-progress `v6.2.x` episodes and still rejecting cross-track / wrong-stage mismatches).
+  - Upgraded `tools/validate_skills.py` to verify exact 8-command `skills/` surface, zero dead `guides/*.md` links, native `agents/` frontmatter, `assets/logo.svg`, and 4-way manifest version parity (`plugin.json`, `.claude-plugin/plugin.json`, `gemini-extension.json`, `CHANGELOG.md`).
+  - Added **Test 14 (`test_14_v63_intent_skills_native_agents_and_manifests`)** in `tests/test_v6_suite.py`.
+
 ## `v6.2.1` — 2026-11-25 · Zero-Flicker Multi-Tab `<RasterPlate>` (`Film.tsx` + `kit.tsx`), Post-Encode 30fps Transition QA (`transition_qa.py`, `DL-01..02`), Anti-Treadmill Subject Guard (`PR-11`) & Enhanced Blind `continuity` Checklist
 - **Zero-Flicker Multi-Tab Raster Plate Rendering (`engine/src/Film.tsx`, `engine/src/kit.tsx`, `engine/scripts/load.mjs`, `engine/scripts/lint.mjs`, `skills/sv-short-design/references/atmospheric-plates.md`):**
   - Keyed set `<LayerG>` wrappers by `shot.set` (`far-${shot.set}`, `back-${shot.set}`, `fg-${shot.set}`) in `engine/src/Film.tsx` so Chromium always unmounts/remounts set backdrops across set cuts instead of reusing stale SVG `<image>` DOM nodes.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unified Story Video Skills CLI & Standardized JSON API Dispatcher (v6.2.1).
+"""Unified Story Video Skills CLI & Standardized JSON API Dispatcher (v6.3.0).
 
 Single canonical CLI for Orchestrator, Executor, and Reviewer roles:
   python scripts/sv_cli.py status [--json]

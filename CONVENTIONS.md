@@ -1,16 +1,19 @@
-# Conventions (`v6.2.1`)
+# Conventions (`v6.3.0`)
 
 Enforced by `tools/validate_skills.py`.
 
 ## Repository layout — one kind of thing per top-level folder
 | Folder / File | Holds | Never holds |
 |---|---|---|
-| `plugin.json`, `.claude-plugin/plugin.json` | Antigravity & Claude plugin manifests (must match `CHANGELOG.md`) | code or generated files |
+| `plugin.json`, `.claude-plugin/plugin.json`, `gemini-extension.json` | Antigravity, Claude Code & Gemini CLI plugin manifests (must match `CHANGELOG.md`) | code or generated files |
+| `assets/` | Plugin visual assets (`logo.svg`, square icon with 10% safe margin) | episode frames |
+| `agents/` | Native subagent definitions (`sv-orchestrator.md`, `sv-executor.md`, `sv-reviewer.md`) with Antigravity/Claude YAML frontmatter | episode code |
+| `skills/` | Exactly `8` user-invocable intent-first action skills (`skills/sv-*/SKILL.md`) | code, data, templates |
+| `guides/` | Progressive-disclosure deep manuals & references split into `guides/{core,short,long}/` | code or standards |
 | `hooks.json`, `hooks/` | Antigravity native `PreToolUse`/`PostToolUse` anti-bypass guard (`hooks/sv_guard.py`) | episode files |
 | `rules/` | always-on concise plugin rules (`rules/AGENTS.md`) | stale threshold tables |
-| `roles/` | complete per-role system prompts (`orchestrator.md`, `executor.md`, `reviewer.md`) | episode code |
+| `roles/` | backwards-compatible mirrors of `agents/sv-*.md` (`orchestrator.md`, `executor.md`, `reviewer.md`) | episode code |
 | `schemas/` | formal JSON Schemas (`cli_envelope`, `role_log`, `review_record`, `art_direction`, `g4_scores`) | runtime logs |
-| `skills/` | 3-track instructions ONLY: `sv-(core\|short\|long)-*/SKILL.md` + `references/*.md` | code, data, templates |
 | `standards/` | Single Source of Truth split by track: `core/{voice_standard,mix_targets}.json`, `short/{pacing,script_dna_db}.json`, `long/pacing.json` | episode overrides |
 | `engine/` | shared Remotion runtime & scripts (`sv_cli.py`, `sv_log.py`, `sv_log_lint.py`, `sv_gate.py`, `art_direction_lint.py`, `lint.mjs`, `script_lint.py`, `qa.mjs`, `blind_pack.mjs`, `rough_helpers.mjs`, `pixi_stage.mjs`, `pixi_fx.mjs`, `rough_pixi_bake.mjs`, `voice.py`, `mix.py`, `deliver.mjs`, `transition_qa.py`) | episode content or standards |
 | `starter/` | blank episode files copied by `tools/new_episode.py` (incl. `art_direction.json`) | demo or reference content |
@@ -19,11 +22,12 @@ Enforced by `tools/validate_skills.py`.
 | `tests/` | automated end-to-end verification tests (`tests/test_v6_suite.py`) | generated media |
 | `docs/` | design reviews and research notes | operational skills |
 
-## 3-Track Skills & Anti-Drift Discipline
-- Skill folders MUST follow `skills/sv-(core|short|long)-<slug>/` (5 Core, 3 Short 9:16, 3 Long 16:9).
+## User-Invocable Skills & Anti-Drift Discipline
+- `skills/` holds strictly the `8` verb-first action commands: `sv-create-short`, `sv-create-long`, `sv-write-script`, `sv-design`, `sv-produce`, `sv-voice-audio`, `sv-audit`, `sv-fix`.
 - Frontmatter: `name` equals directory name; `description` is `150–1024` chars without `<` or `>`.
-- `SKILL.md` ≤ `500` lines (target `≤ 120` lines); every `references/*` file must be cited in `SKILL.md`.
-- **Single Source of Truth (`E18`):** `SKILL.md` and `rules/AGENTS.md` NEVER duplicate stale voice/budget literals — all thresholds come directly from `standards/`.
+- `SKILL.md` ≤ `500` lines (target `≤ 100` lines); every `guides/<path>.md` path referenced in `SKILL.md` MUST exist on disk.
+- Native agents under `agents/sv-*.md` MUST declare `name`, `description`, `subagent: true`, `mainAgent: false`, and explicit `tools:`.
+- **Single Source of Truth (`E18`):** `SKILL.md`, `guides/*/*.md`, and `rules/AGENTS.md` NEVER duplicate stale voice/budget literals — all thresholds come directly from `standards/`.
 
 ## Lint & CI Rules
 | Prefix | Area | Implemented In |
@@ -39,8 +43,3 @@ Enforced by `tools/validate_skills.py`.
 | `AN-01..02`, `OV-01..04`, `CA-01..08`, `SZ-01..02`, `KY-01`, `CO-01..03`, `PC-01..03` | Anchors, overlays, camera bounds/180° axis/`camKeys`, screen sizes, animated keys, coverage, dual shot pacing | `scripts/lint.mjs` |
 | `MO-01..19` | Distance-locked walk/run stop-settle, `pushTarget`, straddle mounts, `ActionFx`, choreography density, 4-stage `jumpPhase`, anti-freeze, late-ramp guard | `scripts/lint.mjs` |
 | `GE-01`, `GE-04`, `GE-07`, `GE-10..11`, `GE-15..21` | Screen geometry, sign clipping/occlusion, detached limbs (`GE-19`), flying airspace occlusion (`GE-20`), non-airborne ground-plane contact invariant (`GE-21`) | `scripts/lint.mjs` |
-
-## 5-Pillar Verification Gates & Hooks
-- Unified CLI: `python scripts/sv_cli.py status|doctor|log|ci|design|review|gate [--json]` conforming to `schemas/cli_envelope.schema.json`.
-- Gates: `G1 → G2 → G3 ∥ (Pre-G4 art-direction → G4) → G5 (G5.U1..Uk sequential on long) → G6 → G7`.
-- Every passing gate requires: **(1)** Domain CI = `0` errors (incl. `AD-01..08` on `G4`), **(2)** Executor Log-CI (`LG-01..13`) = `0`, **(3)** Reviewer Log-CI + 8-axis `design score` (`G4`, `LG-13`) / 9-or-11-check blind reviews (`G5`) = `0`, **(4)** Orchestrator audit + `gates/G*.review.md` (+ `user_quote` on `G1/G2/G4`), and **(5)** Antigravity `hooks/sv_guard.py` hard `PreToolUse` enforcement (`H1..H6`).

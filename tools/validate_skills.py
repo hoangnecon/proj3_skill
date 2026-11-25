@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""Validate the story-video-skills v6.0.0 repository (see CONVENTIONS.md).
+"""Validate the story-video-skills v6.3.0 multi-provider plugin repository (see CONVENTIONS.md).
 
 Checks:
   0. layout: known top-level folders & files only; strict per-folder extension rules
-  1. 3-track skills (`sv-core-*`, `sv-short-*`, `sv-long-*`): frontmatter name == dir,
-     description 150-1024 chars without < >, <= 500 lines, every references/ file cited
-  2. every lint ID written in docs (XX-NN) exists in lint.mjs, script_lint.py, or sv_log_lint.py
+  1. 8 intent-first user-invocable skills (`skills/sv-*/SKILL.md`): frontmatter name == dir,
+     description 150-1024 chars without < >, <= 500 lines, valid `guides/` links, plus
+     native `agents/sv-*.md` frontmatter and `assets/logo.svg` checks
+  2. every lint ID written in docs (XX-NN) exists in lint.mjs, script_lint.py, sv_log_lint.py,
+     art_direction_lint.py, or transition_qa.py
   3. every `scripts/<file>` named in docs exists in engine/scripts/, every `tools/<file>` in tools/
-  4. required suite files exist (engine, split standards, hooks, roles, schemas, starter, examples, tools)
-  5. version parity across plugin.json, .claude-plugin/plugin.json, and newest CHANGELOG.md entry
-  6. E18 anti-drift guard: zero stale conflicting speed/budget literals in SKILL.md or rules/AGENTS.md
+  4. required suite files exist (engine, guides, agents, roles, assets, split standards, hooks, schemas, starter, examples, tools)
+  5. version parity across plugin.json, .claude-plugin/plugin.json, gemini-extension.json, and newest CHANGELOG.md entry
+  6. E18 anti-drift guard: zero stale conflicting speed/budget literals in SKILL.md, guides/*/*.md, or rules/AGENTS.md
 
 Usage: python tools/validate_skills.py [repo_root]     exit 1 on any error
 """
@@ -27,6 +29,8 @@ for _st in (sys.stdout, sys.stderr):
 
 ROOT = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else pathlib.Path(__file__).resolve().parents[1])
 SK = ROOT / "skills"
+GD = ROOT / "guides"
+AG = ROOT / "agents"
 ENG = ROOT / "engine"
 errors: list[str] = []
 warns: list[str] = []
@@ -35,12 +39,18 @@ warn = warns.append
 
 # ---------------------------------------------------------------- 0. layout
 TOP = {
-    "skills", "standards", "engine", "starter", "examples", "tools",
+    "skills", "guides", "agents", "assets", "standards", "engine", "starter", "examples", "tools",
     "docs", ".claude-plugin", "rules", "hooks", "roles", "schemas", "tests",
 }
-TOP_FILES = {"README.md", "CHANGELOG.md", "CONVENTIONS.md", ".gitignore", "plugin.json", "hooks.json"}
+TOP_FILES = {
+    "README.md", "CHANGELOG.md", "CONVENTIONS.md", ".gitignore",
+    "plugin.json", "hooks.json", "gemini-extension.json",
+}
 KINDS = {
     "skills": {".md"},
+    "guides": {".md"},
+    "agents": {".md"},
+    "assets": {".svg", ".png", ".jpg", ".jpeg", ".webp"},
     "standards": {".json"},
     "engine": {".py", ".mjs", ".ts", ".tsx", ".json"},
     "starter": {".md", ".json", ".ts", ".tsx", ".gitignore"},
@@ -91,20 +101,34 @@ for item in sorted(ROOT.iterdir()):
     elif item.is_file() and item.name not in TOP_FILES:
         err(f"E16 stray top-level file on disk: {item.name}")
 
-# ---------------------------------------------------------------- 1. 3-track skills
-NAME_RE = re.compile(r"^sv-(core|short|long)-[a-z0-9]+(?:-[a-z0-9]+)*$")
+# ---------------------------------------------------------------- 1. 8 intent-first user-invocable skills
+EXPECTED_SKILLS = {
+    "sv-create-short",
+    "sv-create-long",
+    "sv-write-script",
+    "sv-design",
+    "sv-produce",
+    "sv-voice-audio",
+    "sv-audit",
+    "sv-fix",
+}
+NAME_RE = re.compile(r"^sv-[a-z0-9]+(?:-[a-z0-9]+)*$")
 skill_dirs = sorted(p for p in SK.iterdir() if p.is_dir()) if SK.exists() else []
 if not skill_dirs:
     err("E01 no skills/ directories")
 
-track_counts = {"core": 0, "short": 0, "long": 0}
+found_skill_names = {d.name for d in skill_dirs}
+missing_sk = sorted(EXPECTED_SKILLS - found_skill_names)
+extra_sk = sorted(found_skill_names - EXPECTED_SKILLS)
+if missing_sk:
+    err(f"E02 missing expected user-invocable skill(s): {missing_sk}")
+if extra_sk:
+    err(f"E02 unexpected skill folder(s) outside 8-command surface: {extra_sk}")
+
 docs: dict[pathlib.Path, str] = {}
 for d in skill_dirs:
-    m_name = NAME_RE.match(d.name)
-    if not m_name:
-        err(f"E02 {d.name}: directory name must be sv-(core|short|long)-<slug>")
-    else:
-        track_counts[m_name.group(1)] += 1
+    if not NAME_RE.match(d.name):
+        err(f"E02 {d.name}: directory name must match sv-<slug>")
     f = d / "SKILL.md"
     if not f.exists():
         err(f"E03 {d.name}: SKILL.md missing")
@@ -114,7 +138,7 @@ for d in skill_dirs:
     if not m:
         err(f"E04 {d.name}: no YAML frontmatter")
         continue
-    fm = dict(re.findall(r"^(\w+):\s*(.*)$", m.group(1), re.M))
+    fm = dict(re.findall(r"^([\w-]+):\s*(.*)$", m.group(1), re.M))
     if fm.get("name") != d.name:
         err(f"E05 {d.name}: frontmatter name '{fm.get('name')}' != directory")
     desc = fm.get("description", "").strip()
@@ -128,13 +152,43 @@ for d in skill_dirs:
         for rf in sorted((d / sub).glob("*")) if (d / sub).exists() else []:
             if rf.is_file() and rf.name not in txt:
                 err(f"E09 {d.name}: {sub}/{rf.name} is not mentioned in SKILL.md")
+    # Verify every concrete `guides/<path>.md` path referenced in SKILL.md exists on disk
+    for gref in set(re.findall(r"(?<![\w/])(guides/[a-z0-9_/-]+\.md)", txt)):
+        if not (ROOT / gref).is_file():
+            err(f"E09 {d.name}: references missing guide {gref}")
     docs[f] = txt
     for rf in (d / "references").glob("*.md") if (d / "references").exists() else []:
         docs[rf] = rf.read_text(encoding="utf-8")
 
-for tr_name, cnt in track_counts.items():
-    if cnt < 3:
-        err(f"E02 track '{tr_name}' has only {cnt} skill(s) (expected >= 3)")
+# Collect guides/ and validate every native agent in agents/
+if GD.is_dir():
+    for gf in sorted(GD.rglob("*.md")):
+        docs[gf] = gf.read_text(encoding="utf-8")
+
+EXPECTED_AGENTS = {"sv-orchestrator", "sv-executor", "sv-reviewer"}
+if AG.is_dir():
+    for ag_name in sorted(EXPECTED_AGENTS):
+        af = AG / f"{ag_name}.md"
+        if not af.is_file():
+            err(f"E13 agents/{ag_name}.md missing")
+            continue
+        atxt = af.read_text(encoding="utf-8")
+        am = re.match(r"^---\r?\n(.*?)\r?\n---\r?\n", atxt, re.S)
+        if not am:
+            err(f"E04 agents/{ag_name}.md: missing YAML frontmatter")
+            continue
+        afm = dict(re.findall(r"^([\w-]+):\s*(.*)$", am.group(1), re.M))
+        if afm.get("name") != ag_name:
+            err(f"E05 agents/{ag_name}.md: frontmatter name '{afm.get('name')}' != '{ag_name}'")
+        if not afm.get("description", "").strip():
+            err(f"E06 agents/{ag_name}.md: empty description")
+        if afm.get("subagent", "").strip().lower() != "true" or afm.get("mainAgent", "").strip().lower() != "false":
+            err(f"E04 agents/{ag_name}.md: must set subagent: true and mainAgent: false")
+        if "tools:" not in am.group(1):
+            err(f"E04 agents/{ag_name}.md: must declare explicit tools list")
+        docs[af] = atxt
+else:
+    err("E13 agents/ directory missing")
 
 for extra in ("README.md", "CONVENTIONS.md", "rules/AGENTS.md"):
     p = ROOT / extra
@@ -169,7 +223,7 @@ for f, txt in docs.items():
         if not (ROOT / "tools" / s).exists():
             err(f"E12 {f.relative_to(ROOT)}: names tools/{s} which does not exist")
 
-# ---------------------------------------------------------------- 4. required v6.0 parts
+# ---------------------------------------------------------------- 4. required v6.3 parts
 REQUIRED = {
     "engine": [
         "package.json", "remotion.config.ts", "tsconfig.json", "src/index.ts", "src/Root.tsx", "src/engine.ts",
@@ -183,6 +237,13 @@ REQUIRED = {
             "tile.py", "times.mjs", "transition_qa.py", "voice.py",
         )
     ],
+    "guides": [
+        "core/router.md", "core/bible.md", "core/voice.md", "core/audio.md", "core/delivery.md",
+        "short/script.md", "short/design.md", "short/production.md",
+        "long/script.md", "long/design.md", "long/production.md",
+    ],
+    "agents": ["sv-orchestrator.md", "sv-executor.md", "sv-reviewer.md"],
+    "assets": ["logo.svg"],
     "standards": [
         "core/voice_standard.json", "core/mix_targets.json",
         "short/pacing.json", "short/script_dna_db.json",
@@ -208,8 +269,11 @@ for part, files in REQUIRED.items():
         if not (ROOT / part / r).exists():
             err(f"E13 {part}/{r} missing")
 
-# Validate JSON integrity of hooks.json, schemas/*.json, standards/**/*.json
+# Validate JSON integrity of manifests, hooks.json, schemas/*.json, standards/**/*.json
 for jp in [
+    ROOT / "plugin.json",
+    ROOT / ".claude-plugin" / "plugin.json",
+    ROOT / "gemini-extension.json",
     ROOT / "hooks.json",
     *(sorted((ROOT / "schemas").glob("*.json")) if (ROOT / "schemas").is_dir() else []),
     *(sorted((ROOT / "standards").rglob("*.json")) if (ROOT / "standards").is_dir() else []),
@@ -228,25 +292,41 @@ for t in tracked:
     if re.search(r"(^|/)(audio|public|qa|out|logs|node_modules)/", t) or t.endswith("gates/log.jsonl"):
         err(f"E14 generated file tracked by git: {t}")
 
-# ---------------------------------------------------------------- 5. version parity
+# ---------------------------------------------------------------- 5. version & manifest parity
 pj_root = ROOT / "plugin.json"
 pj_claude = ROOT / ".claude-plugin" / "plugin.json"
+pj_gemini = ROOT / "gemini-extension.json"
 cl = ROOT / "CHANGELOG.md"
-if pj_root.exists() and pj_claude.exists() and cl.exists():
-    v_root = json.loads(pj_root.read_text(encoding="utf-8")).get("version")
+if pj_root.exists() and pj_claude.exists() and pj_gemini.exists() and cl.exists():
+    d_root = json.loads(pj_root.read_text(encoding="utf-8"))
+    v_root = d_root.get("version")
     v_claude = json.loads(pj_claude.read_text(encoding="utf-8")).get("version")
+    v_gemini = json.loads(pj_gemini.read_text(encoding="utf-8")).get("version")
     m = re.search(r"^## `v([\d.]+)`", cl.read_text(encoding="utf-8"), re.M)
     v_cl = m.group(1) if m else None
     if v_root != v_claude:
         err(f"E15 plugin.json version ({v_root}) != .claude-plugin/plugin.json ({v_claude})")
+    if v_root != v_gemini:
+        err(f"E15 plugin.json version ({v_root}) != gemini-extension.json ({v_gemini})")
     if v_cl != v_root:
         err(f"E15 plugin.json version ({v_root}) != newest CHANGELOG entry ({v_cl})")
+    logo_rel = d_root.get("logo")
+    if not logo_rel or not (ROOT / logo_rel).is_file():
+        err(f"E15 plugin.json logo '{logo_rel}' missing on disk")
+    prompts = d_root.get("suggestedPrompts") or []
+    if not (1 <= len(prompts) <= 3):
+        err(f"E15 plugin.json suggestedPrompts should have 1-3 entries (got {len(prompts)})")
 else:
-    err("E15 plugin.json, .claude-plugin/plugin.json, or CHANGELOG.md missing")
+    err("E15 plugin.json, .claude-plugin/plugin.json, gemini-extension.json, or CHANGELOG.md missing")
 
 # ---------------------------------------------------------------- 6. E18 anti-drift guard
 STALE_DRIFT_RE = re.compile(r"5\.25\s*ups|pitch[_\s=]*1\.02|620[\s–-]860|4\.70\s*ups", re.I)
-for target in [*(d / "SKILL.md" for d in skill_dirs if (d / "SKILL.md").exists()), ROOT / "rules" / "AGENTS.md"]:
+drift_targets = [
+    *(d / "SKILL.md" for d in skill_dirs if (d / "SKILL.md").exists()),
+    *(sorted(GD.glob("*/*.md")) if GD.is_dir() else []),
+    ROOT / "rules" / "AGENTS.md",
+]
+for target in drift_targets:
     if not target.exists():
         continue
     hit = STALE_DRIFT_RE.search(target.read_text(encoding="utf-8"))
@@ -257,5 +337,5 @@ for w in warns:
     print("WARN ", w)
 for e in errors:
     print("ERROR", e)
-print(f"validate_skills: {len(skill_dirs)} skills, {len(have)} lint rules implemented, {len(errors)} errors, {len(warns)} warnings")
+print(f"validate_skills: {len(skill_dirs)} skills, {len(EXPECTED_AGENTS)} agents, {len(have)} lint rules implemented, {len(errors)} errors, {len(warns)} warnings")
 sys.exit(1 if errors else 0)

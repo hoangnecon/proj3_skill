@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Log-CI / Log-Lint Gate (LG-01..LG-13) for story-video-skills v6.2.1.
+"""Log-CI / Log-Lint Gate (LG-01..LG-13) for story-video-skills v6.3.0.
 
 Every Executor run, Reviewer run, and Orchestrator audit run MUST pass Log-CI BEFORE
 its stage output can enter the Verification Gate (`sv_gate.py pass` / `sv_cli.py gate pass`).
@@ -7,7 +7,7 @@ its stage output can enter the Verification Gate (`sv_gate.py pass` / `sv_cli.py
 Rules implemented (LG-01..LG-13):
   LG-01  Log file presence & JSON schema validity (`schemas/role_log.schema.json`)
   LG-02  SHA-256 hash-chain integrity (`prev_sha` -> `entry_sha`, tamper detection)
-  LG-03  Mandatory `read_skill` logged matching the episode track (`sv-core-*` / `sv-short-*` / `sv-long-*`)
+  LG-03  Mandatory `read_skill` logged matching the stage action skill (`sv-*`) or track guide (`guides/{core,short,long}/*`)
   LG-04  Run lifecycle completeness (`init` -> steps -> `complete` with valid verdict)
   LG-05  Executor Domain CI execution proof (`exit_code == 0`, cross-checked against `logs/ci_lint.jsonl`)
   LG-06  Output artifact hash integrity (every output exists & matches current disk SHA-256)
@@ -72,22 +72,22 @@ REQUIRED_DOMAIN_CI = {
 
 REQUIRED_SKILLS_BY_TRACK = {
     "short": {
-        "G1": ("sv-short-script", "sv-core-bible"),
-        "G2": ("sv-short-script",),
-        "G3": ("sv-core-voice",),
-        "G4": ("sv-short-design",),
-        "G5": ("sv-short-production",),
-        "G6": ("sv-core-audio",),
-        "G7": ("sv-core-delivery",),
+        "G1": ("sv-create-short", "sv-write-script", "guides/short/script.md", "guides/core/bible.md", "sv-short-script", "sv-core-bible"),
+        "G2": ("sv-write-script", "sv-create-short", "guides/short/script.md", "sv-short-script"),
+        "G3": ("sv-voice-audio", "sv-produce", "sv-fix", "guides/core/voice.md", "sv-core-voice"),
+        "G4": ("sv-design", "sv-fix", "guides/short/design.md", "sv-short-design"),
+        "G5": ("sv-produce", "sv-audit", "sv-fix", "guides/short/production.md", "sv-short-production"),
+        "G6": ("sv-voice-audio", "sv-produce", "sv-fix", "guides/core/audio.md", "sv-core-audio"),
+        "G7": ("sv-produce", "sv-audit", "sv-fix", "guides/core/delivery.md", "sv-core-delivery"),
     },
     "long": {
-        "G1": ("sv-long-script", "sv-core-bible"),
-        "G2": ("sv-long-script",),
-        "G3": ("sv-core-voice",),
-        "G4": ("sv-long-design",),
-        "G5": ("sv-long-production",),
-        "G6": ("sv-core-audio",),
-        "G7": ("sv-core-delivery",),
+        "G1": ("sv-create-long", "sv-write-script", "guides/long/script.md", "guides/core/bible.md", "sv-long-script", "sv-core-bible"),
+        "G2": ("sv-write-script", "sv-create-long", "guides/long/script.md", "sv-long-script"),
+        "G3": ("sv-voice-audio", "sv-produce", "sv-fix", "guides/core/voice.md", "sv-core-voice"),
+        "G4": ("sv-design", "sv-fix", "guides/long/design.md", "sv-long-design"),
+        "G5": ("sv-produce", "sv-audit", "sv-fix", "guides/long/production.md", "sv-long-production"),
+        "G6": ("sv-voice-audio", "sv-produce", "sv-fix", "guides/core/audio.md", "sv-core-audio"),
+        "G7": ("sv-produce", "sv-audit", "sv-fix", "guides/core/delivery.md", "sv-core-delivery"),
     },
 }
 
@@ -289,12 +289,12 @@ def audit_logs(
             skill_steps = [s for s in steps if s.get("action") == "read_skill" and s.get("target_sha")]
             matched = []
             for sk in req_skills:
-                if any(sk in str(s.get("target") or "") for s in skill_steps):
+                if any(sk in str(s.get("target") or "").replace("\\", "/") for s in skill_steps):
                     matched.append(sk)
             # Reviewer may read review-cards.md or the stage production/design skill
             if rname == "reviewer" and sbase == "G5":
                 has_rev_doc = any(
-                    ("review-cards" in str(s.get("target") or "") or any(sk in str(s.get("target") or "") for sk in req_skills))
+                    ("review-cards" in str(s.get("target") or "").replace("\\", "/") or any(sk in str(s.get("target") or "").replace("\\", "/") for sk in req_skills))
                     for s in skill_steps
                 )
                 add_check(

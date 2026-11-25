@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="Story Video Skills">
+  <!-- Safe 10% margin (24..232), high-contrast riso-ink film frame + Nhim red cap badge -->
+  <rect x="26" y="34" width="204" height="188" rx="28" fill="#fff6df" stroke="#1f2f6e" stroke-width="12" stroke-linejoin="round"/>
+  <!-- Top & bottom cinema sprocket strips -->
+  <rect x="32" y="40" width="192" height="32" rx="18" fill="#1f2f6e"/>
+  <rect x="32" y="184" width="192" height="32" rx="18" fill="#1f2f6e"/>
+  <rect x="52" y="49" width="22" height="14" rx="4" fill="#ffd65c"/>
+  <rect x="94" y="49" width="22" height="14" rx="4" fill="#ffd65c"/>
+  <rect x="138" y="49" width="22" height="14" rx="4" fill="#ffd65c"/>
+  <rect x="180" y="49" width="22" height="14" rx="4" fill="#ffd65c"/>
+  <rect x="52" y="193" width="22" height="14" rx="4" fill="#7fd1c3"/>
+  <rect x="94" y="193" width="22" height="14" rx="4" fill="#7fd1c3"/>
+  <rect x="138" y="193" width="22" height="14" rx="4" fill="#7fd1c3"/>
+  <rect x="180" y="193" width="22" height="14" rx="4" fill="#7fd1c3"/>
+  <!-- Warm riso stage backdrop -->
+  <rect x="44" y="80" width="168" height="96" rx="12" fill="#ffe08a" stroke="#1f2f6e" stroke-width="7"/>
+  <!-- Stylized red play emblem with riso ink outline -->
+  <path d="M104 98 L164 128 L104 158 Z" fill="#ff4d5e" stroke="#1f2f6e" stroke-width="9" stroke-linejoin="round"/>
+  <!-- Signature red snapback cap accent perched on top-right corner -->
+  <path d="M168 38 C172 18 206 16 218 32 L232 34 C236 35 236 44 228 45 L164 46 Z" fill="#ff4d5e" stroke="#1f2f6e" stroke-width="8" stroke-linejoin="round"/>
+  <circle cx="195" cy="24" r="5" fill="#ffd65c" stroke="#1f2f6e" stroke-width="3.5"/>
+</svg>

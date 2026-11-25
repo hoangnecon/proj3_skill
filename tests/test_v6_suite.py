@@ -100,9 +100,9 @@ def _log_complete(ep: Path, run_id: str, verdict: str, outputs: str, note: str) 
 def test_1_validate_skills() -> None:
     r = _run([PY, str(SUITE / "tools" / "validate_skills.py"), str(SUITE)], cwd=SUITE)
     assert r.returncode == 0, f"validate_skills failed:\n{r.stdout}\n{r.stderr}"
-    assert "11 skills" in r.stdout, f"expected 11 skills: {r.stdout}"
+    assert "8 skills, 3 agents" in r.stdout, f"expected 8 skills, 3 agents: {r.stdout}"
     assert "0 errors, 0 warnings" in r.stdout, f"expected 0 errors/warnings: {r.stdout}"
-    print("[PASS] Test 1: validate_skills.py -> 11 skills, 0 errors, 0 warnings")
+    print("[PASS] Test 1: validate_skills.py -> 8 skills, 3 agents, 0 errors, 0 warnings")
 
 
 def test_2_track_scaffolding(tmp: Path) -> tuple[Path, Path]:
@@ -190,7 +190,7 @@ def test_4_role_logs_and_log_ci(ep_short: Path) -> None:
         'verdict: pass\napproval: user\nuser_quote: "bo cuc nhan vat va boi canh on roi em"\n',
         encoding="utf-8",
     )
-    design_skill = str(SUITE / "skills" / "sv-short-design" / "SKILL.md")
+    design_skill = str(SUITE / "skills" / "sv-design" / "SKILL.md")
 
     # Clean G4 lifecycle across Executor -> Reviewer -> Orchestrator
     r_orch = _log_init(ep_short, "orchestrator", "coord-1", "G4", "Orchestrate G4 design phase")
@@ -275,8 +275,8 @@ def test_5_verification_gate_and_cli_api(ep_short: Path) -> None:
     assert r_blk.returncode in (2, 3) and not env_blk["ok"], f"G1 without logs must block: {env_blk}"
 
     # Write complete valid Executor + Reviewer + Orchestrator logs for G1
-    script_skill = str(SUITE / "skills" / "sv-short-script" / "SKILL.md")
-    bible_skill = str(SUITE / "skills" / "sv-core-bible" / "SKILL.md")
+    script_skill = str(SUITE / "skills" / "sv-write-script" / "SKILL.md")
+    bible_skill = str(SUITE / "guides" / "core" / "bible.md")
 
     r_o1 = _log_init(ep_short, "orchestrator", "coord-1", "G1", "Orchestrate G1 brief")
 
@@ -611,7 +611,7 @@ def test_9_long_unit_gate_cli_and_lg10(ep_long: Path) -> None:
         encoding="utf-8",
     )
 
-    long_prod_skill = str(SUITE / "skills" / "sv-long-production" / "SKILL.md")
+    long_prod_skill = str(SUITE / "guides" / "long" / "production.md")
     r_eu = _run(
         [PY, "scripts/sv_cli.py", "log", "init", "--role", "executor", "--actor", "exec-u1", "--stage", "G5.U1", "--unit", "U1", "--task", "Build U1", "--json"],
         cwd=ep_long,
@@ -943,7 +943,7 @@ def test_11_anti_bypass_hardening(ep_short: Path, tmp: Path) -> None:
 
     # (b) cross-phase loophole: leftover phase='design', errors=[] MUST NOT satisfy a fake G5 ('shots') executor run without ci_lint pass
     (ep_short / "qa" / "lint.json").write_text(json.dumps({"phase": "design", "errors": [], "warns": []}), encoding="utf-8")
-    sh_skill = str(SUITE / "skills" / "sv-short-production" / "SKILL.md")
+    sh_skill = str(SUITE / "skills" / "sv-produce" / "SKILL.md")
     r_fake_g5 = _log_init(ep_short, "executor", "exec-fake-g5", "G5", "Fake shots CI")
     _log_step(ep_short, r_fake_g5, "read_skill", target=sh_skill, note="Read Short production skill before shots")
     _log_step(ep_short, r_fake_g5, "run_tool", target="shots", cmd="sv_cli.py ci shots", exit_code=0, note="Claimed shots CI passed without running it")
@@ -955,7 +955,7 @@ def test_11_anti_bypass_hardening(ep_short: Path, tmp: Path) -> None:
     )
 
     # (c) cross-phase non-regression: once ci_lint.jsonl has a genuine passing 'design' record, later G5 phase='shots' errors in qa/lint.json MUST NOT break G4 Log-CI
-    d_skill = str(SUITE / "skills" / "sv-short-design" / "SKILL.md")
+    d_skill = str(SUITE / "skills" / "sv-design" / "SKILL.md")
     r_g4_cur = _log_init(ep_short, "executor", "exec-design-v61", "G4", "Re-log G4 on current sets.tsx")
     _log_step(ep_short, r_g4_cur, "read_skill", target=d_skill, note="Read Short design skill for G4 verification")
     _log_step(ep_short, r_g4_cur, "run_tool", target="design", cmd="sv_cli.py ci design", exit_code=0, note="Design CI passed cleanly on current sets")
@@ -1009,8 +1009,8 @@ def test_12_v62_art_direction_gate_and_scored_rubric(tmp: Path) -> None:
         'verdict: pass\napproval: user\nuser_quote: "duyet brief tap v62 nay nhe"\n',
         encoding="utf-8",
     )
-    script_skill = str(SUITE / "skills" / "sv-short-script" / "SKILL.md")
-    bible_skill = str(SUITE / "skills" / "sv-core-bible" / "SKILL.md")
+    script_skill = str(SUITE / "skills" / "sv-write-script" / "SKILL.md")
+    bible_skill = str(SUITE / "guides" / "core" / "bible.md")
     r_o1 = _log_init(ep, "orchestrator", "coord-1", "G1", "Orchestrate G1 for v6.2 test")
     r_e1 = _log_init(ep, "executor", "exec-brief", "G1", "Author brief.md")
     _log_step(ep, r_e1, "read_skill", target=script_skill, note="Read Short script skill for brief structure")
@@ -1244,7 +1244,7 @@ def test_12_v62_art_direction_gate_and_scored_rubric(tmp: Path) -> None:
     cast_img.parent.mkdir(parents=True, exist_ok=True)
     cast_img.write_bytes(b"\xff\xd8\xff\xe0FAKECASTV62")
     sets_img.write_bytes(b"\xff\xd8\xff\xe0FAKESETSV62")
-    design_skill = str(SUITE / "skills" / "sv-short-design" / "SKILL.md")
+    design_skill = str(SUITE / "skills" / "sv-design" / "SKILL.md")
 
     def _make_draft(override_set: str | None = None, override_axis: str | None = None, override_val: int = 9) -> dict:
         sets_map = {}
@@ -1496,6 +1496,81 @@ def test_13_v621_zero_flicker_transition_qa_and_pr11(tmp: Path) -> None:
     print("[PASS] Test 13: v6.2.1 zero-flicker <RasterPlate>/keyed <LayerG>, PR-11 anti-treadmill CI, H2 lock & 30fps transition_qa (DL-01/DL-02) verified")
 
 
+def test_14_v63_intent_skills_native_agents_and_manifests(tmp: Path) -> None:
+    """Verify v6.3.0 8 intent-first slash skills, progressive guides/, native agents/, multi-provider manifests & LG-03 track isolation."""
+    # (a) Exact 8 user-invocable skills, 3 native agents, logo.svg, and 3 manifests at matching version
+    expected_skills = {
+        "sv-create-short", "sv-create-long", "sv-write-script", "sv-design",
+        "sv-produce", "sv-voice-audio", "sv-audit", "sv-fix",
+    }
+    actual_skills = {p.name for p in (SUITE / "skills").iterdir() if p.is_dir()}
+    assert actual_skills == expected_skills, f"expected 8 intent-first skills, got {sorted(actual_skills)}"
+
+    for ag in ("sv-orchestrator", "sv-executor", "sv-reviewer"):
+        ag_txt = (SUITE / "agents" / f"{ag}.md").read_text(encoding="utf-8")
+        assert f"name: {ag}" in ag_txt and "subagent: true" in ag_txt and "mainAgent: false" in ag_txt and "tools:" in ag_txt, (
+            f"agents/{ag}.md missing required Antigravity frontmatter fields"
+        )
+
+    pj_agy = json.loads((SUITE / "plugin.json").read_text(encoding="utf-8"))
+    pj_cl = json.loads((SUITE / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+    pj_gm = json.loads((SUITE / "gemini-extension.json").read_text(encoding="utf-8"))
+    assert pj_agy["version"] == pj_cl["version"] == pj_gm["version"] == "6.3.0", "manifest version mismatch"
+    assert (SUITE / pj_agy["logo"]).is_file(), f"plugin logo missing: {pj_agy['logo']}"
+    assert pj_cl.get("agents") == "./agents" and pj_cl.get("skills") == "./skills", f"Claude manifest paths invalid: {pj_cl}"
+    assert pj_gm.get("contextFileName") == "rules/AGENTS.md", f"Gemini extension contextFileName invalid: {pj_gm}"
+
+    # (b) LG-03 accepts v6.3 action skill (sv-fix) & matching track guide (guides/short/design.md),
+    #     and REJECTS cross-track guide (guides/long/design.md) and wrong-stage skill (sv-voice-audio) on Short G4!
+    ep = tmp / "ep-v63"
+    r_sc = _run([PY, str(SUITE / "tools" / "new_episode.py"), str(ep), "--track", "short"], cwd=SUITE)
+    assert r_sc.returncode == 0, f"v6.3 scaffold failed: {r_sc.stderr}"
+    (ep / "art_direction.json").unlink(missing_ok=True)
+    # Seed passing design CI event in logs/ci_lint.jsonl so LG-05 stays green while isolating LG-03
+    _run(
+        [PY, "-c", "import sys; sys.path.insert(0, 'scripts'); import sv_log as L; from pathlib import Path; L.log_ci_event(Path('.'), stage='G4', domain='design', actor_id='sv-ci', command='lint design', exit_code=0, metrics={}, note='design CI PASS')"],
+        cwd=ep,
+    )
+
+    # 1) Wrong-track guide guides/long/design.md on Short G4 -> MUST FAIL LG-03
+    r_wtrack = _log_init(ep, "executor", "exec-wrong-track", "G4", "Attempt wrong track guide")
+    _log_step(ep, r_wtrack, "read_skill", target=str(SUITE / "guides" / "long" / "design.md"), note="Read Long design guide on a Short episode")
+    _log_step(ep, r_wtrack, "run_tool", target="design", cmd="sv_cli.py ci design", exit_code=0, note="Design CI passed cleanly")
+    _log_complete(ep, r_wtrack, "pass", "src/episode/sets.tsx", "Built sets")
+    res_wt = _run([PY, "scripts/sv_cli.py", "ci", "log", "--stage", "G4", "--role", "executor", "--actor", "exec-wrong-track", "--json"], cwd=ep)
+    d_wt = json.loads(res_wt.stdout)
+    assert res_wt.returncode == 2 and any("[LG-03]" in e for e in d_wt["errors"]), f"cross-track guide must fail LG-03: {d_wt}"
+
+    # 2) Wrong-stage skill sv-voice-audio on G4 -> MUST FAIL LG-03
+    r_wstage = _log_init(ep, "executor", "exec-wrong-stage", "G4", "Attempt wrong stage skill")
+    _log_step(ep, r_wstage, "read_skill", target=str(SUITE / "skills" / "sv-voice-audio" / "SKILL.md"), note="Read voice/audio skill during design stage")
+    _log_step(ep, r_wstage, "run_tool", target="design", cmd="sv_cli.py ci design", exit_code=0, note="Design CI passed cleanly")
+    _log_complete(ep, r_wstage, "pass", "src/episode/sets.tsx", "Built sets")
+    res_ws = _run([PY, "scripts/sv_cli.py", "ci", "log", "--stage", "G4", "--role", "executor", "--actor", "exec-wrong-stage", "--json"], cwd=ep)
+    d_ws = json.loads(res_ws.stdout)
+    assert res_ws.returncode == 2 and any("[LG-03]" in e for e in d_ws["errors"]), f"wrong-stage skill must fail LG-03: {d_ws}"
+
+    # 3) Valid v6.3 action skill sv-fix on G4 -> MUST PASS LG-03
+    r_ok_fix = _log_init(ep, "executor", "exec-fix-g4", "G4", "Fix design plate via sv-fix")
+    _log_step(ep, r_ok_fix, "read_skill", target=str(SUITE / "skills" / "sv-fix" / "SKILL.md"), note="Read sv-fix root-cause fix skill before patching design")
+    _log_step(ep, r_ok_fix, "run_tool", target="design", cmd="sv_cli.py ci design", exit_code=0, note="Design CI passed cleanly after fix")
+    _log_complete(ep, r_ok_fix, "pass", "src/episode/sets.tsx", "Patched design plate via sv-fix")
+    res_ok1 = _run([PY, "scripts/sv_cli.py", "ci", "log", "--stage", "G4", "--role", "executor", "--actor", "exec-fix-g4", "--json"], cwd=ep)
+    d_ok1 = json.loads(res_ok1.stdout)
+    assert res_ok1.returncode == 0 and d_ok1["ok"], f"sv-fix must pass LG-03 on G4: {d_ok1}"
+
+    # 4) Valid track guide guides/short/design.md on Short G4 -> MUST PASS LG-03 (including Windows backslash paths!)
+    r_ok_gd = _log_init(ep, "executor", "exec-guide-g4", "G4", "Build design via guides/short/design.md")
+    _log_step(ep, r_ok_gd, "read_skill", target=str(SUITE / "guides" / "short" / "design.md"), note="Read Short design guide before authoring sets")
+    _log_step(ep, r_ok_gd, "run_tool", target="design", cmd="sv_cli.py ci design", exit_code=0, note="Design CI passed cleanly")
+    _log_complete(ep, r_ok_gd, "pass", "src/episode/sets.tsx", "Built design sets per Short guide")
+    res_ok2 = _run([PY, "scripts/sv_cli.py", "ci", "log", "--stage", "G4", "--role", "executor", "--actor", "exec-guide-g4", "--json"], cwd=ep)
+    d_ok2 = json.loads(res_ok2.stdout)
+    assert res_ok2.returncode == 0 and d_ok2["ok"], f"guides/short/design.md must pass LG-03 on Short G4: {d_ok2}"
+
+    print("[PASS] Test 14: v6.3.0 8 intent-first skills, native agents/, 3-provider manifests & LG-03 track isolation verified")
+
+
 def main() -> int:
     t0 = time.perf_counter()
     test_1_validate_skills()
@@ -1513,8 +1588,9 @@ def main() -> int:
         test_11_anti_bypass_hardening(ep_short, tmp)
         test_12_v62_art_direction_gate_and_scored_rubric(tmp)
         test_13_v621_zero_flicker_transition_qa_and_pr11(tmp)
+        test_14_v63_intent_skills_native_agents_and_manifests(tmp)
     finally:
-        for sub in ("ep-short", "ep-long", "ep-v62", "ep-v621"):
+        for sub in ("ep-short", "ep-long", "ep-v62", "ep-v621", "ep-v63"):
             nm = tmp / sub / "node_modules"
             if nm.exists():
                 if os.name == "nt":
@@ -1524,7 +1600,7 @@ def main() -> int:
         shutil.rmtree(tmp, ignore_errors=True)
 
     dt = time.perf_counter() - t0
-    print(f"\nALL 13/13 v6.2.1 END-TO-END VERIFICATION TESTS PASSED in {dt:.2f}s!")
+    print(f"\nALL 14/14 v6.3.0 END-TO-END VERIFICATION TESTS PASSED in {dt:.2f}s!")
     return 0
 
 
