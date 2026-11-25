@@ -313,8 +313,45 @@ if (phase !== 'shots') {
       if (st.shapes < TH.insertShapes) err('SE-06', `${id} (insert): ${st.shapes} shapes < ${TH.insertShapes}`);
       if (st.texts < 1) err('SE-07', `${id} (insert): no diegetic text`);
     } else {
+      let latestPlateSrcMtime = fs.statSync('src/episode/sets.tsx').mtimeMs;
       if (d.rasterPlate) {
-        if ((st.images ?? 0) < 1) err('SE-06', `${id} (rasterPlate): renders 0 <image> elements — mount the pre-baked plate via <image href={staticFile(...)} /> or remove rasterPlate: true`);
+        const imgTags = Array.isArray(st.imageTags) ? st.imageTags : [];
+        if ((st.images ?? 0) < 1 || imgTags.length < 1) {
+          err('SE-06', `${id} (rasterPlate): renders 0 <image> elements — mount the pre-baked plate via <image href={staticFile(...)} /> or remove rasterPlate: true`);
+        } else {
+          const bw = Array.isArray(d.bounds) && d.bounds.length === 4 ? Math.max(1, d.bounds[2] - d.bounds[0]) : W;
+          const bh = Array.isArray(d.bounds) && d.bounds.length === 4 ? Math.max(1, d.bounds[3] - d.bounds[1]) : H;
+          let hasFullBackdrop = false;
+          for (const im of imgTags) {
+            const rawHref = String(im.href ?? '').trim();
+            if (!rawHref) {
+              err('SE-06', `${id} (rasterPlate): <image> has empty href`);
+              continue;
+            }
+            if (!/^(?:data:|https?:)/i.test(rawHref)) {
+              const cleanRel = decodeURIComponent(rawHref.split(/[?#]/)[0]).replace(/^\/+/, '').replace(/^public[\\/]+/, '');
+              const diskPath = path.resolve('public', cleanRel);
+              const pubRoot = path.resolve('public');
+              if (!diskPath.startsWith(pubRoot + path.sep) || !fs.existsSync(diskPath) || !fs.statSync(diskPath).isFile()) {
+                err('SE-06', `${id} (rasterPlate): <image href="${rawHref}"> missing on disk at public/${cleanRel} — bake the plate before passing design CI`);
+              } else {
+                const stFile = fs.statSync(diskPath);
+                if (stFile.size < 512) {
+                  err('SE-06', `${id} (rasterPlate): public/${cleanRel} is only ${stFile.size} bytes (< 512 B placeholder) — bake a real high-res plate`);
+                }
+                if (stFile.mtimeMs > latestPlateSrcMtime) latestPlateSrcMtime = stFile.mtimeMs;
+              }
+            } else if (/^data:/i.test(rawHref) && rawHref.length < 600) {
+              err('SE-06', `${id} (rasterPlate): inline data: <image> is too small (${rawHref.length} chars) — cannot use a 1x1 pixel stub to bypass SE-06`);
+            }
+            if ((im.width ?? 0) >= bw * 0.85 && (im.height ?? 0) >= bh * 0.85) {
+              hasFullBackdrop = true;
+            }
+          }
+          if (!hasFullBackdrop) {
+            err('SE-06', `${id} (rasterPlate): no <image> covers >= 85% of set bounds (${Math.round(bw)}x${Math.round(bh)} px) — a tiny icon cannot substitute for a full stage plate`);
+          }
+        }
       } else {
         if (st.shapes < TH.shapes) err('SE-06', `${id}: ${st.shapes} shapes < ${TH.shapes} (exemplar median). Add fixtures, clutter, wear — see sets.md §Detail budget`);
         if (st.colours < TH.colours) err('SE-08', `${id}: ${st.colours} distinct colours < ${TH.colours}`);
@@ -323,7 +360,7 @@ if (phase !== 'shots') {
       }
       const pl = plateStats[id];
       if (!pl) err('SE-13', `${id}: plate not measured yet — run node scripts/design.mjs`);
-      else if ((pl.measured ?? pl.mtime) * 1000 < fs.statSync('src/episode/sets.tsx').mtimeMs) err('SE-13', `${id}: plate is older than src/episode/sets.tsx — re-render with node scripts/design.mjs --only set:${id}`);
+      else if ((pl.measured ?? pl.mtime) * 1000 < latestPlateSrcMtime) err('SE-13', `${id}: plate is older than src/episode/sets.tsx or public/ plate image — re-render with node scripts/design.mjs --only set:${id}`);
       else if (pl.empty_mid > 8) err('SE-13', `${id}: ${pl.empty_mid} empty 180-px cells in the visible middle of the plate (max 8; rows ${pl.rows}) — detail must be IN FRAME, not off-screen. Fill the wall band: notices, fixtures, clutter (sets.md §3)`);
       else if (pl.empty_mid > 5) warn('SE-13', `${id}: ${pl.empty_mid} empty cells in the middle of the plate (rows ${pl.rows}) — look for bare wall`);
       // SE-16: Perceptual Visual Quality Gate from plate_stats.json (v4.3 fields; graceful no-op if absent)
@@ -1132,12 +1169,58 @@ if (phase !== 'design') {
         for (const t of tt) strips.push({name: `s${String(i).padStart(2, '0')}_${a.id}_legs`, t0: +Math.max(r.t0, t - 0.5).toFixed(2), t1: +Math.min(r.t1, t + 0.9).toFixed(2), n: 8, why: 'sit/stand'});
       }
       if (A.ride) strips.push({name: `s${String(i).padStart(2, '0')}_${a.id}_ride`, t0: r.t0, t1: +Math.min(r.t1, r.t0 + 2.5).toFixed(2), n: 8, why: 'piggyback'});
-      for (const [li, lp] of (A.leap ?? []).entries()) {
-        try {
-          const lt = typeof lp.at === 'number' ? r.t0 + lp.at : P.tAt(lp.at);
-          const ldur = Math.max(0.25, lp.dur ?? 0.9);
-          strips.push({name: `s${String(i).padStart(2, '0')}_${a.id}_leap${li ? li + 1 : ''}`, t0: +Math.max(r.t0, lt - 0.1).toFixed(2), t1: +Math.min(r.t1, lt + ldur + 0.15).toFixed(2), n: 8, why: 'leap'});
-        } catch {}
+      if (Array.isArray(A.leap) && A.leap.length > 0) {
+        if (A.leap.length > 2 && !waived('MO-17', r.name)) {
+          warn('MO-17', `${tag}: actor '${a.id}' has ${A.leap.length} leaps in one ${dur.toFixed(1)}s shot (max 2 recommended) — avoid bouncy slapstick spam`);
+          markHot(r.i, 'MO-17');
+        }
+        let prevEnd = -Infinity;
+        for (const [li, lp] of A.leap.entries()) {
+          let lt = NaN;
+          try { lt = typeof lp.at === 'number' ? r.t0 + lp.at : P.tAt(lp.at); } catch {}
+          if (!Number.isFinite(lt)) continue;
+          const lh = lp.h ?? 70;
+          const ldur = lp.dur ?? 0.9;
+          if (lt < r.t0 - 0.05 || lt > r.t1 - 0.1) {
+            err('KY-01', `${tag}: actor '${a.id}' leap[${li}] fires at ${lt.toFixed(2)}s outside shot window [${r.t0.toFixed(2)}..${r.t1.toFixed(2)}]s`);
+          }
+          if (!(lh >= 12 && lh <= 220) || !(ldur >= 0.25 && ldur <= 1.8)) {
+            err('MO-17', `${tag}: actor '${a.id}' leap[${li}] has out-of-bounds physics (h=${lh}, dur=${ldur}; expected h in 12..220 px, dur in 0.25..1.8 s)`);
+          }
+          if (lt < prevEnd && !waived('MO-17', r.name)) {
+            err('MO-17', `${tag}: actor '${a.id}' leap[${li}] at ${lt.toFixed(2)}s overlaps previous leap ending at ${prevEnd.toFixed(2)}s`);
+          }
+          prevEnd = Math.max(prevEnd, lt + Math.max(0.25, ldur) * 0.85);
+          const curExpr = scalarKeyAt(A.e, 'neutral', r, P, lt + 0.1);
+          if ((curExpr === 'sad' || curExpr === 'cry' || curExpr === 'deadpan') && !waived('MO-15', r.name)) {
+            warn('MO-15', `${tag}: actor '${a.id}' triggers cartoon leap while expression is '${curExpr}' — verify story-motivation restraint (actor-api.md)`);
+            markHot(r.i, 'MO-15');
+          }
+          strips.push({name: `s${String(i).padStart(2, '0')}_${a.id}_leap${li ? li + 1 : ''}`, t0: +Math.max(r.t0, lt - 0.1).toFixed(2), t1: +Math.min(r.t1, lt + Math.max(0.25, ldur) + 0.15).toFixed(2), n: 8, why: 'leap'});
+        }
+      }
+      if (Array.isArray(A.pop) && A.pop.length > 0) {
+        if (A.pop.length > 2 && !waived('MO-15', r.name)) {
+          warn('MO-15', `${tag}: actor '${a.id}' triggers ${A.pop.length} pop impulses in one ${dur.toFixed(1)}s shot (max 2 recommended) — never bounce calm dialogue`);
+          markHot(r.i, 'MO-15');
+        }
+        for (const [pi, pp] of A.pop.entries()) {
+          let pt = NaN;
+          try { pt = typeof pp.at === 'number' ? r.t0 + pp.at : P.tAt(pp.at); } catch {}
+          if (!Number.isFinite(pt)) continue;
+          const pamp = pp.amp ?? 0.12;
+          if (pt < r.t0 - 0.05 || pt > r.t1 - 0.1) {
+            err('KY-01', `${tag}: actor '${a.id}' pop[${pi}] fires at ${pt.toFixed(2)}s outside shot window [${r.t0.toFixed(2)}..${r.t1.toFixed(2)}]s`);
+          }
+          if (!(pamp >= 0.02 && pamp <= 0.22)) {
+            err('MO-15', `${tag}: actor '${a.id}' pop[${pi}] amp=${pamp} outside restrained range [0.02..0.22] (recommended 0.08..0.14)`);
+          }
+          const curExpr = scalarKeyAt(A.e, 'neutral', r, P, pt + 0.05);
+          if (pamp >= 0.10 && (curExpr === 'sad' || curExpr === 'cry' || curExpr === 'deadpan') && !waived('MO-15', r.name)) {
+            warn('MO-15', `${tag}: actor '${a.id}' triggers squash-pop (amp=${pamp}) on '${curExpr}' expression — verify story-motivation restraint`);
+            markHot(r.i, 'MO-15');
+          }
+        }
       }
       if (A.seatH !== undefined && !waived('MO-12', r.name)) {
         const bed = P.SETS[r.set]?.bed;

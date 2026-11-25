@@ -729,6 +729,12 @@ const ActorView: React.FC<{a: Actor; ctx: Ctx; renderLayer?: 'all' | 'far' | 'ne
         sqDy += sm.dy;
       }
     }
+    if (sqSy !== 1) {
+      const clampedSq = clamp(sqSy, 0.65, 1.45);
+      sqSy = clampedSq;
+      sqSx = 1 / clampedSq;
+    }
+    sqDy = Math.max(-240, Math.min(40, sqDy));
   }
 
   const rotStr = mountRot ? ` rotate(${mountRot.toFixed(2)})` : '';

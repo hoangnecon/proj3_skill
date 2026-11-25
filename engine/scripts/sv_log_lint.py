@@ -306,7 +306,7 @@ def audit_logs(
                     expected=list(req_skills),
                 )
 
-        # LG-05: Executor Domain CI proof
+        # LG-05: Executor Domain CI proof (cross-checked against logs/ci_lint.jsonl & on-disk lint reports)
         if rname == "executor":
             req_domains = REQUIRED_DOMAIN_CI.get(sbase, [])
             for dom in req_domains:
@@ -316,21 +316,38 @@ def audit_logs(
                     and (dom in str(s.get("target") or "").lower() or dom in str(s.get("command") or "").lower())
                     for s in steps
                 )
-                ci_ok_rec = any(
-                    c.get("event") == "ci_result"
-                    and c.get("target") == dom
-                    and c.get("exit_code") == 0
-                    for c in ci_entries
-                )
+                dom_ci_recs = [c for c in ci_entries if c.get("event") == "ci_result" and c.get("target") == dom]
+                ci_ok_rec = bool(dom_ci_recs) and dom_ci_recs[-1].get("exit_code") == 0
+                ci_contradicted = bool(dom_ci_recs) and dom_ci_recs[-1].get("exit_code") != 0
+                eff_unit_exec = unit or (stage.split(".", 1)[1] if "." in stage else None)
+                disk_errs: list[str] = []
+                if eff_unit_exec is None:
+                    if dom in ("design", "shots") and (root / "qa" / "lint.json").is_file():
+                        try:
+                            lj = json.loads((root / "qa" / "lint.json").read_text(encoding="utf-8"))
+                            disk_errs = list(lj.get("errors") or [])
+                        except Exception:
+                            disk_errs = ["unreadable qa/lint.json"]
+                    elif dom == "script" and (root / "qa" / "script_lint.json").is_file():
+                        try:
+                            sj = json.loads((root / "qa" / "script_lint.json").read_text(encoding="utf-8"))
+                            disk_errs = list(sj.get("errors") or [])
+                        except Exception:
+                            disk_errs = ["unreadable qa/script_lint.json"]
+                ok_lg05 = (step_ok or ci_ok_rec) and not ci_contradicted and len(disk_errs) == 0
                 add_check(
                     "LG-05",
                     rname,
-                    step_ok or ci_ok_rec,
+                    ok_lg05,
                     f"executor ({actor_id}) passed required Domain CI '{dom}' (exit_code=0)"
-                    if (step_ok or ci_ok_rec)
-                    else f"executor ({actor_id}) missing passing Domain CI '{dom}' run — execute `sv_cli.py ci {dom}` and log step",
-                    value={"step": step_ok, "ci_log": ci_ok_rec},
-                    expected=f"ci:{dom} exit_code=0",
+                    if ok_lg05
+                    else (
+                        f"executor ({actor_id}) logged passing '{dom}' CI, but on-disk report/ci_lint still has failure(s): {disk_errs[:3]}"
+                        if (ci_contradicted or disk_errs)
+                        else f"executor ({actor_id}) missing passing Domain CI '{dom}' run — execute `sv_cli.py ci {dom}` and log step"
+                    ),
+                    value={"step": step_ok, "ci_log": ci_ok_rec, "disk_errors": len(disk_errs)},
+                    expected=f"ci:{dom} exit_code=0, disk_errors=0",
                 )
 
             # LG-06: Output artifact hash integrity
@@ -387,13 +404,36 @@ def audit_logs(
                 expected=f">={need_min}, 0 stale/thin",
             )
 
-        # LG-09: Reviewer G5 blind review submission check
+        # LG-09: Reviewer G5 blind review submission & full shot coverage check
         if rname == "reviewer" and sbase == "G5":
             rev_dir = root / "qa" / "review"
             rev_files = sorted(rev_dir.glob("*.json")) if rev_dir.is_dir() else []
             submit_steps = [s for s in steps if s.get("action") == "submit_review" and s.get("exit_code") == 0]
+            eff_unit_rev = unit or (stage.split(".", 1)[1] if "." in stage else None)
+            expected_shot_ids: list[int] = []
+            pack_p = (
+                (root / "qa" / "blind_review" / f"unit_{eff_unit_rev}.json")
+                if eff_unit_rev
+                else (root / "qa" / "blind_review" / "manifest.json")
+            )
+            if pack_p.is_file():
+                try:
+                    pk = json.loads(pack_p.read_text(encoding="utf-8"))
+                    expected_shot_ids = sorted(
+                        int(s["shot"]) for s in (pk.get("shots") or []) if isinstance(s, dict) and "shot" in s
+                    )
+                except Exception:
+                    pass
+            missing_shots = [
+                f"{sid:02d}.json" for sid in expected_shot_ids if not (rev_dir / f"{sid:02d}.json").is_file()
+            ]
+            target_rev_files = (
+                [rev_dir / f"{sid:02d}.json" for sid in expected_shot_ids if (rev_dir / f"{sid:02d}.json").is_file()]
+                if expected_shot_ids
+                else rev_files
+            )
             missing_cont = []
-            for rf in rev_files:
+            for rf in target_rev_files:
                 try:
                     rd = json.loads(rf.read_text(encoding="utf-8"))
                     ch = rd.get("checks") or {}
@@ -401,14 +441,14 @@ def audit_logs(
                         missing_cont.append(rf.name)
                 except Exception:
                     missing_cont.append(rf.name)
-            ok_lg09 = len(submit_steps) >= 1 and len(rev_files) > 0 and len(missing_cont) == 0
+            ok_lg09 = len(submit_steps) >= 1 and len(target_rev_files) > 0 and len(missing_shots) == 0 and len(missing_cont) == 0
             add_check(
                 "LG-09",
                 rname,
                 ok_lg09,
-                f"reviewer ({actor_id}) submitted {len(rev_files)} blind review record(s) with continuity check"
+                f"reviewer ({actor_id}) submitted {len(target_rev_files)} blind review record(s) with full shot coverage & continuity check"
                 if ok_lg09
-                else f"reviewer ({actor_id}) G5 review proof incomplete (submit_steps={len(submit_steps)}, review_files={len(rev_files)}, missing_continuity={missing_cont[:5]})",
+                else f"reviewer ({actor_id}) G5 review proof incomplete (submit_steps={len(submit_steps)}, reviewed={len(target_rev_files)}, missing_shots={missing_shots[:5]}, missing_continuity={missing_cont[:5]})",
             )
 
         # LG-10: Orchestrator G5 / G5.U* Cross-Check proof
@@ -473,9 +513,7 @@ def audit_logs(
                 rv_txt = rv_file.read_text(encoding="utf-8")
                 q = str(ap_steps[-1]["user_quote"]).strip()
                 quote_matches = q in rv_txt
-            elif ap_steps:
-                quote_matches = True
-            ok_lg11 = len(ap_steps) >= 1 and quote_matches
+            ok_lg11 = len(ap_steps) >= 1 and rv_file.is_file() and quote_matches
             add_check(
                 "LG-11",
                 rname,
