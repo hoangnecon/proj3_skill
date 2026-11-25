@@ -9,7 +9,7 @@ description: Short 9:16 track Gate G5 motion, camera, shotlist authoring, and bl
 - **Active only for:** `.episode.json` `"track": "short"` (`9:16`, `1080×1920`).
 - **Upstream lock:** BOTH `G3` (voice) and `G4` (design) MUST be `PASS` (`hooks/sv_guard.py H3` denies edits to `src/episode/shotlist.ts` earlier).
 - **Craft references:**
-  - `references/acting.md` & `references/actor-api.md` (distance-locked walk/run stop-settle, `lookAt`, `livingIdle`, `jumpPhase`, `pushTarget`, 3-layer straddle mounts, `ActionFx`)
+  - `references/acting.md` & `references/actor-api.md` (distance-locked walk/run stop-settle, `lookAt`, `livingIdle`, `jumpPhase`, `pushTarget`, 3-layer straddle mounts, `ActionFx`, story-motivated `leap`/`pop` squash-and-stretch with strict restraint)
   - `references/shot-grammar.md` & `references/shotlist-api.md` (word anchors `tAt`, shot sizes, `cam`/`cam2`/`camKeys`, transitions `ShotDef.tr`, overlays, `standards/pacing.json` `shots` pacing)
   - `references/review-cards.md` (9-check blind review protocol, HOT crops, 3-shot `continuity` check)
 

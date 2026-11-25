@@ -17,7 +17,7 @@ import {SUBJECTS} from '../episode/subjects';
 import {resolveSeat} from '../subjects';
 import {CAST, CAST_ROLES} from '../episode/cast';
 import {EX_LOOKS} from '../exemplar/looks';
-import {LayerG} from '../Film';
+import {LayerG, VideoPlateLayer} from '../Film';
 import {FRAME_W, FRAME_H} from '../format';
 import {GroundShadow} from '../anim';
 
@@ -188,7 +188,10 @@ export const SetPlate: React.FC<{id: string; grid?: boolean}> = ({id, grid}) => 
       <svg viewBox={`0 0 ${FRAME_W} ${FRAME_H}`} width={FRAME_W} height={FRAME_H} style={{display: 'block'}}>
         <Defs />
         {layers.far && <LayerG d={0.5} cam={cam}>{layers.far}</LayerG>}
-        <LayerG d={1} cam={cam}>{layers.back}</LayerG>
+        <LayerG d={1} cam={cam}>
+          {def.videoPlate && <VideoPlateLayer vp={def.videoPlate} />}
+          {layers.back}
+        </LayerG>
         <LayerG d={1} cam={cam}>{[...layers.mid].sort((a, b) => a.y - b.y).map((m) => <g key={m.key}>{m.node}</g>)}</LayerG>
         {layers.fg && <LayerG d={1.3} cam={cam}>{layers.fg}</LayerG>}
         {grid && (

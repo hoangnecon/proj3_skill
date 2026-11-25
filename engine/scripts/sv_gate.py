@@ -48,7 +48,21 @@ COOLDOWN_S = 60   # between any two passes: gates are reviewed one at a time, no
 UNIT_COOLDOWN_S = 30  # between sequential episodic unit passes (G5.U1 -> G5.U2 -> ...)
 
 
+PUBLIC_PLATE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".svg", ".mp4", ".webm"}
+
+
 def sha(p):
+    if p == "public:plates":
+        pub = ROOT / "public"
+        if not pub.is_dir():
+            return "empty"
+        h = hashlib.sha256()
+        matched = 0
+        for f in sorted(pub.rglob("*")):
+            if f.is_file() and f.suffix.lower() in PUBLIC_PLATE_EXTS:
+                h.update(str(f.relative_to(pub)).replace("\\", "/").encode() + f.read_bytes())
+                matched += 1
+        return h.hexdigest()[:16] if matched else "empty"
     p = ROOT / p
     if p.is_dir():
         h = hashlib.sha256()
@@ -74,8 +88,8 @@ INPUTS = {
     "G1": ["brief.md"],
     "G2": ["script.json", "beats.md", "standards/pacing.json", "standards/voice_standard.json"],
     "G3": ["script.json", "audio/voice.wav", "src/data/words.json", "standards/voice_standard.json", "standards/pacing.json"],
-    "G4": ["src/episode/cast.ts", "src/episode/sets.tsx", "src/episode/geo.ts", "src/props.tsx", "src/sets", "src/episode/subjects.tsx", "src/subjects.ts"],
-    "G5": ["src/episode/shotlist.ts", "src/episode/cast.ts", "src/episode/sets.tsx", "src/data/words.json", "standards/pacing.json"],
+    "G4": ["src/episode/cast.ts", "src/episode/sets.tsx", "src/episode/geo.ts", "src/props.tsx", "src/sets", "src/episode/subjects.tsx", "src/subjects.ts", "public:plates"],
+    "G5": ["src/episode/shotlist.ts", "src/episode/cast.ts", "src/episode/sets.tsx", "src/data/words.json", "standards/pacing.json", "public:plates"],
     "G6": ["audio.json", "audio/voice.wav", "qa/timing.json", "standards/mix_targets.json", "scripts/theme.py"],
     "G7": ["out/final.mp4"],
 }
@@ -927,6 +941,8 @@ def main():
             actor_role = os.environ.get("SV_ACTOR_ROLE", "orchestrator").strip().lower()
             if actor_role != "orchestrator":
                 sys.exit(f"ROLE_VIOLATION: SV_ACTOR_ROLE={actor_role!r} cannot pass unit gates (only orchestrator may run pass-unit)")
+            if (ROOT / ".episode.json").exists() and os.environ.get("SV_CLI_VERIFIED") != "1":
+                sys.exit(f"BYPASS_BLOCKED: Direct 'sv_gate.py pass-unit' is disabled in v6 episodes — run 'python scripts/sv_cli.py gate pass G5.{raw_uid} --actor <orchestrator_id>'")
         unit_id, unit, unit_shot_set, probs = check_unit(raw_uid)
         gname = f"G5.{unit_id}"
         probs = probs + _audit_v6_logs(gname, unit_id=unit_id)
@@ -980,6 +996,8 @@ def main():
         actor_role = os.environ.get("SV_ACTOR_ROLE", "orchestrator").strip().lower()
         if actor_role != "orchestrator":
             sys.exit(f"ROLE_VIOLATION: SV_ACTOR_ROLE={actor_role!r} cannot pass gates (only orchestrator may pass {g})")
+        if (ROOT / ".episode.json").exists() and os.environ.get("SV_CLI_VERIFIED") != "1":
+            sys.exit(f"BYPASS_BLOCKED: Direct 'sv_gate.py pass' is disabled in v6 episodes — run 'python scripts/sv_cli.py gate pass {g} --actor <orchestrator_id>'")
     memo = {}
     for d in DEPS[g]:
         st, info = state(d, memo)

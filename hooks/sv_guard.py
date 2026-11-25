@@ -25,10 +25,16 @@ for _st in (sys.stdin, sys.stdout, sys.stderr):
         except Exception:
             pass
 
-READONLY_DIRS = ("standards/", "scripts/", "src/exemplar/")
+READONLY_DIRS = ("standards/", "scripts/", "src/exemplar/", "src/design/")
 READONLY_FILES = {
     ".episode.json",
     ".suite.json",
+    "package.json",
+    "remotion.config.ts",
+    "src/index.ts",
+    "src/format.ts",
+    "src/math.ts",
+    "src/anim.ts",
     "src/engine.ts",
     "src/kit.tsx",
     "src/chars.tsx",
@@ -43,6 +49,7 @@ READONLY_FILES = {
     "src/sets/index.ts",
     "src/sets/types.ts",
 }
+IMMUTABLE_CI_PREFIXES = ("logs/", "qa/review/")
 IMMUTABLE_CI_FILES = {
     "gates/log.jsonl",
     "qa/state.json",
@@ -52,6 +59,17 @@ IMMUTABLE_CI_FILES = {
     "qa/mix_report.json",
     "qa/deliver_report.json",
     "qa/video_audio.json",
+    "qa/qa_status.json",
+    "qa/cache.json",
+    "qa/shots.json",
+    "qa/timing.json",
+    "qa/hot.json",
+    "qa/layout_report.json",
+    "qa/strips_needed.json",
+    "qa/blind_review/manifest.json",
+    "qa/design/plate_stats.json",
+    "qa/design/visual_spec.json",
+    "qa/design/cache.json",
 }
 
 
@@ -144,8 +162,30 @@ def _extract_read_targets_from_obj(obj) -> list[str]:
     return _walk_strings(obj)
 
 
-def _transcript_read_patterns(transcript_path: str | None) -> list[str]:
-    """Return normalized lowercase paths passed to read_file / view_file in transcript."""
+def _resolve_existing_evidence(raw_cand: str, ep_root: Path | None) -> str | None:
+    """Normalize a read_file image path and verify it actually exists on disk (>0 bytes)."""
+    norm = re.sub(r"[\\/]+", "/", raw_cand.strip()).lower()
+    if ep_root is None:
+        return norm
+    ep_norm = re.sub(r"[\\/]+", "/", str(ep_root.resolve())).rstrip("/").lower()
+    cand_p = Path(raw_cand.strip())
+    resolved: Path | None = None
+    if cand_p.is_absolute():
+        resolved = cand_p
+    elif norm.startswith(ep_norm + "/"):
+        resolved = ep_root / raw_cand.strip()[len(ep_norm) + 1:]
+    else:
+        resolved = ep_root / raw_cand.strip()
+    try:
+        if resolved and resolved.is_file() and resolved.stat().st_size > 0:
+            return re.sub(r"[\\/]+", "/", str(resolved.resolve())).lower()
+    except Exception:
+        pass
+    return None
+
+
+def _transcript_read_patterns(transcript_path: str | None, ep_root: Path | None = None) -> list[str]:
+    """Return normalized lowercase paths of EXISTING on-disk images passed to read_file / view_file."""
     if not transcript_path:
         return []
     tp = Path(transcript_path)
@@ -172,15 +212,20 @@ def _transcript_read_patterns(transcript_path: str | None) -> list[str]:
                 obj = json.loads(line)
                 for s in _extract_read_targets_from_obj(obj):
                     unquoted = s.replace('\\"', '"').replace("\\\\", "/").strip().strip('"\'').strip()
-                    norm = re.sub(r"[\\/]+", "/", unquoted).lower()
-                    if img_end_re.search(norm):
-                        paths.append(norm)
+                    if img_end_re.search(unquoted):
+                        hit = _resolve_existing_evidence(unquoted, ep_root)
+                        if hit:
+                            paths.append(hit)
                     else:
-                        for m in img_any_re.finditer(norm):
-                            paths.append(m.group(1))
+                        for m in img_any_re.finditer(unquoted):
+                            hit = _resolve_existing_evidence(m.group(1), ep_root)
+                            if hit:
+                                paths.append(hit)
             except Exception:
                 for m in img_any_re.finditer(line.replace('\\"', '"').replace("\\\\", "/")):
-                    paths.append(re.sub(r"[\\/]+", "/", m.group(1)).lower())
+                    hit = _resolve_existing_evidence(m.group(1), ep_root)
+                    if hit:
+                        paths.append(hit)
     return paths
 
 
@@ -212,11 +257,11 @@ def _check_write_or_edit(payload: dict) -> None:
         )
         return
 
-    # H2: Immutable logs & CI reports
-    if rel.startswith("logs/") or rel in IMMUTABLE_CI_FILES:
+    # H2: Immutable logs, shot review records & generated CI reports
+    if any(rel.startswith(p) for p in IMMUTABLE_CI_PREFIXES) or rel in IMMUTABLE_CI_FILES:
         _deny(
             f"[SV-GUARD H2] Direct edits to '{rel}' are forbidden. "
-            f"Role logs must be written via 'python scripts/sv_cli.py log ...' and gate/CI records via CLI commands."
+            f"Role logs must be written via 'sv_cli.py log ...', shot reviews via 'sv_cli.py review submit', and CI reports via CLI commands."
         )
         return
 
@@ -279,16 +324,37 @@ def _check_run_command(payload: dict) -> None:
         _allow()
         return
 
-    # H4: Shell log / gate tampering guard
+    # H4: Shell & inline-script tampering guard against logs, gate records, reviews, standards, and suite scripts
+    protected_target_re = (
+        r'(?:gates[\\/]log\.jsonl|logs[\\/][^\s"\']+\.jsonl|qa[\\/]review[\\/]|'
+        r'qa[\\/]design[\\/]plate_stats\.json|qa[\\/](?:lint|script_lint|voice_report|mix_report|deliver_report|qa_status|layout_report)\.json|'
+        r'standards[\\/][^\s"\']+\.json)'
+    )
     tamper_re = re.compile(
-        r'(?:>>?|\bSet-Content\b|\bOut-File\b|\bAdd-Content\b|\bRemove-Item\b|\brm\s|\bdel\s|\bsed\s+-i|\btruncate\b)'
-        r'[^\r\n;&|]*(?:gates[\\/]log\.jsonl|logs[\\/][^\s"\']+\.jsonl)',
+        r'(?:>>?|\bSet-Content\b|\bOut-File\b|\bAdd-Content\b|\bCopy-Item\b|\bMove-Item\b|\bRemove-Item\b|\bcp\s|\bmv\s|\brm\s|\bdel\s|\btee\s|\bsed\s+-i|\btruncate\b)'
+        r'[^\r\n;&|]*' + protected_target_re,
         re.I,
     )
-    if tamper_re.search(cmd):
+    inline_code_head_re = re.compile(
+        r'\b(?:python3?|py|node)\b[^\r\n;&|]*\s(?:-c|-e|--eval)\s',
+        re.I,
+    )
+    inline_code_mut_re = re.compile(
+        r'(?:write_text|write_bytes|writeFileSync|writeFile|appendFileSync|appendFile|'
+        r'createWriteStream|unlinkSync|unlink|rmSync|rmdirSync|remove|rmtree|rename|replace|'
+        r'truncate|copyfile|copy2|shutil\.|os\.remove|os\.unlink|os\.replace|os\.rename|'
+        r'open\s*\([^)]*(?:,\s*[\'"][wa+][^\'"]*[\'"]|mode\s*=\s*[\'"][wa+]))',
+        re.I,
+    )
+    is_inline_tamper = bool(
+        inline_code_head_re.search(cmd)
+        and re.search(protected_target_re, cmd, re.I)
+        and inline_code_mut_re.search(cmd)
+    )
+    if tamper_re.search(cmd) or is_inline_tamper:
         _deny(
-            "[SV-GUARD H4] Direct shell modification/deletion of logs/*.jsonl or gates/log.jsonl is forbidden. "
-            "Use scripts/sv_cli.py log|gate commands only."
+            "[SV-GUARD H4] Direct shell or inline-script modification/deletion of protected logs, gates/log.jsonl, qa/review/*, CI reports, or standards/* is forbidden. "
+            "Use scripts/sv_cli.py commands only."
         )
         return
 
@@ -337,13 +403,32 @@ def _check_run_command(payload: dict) -> None:
 
         if visual_req is not None:
             label, needles = visual_req
-            seen_reads = _transcript_read_patterns(str(tp))
+            seen_reads = _transcript_read_patterns(str(tp), ep_root)
             if not any(any(n in p for n in needles) for p in seen_reads):
                 _deny(
-                    f"[SV-GUARD H6] Blocked {label}: transcript has zero read_file calls on required visual evidence "
-                    f"({', '.join(needles)}). Open the rendered JPEG evidence with read_file first — blind passing is forbidden."
+                    f"[SV-GUARD H6] Blocked {label}: transcript has zero read_file calls on existing on-disk visual evidence "
+                    f"({', '.join(needles)}). Render and open the JPEG evidence with read_file first — blind passing is forbidden."
                 )
                 return
+            if label == "Gate G4 pass":
+                design_dir = ep_root / "qa" / "design"
+                has_set_sheets = design_dir.is_dir() and (
+                    (design_dir / "overview_sets.jpg").is_file()
+                    or any(design_dir.glob("set_*_v.jpg"))
+                    or any(design_dir.glob("set_*.png"))
+                )
+                has_cast_sheets = design_dir.is_dir() and (
+                    any(design_dir.glob("cast_episode*"))
+                    or any(design_dir.glob("expr_*"))
+                )
+                read_cast = any(("qa/design/cast_" in p or "qa/design/expr_" in p) for p in seen_reads)
+                read_sets = any(("qa/design/set_" in p or "qa/design/overview_sets" in p or "qa/design/location_" in p) for p in seen_reads)
+                if (has_cast_sheets and not read_cast) or (has_set_sheets and not read_sets):
+                    _deny(
+                        "[SV-GUARD H6] Blocked Gate G4 pass: transcript must prove read_file opened BOTH cast sheet(s) "
+                        "(qa/design/cast_episode*_v.jpg) AND set plate sheet(s) (qa/design/overview_sets.jpg or set_*_v.jpg)."
+                    )
+                    return
 
     _allow()
 

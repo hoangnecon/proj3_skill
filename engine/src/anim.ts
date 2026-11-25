@@ -57,6 +57,108 @@ export function parabolicArc(u: number, height: number): number {
 }
 
 /**
+ * Volume-preserving 2D squash & stretch scale pair (`sx * sy === 1`).
+ * Clamps `scaleY` into `[0.65, 1.45]` so characters never pancake or turn needle-thin.
+ */
+export function squashStretch(scaleY: number): {sx: number; sy: number} {
+  const sy = clamp(Number.isFinite(scaleY) ? scaleY : 1, 0.65, 1.45);
+  return {sx: 1 / sy, sy};
+}
+
+export type SquashLeapCfg = {
+  height?: number; // peak vertical leap height in world px (default 70)
+  dur?: number; // full 4-phase leap cycle duration in seconds (default 0.90)
+  squat?: number; // anticipation crouch scaleY (default 0.80)
+  stretch?: number; // launch vertical stretch scaleY (default 1.24)
+  land?: number; // landing impact squash scaleY (default 0.78)
+};
+
+export type SquashLeapSample = {
+  dy: number; // vertical offset in px (negative = airborne upward; 0 = grounded)
+  sx: number; // volume-preserving horizontal scale multiplier (1 / sy)
+  sy: number; // vertical scale multiplier
+  shadowScale: number; // ground shadow scale multiplier (1 grounded, shrinks at apex)
+  takeoffDust: boolean; // true during launch window for <DustPuff>
+  landingDust: boolean; // true during impact window for <DustPuff>
+  active: boolean; // true while localT is inside [0, dur]
+};
+
+/**
+ * Story-motivated 4-phase cartoon squash-and-stretch leap anchored at character feet (y = 0):
+ *   0.00–0.18  Anticipation crouch (feet planted, body compresses)
+ *   0.18–0.72  Launch stretch -> parabolic apex -> pre-land stretch
+ *   0.72–0.86  Landing impact squash (volume-preserving wide cushion)
+ *   0.86–1.00  Damped elastic settle back to (1, 1)
+ */
+export function evalSquashLeap(localT: number, cfg: SquashLeapCfg = {}): SquashLeapSample {
+  const dur = Math.max(0.25, cfg.dur ?? 0.9);
+  const h = Math.max(0, cfg.height ?? 70);
+  const squat = clamp(cfg.squat ?? 0.8, 0.68, 0.98);
+  const stretch = clamp(cfg.stretch ?? 1.24, 1.02, 1.38);
+  const land = clamp(cfg.land ?? 0.78, 0.68, 0.98);
+
+  if (!Number.isFinite(localT) || localT < 0 || localT > dur) {
+    return {dy: 0, sx: 1, sy: 1, shadowScale: 1, takeoffDust: false, landingDust: false, active: false};
+  }
+
+  const u = localT / dur;
+  const tAnt = 0.18;
+  const tLand = 0.72;
+  const tImpact = 0.86;
+  let dy = 0;
+  let sy = 1;
+
+  if (u < tAnt) {
+    const p = u / tAnt;
+    sy = 1 - (1 - squat) * Math.sin(p * Math.PI * 0.5);
+  } else if (u < tLand) {
+    const p = (u - tAnt) / (tLand - tAnt);
+    dy = -parabolicArc(p, h);
+    const launch = Math.exp(-p * 6.5) * (stretch - 1);
+    const preLand = Math.exp(-(1 - p) * 7.5) * (stretch - 1) * 0.75;
+    const apex = -Math.sin(p * Math.PI) * 0.03;
+    sy = 1 + launch + preLand + apex;
+  } else if (u < tImpact) {
+    const p = (u - tLand) / (tImpact - tLand);
+    sy = 1 - (1 - land) * Math.sin(p * Math.PI);
+  } else {
+    const p = (u - tImpact) / (1 - tImpact);
+    const damp = Math.exp(-p * 4.5);
+    sy = 1 + (1 - land) * 0.28 * damp * Math.sin(p * Math.PI * 1.5);
+  }
+
+  const {sx, sy: clampedSy} = squashStretch(sy);
+  const liftFrac = h > 0 ? clamp(-dy / h, 0, 1) : 0;
+  const shadowScale = 1 - 0.36 * liftFrac;
+  const takeoffDust = u >= tAnt && u <= tAnt + 0.14;
+  const landingDust = u >= tLand && u <= tLand + 0.18;
+  return {dy, sx, sy: clampedSy, shadowScale, takeoffDust, landingDust, active: true};
+}
+
+/**
+ * Brief volume-preserving pop/startle impulse anchored at character feet (y = 0):
+ * Crisp upward stretch pop -> gentle damped settle in ~0.48s.
+ * Keep `amp` restrained (0.08–0.14) and strictly story-motivated (startles, reveals, impacts).
+ */
+export function evalPopSquash(
+  localT: number,
+  amp = 0.12,
+): {sx: number; sy: number; dy: number; active: boolean} {
+  const dur = 0.48;
+  if (!Number.isFinite(localT) || localT < 0 || localT > dur) {
+    return {sx: 1, sy: 1, dy: 0, active: false};
+  }
+  const a = clamp(amp, 0.02, 0.24);
+  const u = localT / dur;
+  const env = Math.exp(-u * 6.2);
+  const wave = Math.sin(u * Math.PI * 3.0);
+  const sy = 1 + a * env * wave;
+  const {sx, sy: clampedSy} = squashStretch(sy);
+  const dy = -a * 42 * Math.exp(-u * 7.5) * Math.max(0, Math.sin(u * Math.PI * 1.6));
+  return {sx, sy: clampedSy, dy, active: true};
+}
+
+/**
  * Whole-body 3-stage anticipation dip -> overshoot pop -> damped cosine settle
  * impulse for pose/expression transitions and Hero Subject pose switches (RSI v5.4.0).
  */

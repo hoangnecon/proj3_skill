@@ -1,4 +1,4 @@
-# Conventions (`v6.0.0`)
+# Conventions (`v6.1.0`)
 
 Enforced by `tools/validate_skills.py`.
 
@@ -12,7 +12,7 @@ Enforced by `tools/validate_skills.py`.
 | `schemas/` | formal JSON Schemas (`cli_envelope`, `role_log`, `review_record`) | runtime logs |
 | `skills/` | 3-track instructions ONLY: `sv-(core\|short\|long)-*/SKILL.md` + `references/*.md` | code, data, templates |
 | `standards/` | Single Source of Truth split by track: `core/{voice_standard,mix_targets}.json`, `short/{pacing,script_dna_db}.json`, `long/pacing.json` | episode overrides |
-| `engine/` | shared Remotion runtime & scripts (`sv_cli.py`, `sv_log.py`, `sv_log_lint.py`, `sv_gate.py`, `lint.mjs`, `script_lint.py`, `qa.mjs`, `blind_pack.mjs`, `voice.py`, `mix.py`, `deliver.mjs`) | episode content or standards |
+| `engine/` | shared Remotion runtime & scripts (`sv_cli.py`, `sv_log.py`, `sv_log_lint.py`, `sv_gate.py`, `lint.mjs`, `script_lint.py`, `qa.mjs`, `blind_pack.mjs`, `rough_helpers.mjs`, `pixi_stage.mjs`, `pixi_fx.mjs`, `rough_pixi_bake.mjs`, `voice.py`, `mix.py`, `deliver.mjs`) | episode content or standards |
 | `starter/` | blank episode files copied by `tools/new_episode.py` | demo or reference content |
 | `examples/` | `thang-may/` (quality bar exemplar) and `demo/` (4-shot sandbox) | production episode outputs |
 | `tools/` | `new_episode.py`, `new_episode.sh`, `new_episode.ps1`, `validate_skills.py`, `benchmark_suite.py`, `doctor.py` | episode-only scripts |

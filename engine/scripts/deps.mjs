@@ -82,7 +82,7 @@ export function buildDeps() {
   }
   // the registry name itself (a reference to the whole registry) depends on every entry
   for (const r of REGISTRIES) if (units.has(r)) for (const k of units.keys()) if (k.startsWith(r + '.') || k === r + '#head') refs.get(r).add(k);
-  const engineHash = sha(engine.join('\n') + preamble.join('\n') + (fs.existsSync('public') ? walk('public').filter((f) => /\.(png|jpe?g|webp|svg)$/.test(f)).sort().map((f) => f + fs.statSync(f).size).join('\n') : ''));
+  const engineHash = sha(engine.join('\n') + preamble.join('\n') + (fs.existsSync('public') ? walk('public').filter((f) => /\.(png|jpe?g|webp|svg|mp4|webm)$/i.test(f)).sort().map((f) => f + fs.statSync(f).size + ':' + fs.statSync(f).mtimeMs).join('\n') : ''));
   const closure = (roots) => {
     const seen = new Set(); const st = [...roots].filter((r) => units.has(r));
     while (st.length) { const k = st.pop(); if (seen.has(k)) continue; seen.add(k); for (const d of refs.get(k) ?? []) if (!seen.has(d)) st.push(d); }

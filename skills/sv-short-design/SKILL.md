@@ -11,6 +11,7 @@ description: Short 9:16 track Gate G4 visual design system — riso-ink PAL toke
   - `references/tokens.md` (riso-ink `PAL` tokens, line weights, halftone, glow, Be Vietnam Pro typography — zero raw `#hex` `TK-02`, zero literal `fontFamily` `TK-03`)
   - `references/characters.md` (`cast.ts`, `CAST_ROLES`, silhouettes `CH-06..08`, canonical `NHIM_LOOK` `CH-11`, no hand-drawn characters outside `<Person>` `CH-10`)
   - `references/sets.md` (`sets.tsx`, `geo.ts`, 6-pass set building, `bounds` `SE-11`, `zones.mgY` floor lanes, `actorScale`, `location` packs + sub-scene angles, `stateless` plates)
+  - `references/atmospheric-plates.md` (opt-in `SetDef.rasterPlate: true` pre-baked `rough.js + PixiJS v8` atmospheric plates/loops, untouched 2D Risograph cast lock, strict story-motivated FX restraint)
   - `references/props-overlays.md` (`props.tsx`, `subjects.tsx` `SUBJECTS` registry `PR-06`, `PR-08..10`)
 
 ## 2. Design Requirements (Short 9:16)
@@ -22,6 +23,7 @@ description: Short 9:16 track Gate G4 visual design system — riso-ink PAL toke
    - Expand each core location from `brief.md` into connected sub-scenes (`establishing`, `medium`, `closeup`/`insert`) sharing consistent `location` + `landmarks`.
    - Declare exact `bounds`, `actorScale`, and `zones: { bgY, mgY: [minY, maxY], fgY }` on every grounded set so `GE-21` and `LA-01` lock floor contact and actor scale accurately.
    - Keep plates stateless (`SE-20`): never bake transient plot states or moving vehicles into static background plates.
+   - Optional atmospheric backdrops: sets may opt into `rasterPlate: true` (`references/atmospheric-plates.md`) for painterly `rough.js + PixiJS v8` plates while keeping characters 100% crisp 2D Risograph SVG on top and obeying strict story-motivated FX restraint (`0` or `1` weather mode matching the script).
 3. **Hero Subjects (`src/episode/subjects.tsx`):**
    - Register every recurring vehicle, creature, machine, or hero prop in `SUBJECTS` with `kind`, `relToActor`, `>= 4` distinct `poses` (`PR-06`), living `t`/`phase` animation on creatures (`PR-08`), and explicit `partialOf` ONLY for dedicated `closeup`/`insert` limb plates (never placed alongside full `<Person>` actors in wide shots — `PR-10`).
    - Set `airborne: true` ONLY on inherently flying vehicles/machines; ground-bound vehicles/creatures must sit on the floor lane (`GE-21`).

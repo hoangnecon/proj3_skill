@@ -354,7 +354,8 @@ def test_6_antigravity_hooks(ep_short: Path, tmp: Path) -> None:
 
     # Real Antigravity transcript.jsonl format: args.Path is JSON-string-encoded with inner quotes & escaped backslashes
     t_seen = tmp / "transcript_seen.jsonl"
-    real_agy_path_val = json.dumps(str(ep_short / "qa" / "contact_p1.jpg"))  # produces '"C:\\\\...\\\\contact_p1.jpg"'
+    contact_img = ep_short / "qa" / "contact_p1.jpg"
+    real_agy_path_val = json.dumps(str(contact_img))  # produces '"C:\\\\...\\\\contact_p1.jpg"'
     t_seen.write_text(
         json.dumps({
             "step_index": 5,
@@ -367,6 +368,20 @@ def test_6_antigravity_hooks(ep_short: Path, tmp: Path) -> None:
         }) + "\n",
         encoding="utf-8",
     )
+    # Before contact_p1.jpg exists on disk, H6 MUST DENY (blocks pre-render failed read_file spoofing!)
+    if contact_img.exists():
+        contact_img.unlink()
+    res_h6_missing = _invoke_hook({
+        "hookEventName": "PreToolUse",
+        "cwd": str(ep_short),
+        "transcriptPath": str(t_seen),
+        "toolCall": {"name": "run_command", "args": {"CommandLine": "python scripts/sv_cli.py gate pass G5 --actor coord-1"}},
+    })
+    assert res_h6_missing["decision"] == "deny" and "H6" in res_h6_missing["reason"], f"H6 missing-file spoof must deny: {res_h6_missing}"
+
+    # Once contact_p1.jpg actually exists on disk (>0 bytes), H6 ALLOWS
+    contact_img.parent.mkdir(parents=True, exist_ok=True)
+    contact_img.write_bytes(b"\xff\xd8\xff\xe0REALCONTACTJPEG")
     res_h6_allow = _invoke_hook({
         "hookEventName": "PreToolUse",
         "cwd": str(ep_short),
@@ -415,7 +430,7 @@ def test_7_general_physics_and_partial_body_ci(ep_short: Path) -> None:
         {"w": "đi", "s": 1.0, "e": 1.4, "seg": "s1"},
         {"w": "học.", "s": 1.4, "e": 2.4, "seg": "s1"},
     ]
-    cues = {"seg_starts": {"s1": 0.0}, "voice_end": 2.6}
+    cues = {"seg_starts": {"s1": 0.0}, "total": 2.6, "voice_end": 2.6}
     (ep_short / "src" / "data" / "words.json").write_text(json.dumps(words), encoding="utf-8")
     (ep_short / "src" / "data" / "cues.json").write_text(json.dumps(cues), encoding="utf-8")
 
@@ -623,6 +638,345 @@ def test_9_long_unit_gate_cli_and_lg10(ep_long: Path) -> None:
     print("[PASS] Test 9: Long G5.U1 CLI routing + unit-scoped LG-10 + read_evidence verified")
 
 
+def test_10_v61_raster_plate_and_squash_stretch(ep_short: Path) -> None:
+    """Verify v6.1.0 opt-in rasterPlate lint, rough/Pixi script syntax, and anim.ts squash-stretch kinematics."""
+    # (a) Syntax check all 4 generalized atmospheric-plate scripts
+    for script_name in ("rough_helpers.mjs", "pixi_stage.mjs", "pixi_fx.mjs", "rough_pixi_bake.mjs"):
+        r_chk = _run(["node", "--check", str(SUITE / "engine" / "scripts" / script_name)], cwd=SUITE)
+        assert r_chk.returncode == 0, f"syntax error in {script_name}:\n{r_chk.stderr}"
+
+    # (b) Bundle & execute anim.ts squashStretch / evalSquashLeap / evalPopSquash invariants + compile-check Film.tsx & Sheets.tsx
+    probe_js = (
+        "import {build} from 'esbuild';\n"
+        "import fs from 'node:fs';\n"
+        "import path from 'node:path';\n"
+        "import {pathToFileURL} from 'node:url';\n"
+        "const stub = { name: 'stub', setup(b) {\n"
+        "  b.onResolve({filter: /^@remotion\\/google-fonts|^remotion$/}, (a) => ({path: a.path, namespace: 'st'}));\n"
+        "  b.onLoad({filter: /.*/, namespace: 'st'}, (a) => ({\n"
+        "    contents: a.path.startsWith('@remotion') ? 'export const loadFont = () => ({fontFamily:\"Be Vietnam Pro\"});' : 'export const AbsoluteFill=()=>null;export const Audio=()=>null;export const OffthreadVideo=()=>null;export const Loop=({children})=>children??null;export const staticFile=(s)=>s;export const useCurrentFrame=()=>0;',\n"
+        "    loader: 'js',\n"
+        "  }));\n"
+        "}};\n"
+        "const r = await build({\n"
+        "  entryPoints: [path.resolve('src/anim.ts')], bundle: true, write: false, platform: 'node', format: 'esm',\n"
+        "  external: ['react', 'react-dom', 'react/jsx-runtime'], plugins: [stub], logLevel: 'error',\n"
+        "});\n"
+        "await build({\n"
+        "  entryPoints: [path.resolve('src/Film.tsx'), path.resolve('src/design/Sheets.tsx')], bundle: true, outdir: path.resolve('qa/.sv-tmp'), write: false, platform: 'node', format: 'esm',\n"
+        "  jsx: 'automatic', external: ['react', 'react-dom', 'react/jsx-runtime'], plugins: [stub], logLevel: 'error',\n"
+        "});\n"
+        "fs.mkdirSync(path.resolve('qa'), {recursive: true});\n"
+        "const out = path.resolve('qa/.sv-anim-test.mjs');\n"
+        "fs.writeFileSync(out, r.outputFiles[0].text);\n"
+        "try {\n"
+        "  const M = await import(pathToFileURL(out).href);\n"
+        "  const s1 = M.squashStretch(1.25);\n"
+        "  if (Math.abs(s1.sx * s1.sy - 1) > 1e-6) throw new Error('volume drift');\n"
+        "  if (M.squashStretch(0.1).sy !== 0.65 || M.squashStretch(5).sy !== 1.45) throw new Error('clamp failed');\n"
+        "  if (M.evalSquashLeap(-0.1).active || M.evalSquashLeap(1.2).active) throw new Error('leap bounds');\n"
+        "  const ant = M.evalSquashLeap(0.08, {height: 80, dur: 0.9});\n"
+        "  if (!ant.active || ant.dy !== 0 || ant.sy >= 1 || ant.sx <= 1) throw new Error('anticipation failed');\n"
+        "  const air = M.evalSquashLeap(0.405, {height: 80, dur: 0.9});\n"
+        "  if (!air.active || air.dy >= -50 || air.shadowScale >= 0.8) throw new Error('airborne apex failed');\n"
+        "  const land = M.evalSquashLeap(0.71, {height: 80, dur: 0.9});\n"
+        "  if (!land.active || land.dy !== 0 || land.sy >= 1 || !land.landingDust) throw new Error('landing squash failed');\n"
+        "  for (let i = 0; i <= 20; i++) {\n"
+        "    const sm = M.evalSquashLeap((i / 20) * 0.9, {height: 80, dur: 0.9});\n"
+        "    if (Math.abs(sm.sx * sm.sy - 1) > 1e-6) throw new Error('leap volume drift');\n"
+        "  }\n"
+        "  const pop = M.evalPopSquash(0.08, 0.12);\n"
+        "  if (!pop.active || Math.abs(pop.sx * pop.sy - 1) > 1e-6) throw new Error('pop volume drift');\n"
+        "  if (M.evalPopSquash(0.6, 0.12).active) throw new Error('pop end bound');\n"
+        "  console.log('ANIM_OK');\n"
+        "} finally { fs.rmSync(out, {force: true}); }\n"
+    )
+    r_anim = _run(["node", "--input-type=module", "-e", probe_js], cwd=ep_short)
+    assert r_anim.returncode == 0 and "ANIM_OK" in r_anim.stdout, f"anim.ts test failed:\n{r_anim.stdout}\n{r_anim.stderr}"
+
+    # (c) rasterPlate & videoPlate design lint: missing <image>, https://, .mp4 inside <image>, tiny icon, or missing videoPlate fail SE-06; valid local PNG & MP4 pass!
+    yard_png = ep_short / "public" / "plates" / "yard.png"
+    rain_mp4 = ep_short / "public" / "plates" / "rain.mp4"
+    yard_png.parent.mkdir(parents=True, exist_ok=True)
+    for fp in (yard_png, rain_mp4):
+        if fp.exists():
+            fp.unlink()
+    (ep_short / "src" / "episode" / "sets.tsx").write_text(
+        "import React from 'react';\n"
+        "import {R, S} from '../kit';\n"
+        "import type {SetDef} from '../sets/types';\n"
+        "export const EPISODE_SETS: Record<string, SetDef> = {\n"
+        "  badNoImg: {\n"
+        "    title: 'Nền thiếu thẻ ảnh',\n"
+        "    bed: 'outdoor',\n"
+        "    rasterPlate: true,\n"
+        "    bounds: [-200, -200, 1280, 2120],\n"
+        "    zones: {bgY: 1100, mgY: [1540, 1760], fgY: 1860},\n"
+        "    render: () => ({back: <g><S d={R(-200, -200, 1480, 2320)} f='sky2' /></g>, mid: []}),\n"
+        "  },\n"
+        "  badHttpsImg: {\n"
+        "    title: 'Nền URL ngoài',\n"
+        "    bed: 'outdoor',\n"
+        "    rasterPlate: true,\n"
+        "    bounds: [-200, -200, 1280, 2120],\n"
+        "    zones: {bgY: 1100, mgY: [1540, 1760], fgY: 1860},\n"
+        "    render: () => ({back: <g><image href='https://example.com/plate.png' x={-200} y={-200} width={1480} height={2320} /></g>, mid: []}),\n"
+        "  },\n"
+        "  badMp4InSvgImg: {\n"
+        "    title: 'Nhét mp4 vào thẻ image',\n"
+        "    bed: 'rain',\n"
+        "    rasterPlate: true,\n"
+        "    bounds: [-200, -200, 1280, 2120],\n"
+        "    zones: {bgY: 1100, mgY: [1540, 1760], fgY: 1860},\n"
+        "    render: () => ({back: <g><image href='plates/rain.mp4' x={-200} y={-200} width={1480} height={2320} /></g>, mid: []}),\n"
+        "  },\n"
+        "  badTinyImg: {\n"
+        "    title: 'Nền icon tí hon',\n"
+        "    bed: 'outdoor',\n"
+        "    rasterPlate: true,\n"
+        "    bounds: [-200, -200, 1280, 2120],\n"
+        "    zones: {bgY: 1100, mgY: [1540, 1760], fgY: 1860},\n"
+        "    render: () => ({back: <g><image href='plates/yard.png' x={0} y={0} width={32} height={32} /></g>, mid: []}),\n"
+        "  },\n"
+        "  goodPlate: {\n"
+        "    title: 'Nền vẽ tay hoàn chỉnh',\n"
+        "    bed: 'outdoor',\n"
+        "    rasterPlate: true,\n"
+        "    bounds: [-200, -200, 1280, 2120],\n"
+        "    zones: {bgY: 1100, mgY: [1540, 1760], fgY: 1860},\n"
+        "    render: (o) => ({back: <g><image href='plates/yard.png' x={-200} y={-200} width={1480} height={2320} /><circle cx={100} cy={100} r={4 + Math.sin(o.t)} /></g>, mid: []}),\n"
+        "  },\n"
+        "  goodVideoPlate: {\n"
+        "    title: 'Phố mưa động',\n"
+        "    bed: 'rain',\n"
+        "    videoPlate: {src: 'plates/rain.mp4', x: -200, y: -200, width: 1480, height: 2320, dur: 4.0},\n"
+        "    bounds: [-200, -200, 1280, 2120],\n"
+        "    zones: {bgY: 1100, mgY: [1540, 1760], fgY: 1860},\n"
+        "    render: () => ({back: <g />, mid: []}),\n"
+        "  },\n"
+        "};\n",
+        encoding="utf-8",
+    )
+    # Missing on-disk public/plates/yard.png & rain.mp4 -> goodPlate & goodVideoPlate MUST FAIL SE-06!
+    _run(["node", "scripts/lint.mjs", "design"], cwd=ep_short)
+    d_miss = json.loads((ep_short / "qa" / "lint.json").read_text(encoding="utf-8")).get("errors", [])
+    assert any("[SE-06]" in e and "goodPlate" in e and "missing on disk" in e for e in d_miss), f"missing public plate must fail SE-06:\n{d_miss}"
+    assert any("[SE-06]" in e and "goodVideoPlate" in e and "missing on disk" in e for e in d_miss), f"missing public videoPlate must fail SE-06:\n{d_miss}"
+
+    # Write real >=512B PNG & >=1024B MP4 -> goodPlate & goodVideoPlate pass SE-06..SE-10 (and SE-12 moves), while bad* fail SE-06!
+    yard_png.write_bytes(b"\x89PNG\r\n\x1a\n" + b"X" * 1024)
+    rain_mp4.write_bytes(b"\x00\x00\x00\x18ftypmp42" + b"V" * 2048)
+    _run(["node", "scripts/lint.mjs", "design"], cwd=ep_short)
+    d_lint = json.loads((ep_short / "qa" / "lint.json").read_text(encoding="utf-8"))
+    d_errs = d_lint.get("errors", [])
+    d_warns = d_lint.get("warns", [])
+    for bad_id in ("badNoImg", "badHttpsImg", "badMp4InSvgImg", "badTinyImg"):
+        assert any("[SE-06]" in e and bad_id in e for e in d_errs), f"{bad_id} must fail SE-06:\n{d_errs}"
+    for good_id in ("goodPlate", "goodVideoPlate"):
+        assert not any(any(code in e for code in ("[SE-06]", "[SE-07]", "[SE-08]", "[SE-09]", "[SE-10]")) and good_id in e for e in d_errs), (
+            f"{good_id} should pass SE-06..SE-10:\n{d_errs}"
+        )
+    assert not any("[SE-12]" in w and "goodVideoPlate" in w for w in d_warns), f"goodVideoPlate inherently moves and must not warn SE-12:\n{d_warns}"
+
+    # (d) Actor.leap & Actor.pop anchor validation, bounds/restraint CI, MO-08 liveness, and leap QA strip emission
+    (ep_short / "src" / "episode" / "shotlist.ts").write_text(
+        "import type {ShotDef} from '../engine';\n"
+        "export const SHOTS: ShotDef[] = [\n"
+        "  {\n"
+        "    name: 'bad_leap_and_pop',\n"
+        "    at: 's1',\n"
+        "    set: 'goodPlate',\n"
+        "    cam: [540, 1150, 1.0],\n"
+        "    actors: [{\n"
+        "      id: 'nhim', look: 'nhim', x: 540, y: 1650, s: 1.0, e: 'sad',\n"
+        "      leap: [{at: 's1@khongco', h: 65}, {at: 0.1, h: 400, dur: 0.8}, {at: 0.2, h: 60, dur: 0.8}, {at: 9.0, h: 60}],\n"
+        "      pop: [{at: 0.2, amp: 0.55}],\n"
+        "    }],\n"
+        "  },\n"
+        "];\n",
+        encoding="utf-8",
+    )
+    _run(["node", "scripts/lint.mjs", "shots"], cwd=ep_short)
+    s_bad = json.loads((ep_short / "qa" / "lint.json").read_text(encoding="utf-8"))
+    sb_errs = "\n".join(s_bad.get("errors", []))
+    sb_warns = "\n".join(s_bad.get("warns", []))
+    assert "[AN-01]" in sb_errs and ".leap" in sb_errs, f"bad leap anchor must fail AN-01:\n{sb_errs}"
+    assert "[MO-17]" in sb_errs, f"out-of-bounds/overlapping leap must fail MO-17:\n{sb_errs}"
+    assert "[MO-15]" in sb_errs, f"excessive pop amp must fail MO-15:\n{sb_errs}"
+    assert "[KY-01]" in sb_errs, f"late leap outside shot must fail KY-01:\n{sb_errs}"
+    assert "[MO-15]" in sb_warns, f"leap/pop on sad expression should warn MO-15:\n{sb_warns}"
+
+    # Out-of-order non-overlapping leaps (e.g. [1.6, 0.2]) must sort cleanly without false MO-17 overlap error!
+    (ep_short / "src" / "episode" / "shotlist.ts").write_text(
+        "import type {ShotDef} from '../engine';\n"
+        "export const SHOTS: ShotDef[] = [\n"
+        "  {\n"
+        "    name: 'good_leap_pop',\n"
+        "    at: 's1',\n"
+        "    set: 'goodPlate',\n"
+        "    cam: [540, 1150, 1.0],\n"
+        "    actors: [{id: 'nhim', look: 'nhim', x: 540, y: 1650, s: 1.0, e: 'joy', leap: [{at: 1.6, h: 65, dur: 0.7}, {at: 's1@Nhím', h: 65, dur: 0.7}], pop: [{at: 's1@học', amp: 0.11}]}],\n"
+        "  },\n"
+        "];\n",
+        encoding="utf-8",
+    )
+    _run(["node", "scripts/lint.mjs", "shots"], cwd=ep_short)
+    s_ok = json.loads((ep_short / "qa" / "lint.json").read_text(encoding="utf-8"))
+    assert not any(any(c in e for c in ("[AN-01]", "[MO-15]", "[MO-17]", "[KY-01]")) for e in s_ok.get("errors", [])), f"valid leap/pop failed:\n{s_ok}"
+    assert not any("[MO-08]" in w for w in s_ok.get("warns", [])), f"valid leap/pop should count as live motion:\n{s_ok}"
+    strips_needed = json.loads((ep_short / "qa" / "strips_needed.json").read_text(encoding="utf-8"))
+    assert any(st.get("why") == "leap" for st in strips_needed), f"expected leap strip in strips_needed.json: {strips_needed}"
+
+    print("[PASS] Test 10: v6.1.0 rasterPlate on-disk/bounds CI + rough/Pixi syntax + anim.ts squash-stretch & leap/pop restraint verified")
+
+
+def test_11_anti_bypass_hardening(ep_short: Path, tmp: Path) -> None:
+    """Verify v6.1.0 anti-bypass hardening across sv_guard.py (H1/H2/H4/H6), sv_log_lint.py (LG-05/09/11), and sv_gate.py."""
+    # 1. H1 blocks editing src/anim.ts and src/math.ts
+    for ro_rel in ("src/anim.ts", "src/math.ts", "src/design/Sheets.tsx", "package.json"):
+        res = _invoke_hook({
+            "hookEventName": "PreToolUse",
+            "cwd": str(ep_short),
+            "toolCall": {"name": "edit_file", "args": {"Path": str(ep_short / ro_rel)}},
+        })
+        assert res["decision"] == "deny" and "H1" in res["reason"], f"H1 should deny {ro_rel}: {res}"
+
+    # 2. H2 blocks direct write_file to qa/review/00.json & qa/design/plate_stats.json, while allowing qa/blind_review/rev_1.jsonl
+    for imm_rel in ("qa/review/00.json", "qa/design/plate_stats.json", "qa/blind_review/manifest.json"):
+        res = _invoke_hook({
+            "hookEventName": "PreToolUse",
+            "cwd": str(ep_short),
+            "toolCall": {"name": "write_file", "args": {"Path": str(ep_short / imm_rel)}},
+        })
+        assert res["decision"] == "deny" and "H2" in res["reason"], f"H2 should deny {imm_rel}: {res}"
+
+    res_batch_ok = _invoke_hook({
+        "hookEventName": "PreToolUse",
+        "cwd": str(ep_short),
+        "toolCall": {"name": "write_file", "args": {"Path": str(ep_short / "qa" / "blind_review" / "rev_1.jsonl")}},
+    })
+    assert res_batch_ok["decision"] == "allow", f"Reviewer batch input rev_1.jsonl must stay writable: {res_batch_ok}"
+
+    # 3. H4 allows read-only python -c / node -e diagnostics, while blocking mutating inline scripts & shell redirects
+    for ok_read_cmd in (
+        'python -c "import json; print(len(json.load(open(\'qa/lint.json\'))[\'errors\']))"',
+        'node -e "console.log(require(\'fs\').readFileSync(\'standards/pacing.json\', \'utf8\').length)"',
+    ):
+        res = _invoke_hook({
+            "hookEventName": "PreToolUse",
+            "cwd": str(ep_short),
+            "toolCall": {"name": "run_command", "args": {"CommandLine": ok_read_cmd}},
+        })
+        assert res["decision"] == "allow", f"H4 must allow read-only diagnostic `{ok_read_cmd}`: {res}"
+
+    for bad_cmd in (
+        'python -c "open(\'standards/pacing.json\', \'w\').write(\'{}\')"',
+        'python -c "from pathlib import Path; Path(\'qa/lint.json\').write_text(\'{}\')"',
+        'node -e "require(\'fs\').writeFileSync(\'qa/review/00.json\', \'{}\')"',
+        'Copy-Item fake.json qa/design/plate_stats.json',
+    ):
+        res = _invoke_hook({
+            "hookEventName": "PreToolUse",
+            "cwd": str(ep_short),
+            "toolCall": {"name": "run_command", "args": {"CommandLine": bad_cmd}},
+        })
+        assert res["decision"] == "deny" and "H4" in res["reason"], f"H4 should deny `{bad_cmd}`: {res}"
+
+    # 4. H6 G4 requires reading BOTH cast sheet AND set sheet when both exist on disk
+    t_cast_only = tmp / "transcript_g4_cast_only.jsonl"
+    t_cast_only.write_text(
+        json.dumps({
+            "source": "MODEL",
+            "type": "PLANNER_RESPONSE",
+            "tool_calls": [{"name": "read_file", "args": {"Path": json.dumps(str(ep_short / "qa" / "design" / "cast_episode_p1_v.jpg"))}}],
+        }) + "\n",
+        encoding="utf-8",
+    )
+    res_g4_partial = _invoke_hook({
+        "hookEventName": "PreToolUse",
+        "cwd": str(ep_short),
+        "transcriptPath": str(t_cast_only),
+        "toolCall": {"name": "run_command", "args": {"CommandLine": "python scripts/sv_cli.py gate pass G4 --actor coord-1"}},
+    })
+    assert res_g4_partial["decision"] == "deny" and "H6" in res_g4_partial["reason"], f"H6 G4 cast-only must deny: {res_g4_partial}"
+
+    t_both = tmp / "transcript_g4_both.jsonl"
+    t_both.write_text(
+        json.dumps({
+            "source": "MODEL",
+            "type": "PLANNER_RESPONSE",
+            "tool_calls": [
+                {"name": "read_file", "args": {"Path": json.dumps(str(ep_short / "qa" / "design" / "cast_episode_p1_v.jpg"))}},
+                {"name": "read_file", "args": {"Path": json.dumps(str(ep_short / "qa" / "design" / "overview_sets.jpg"))}},
+            ],
+        }) + "\n",
+        encoding="utf-8",
+    )
+    res_g4_both = _invoke_hook({
+        "hookEventName": "PreToolUse",
+        "cwd": str(ep_short),
+        "transcriptPath": str(t_both),
+        "toolCall": {"name": "run_command", "args": {"CommandLine": "python scripts/sv_cli.py gate pass G4 --actor coord-1"}},
+    })
+    assert res_g4_both["decision"] == "allow", f"H6 G4 with both cast & set sheets should allow: {res_g4_both}"
+
+    # 5. Direct `python scripts/sv_gate.py pass G1` without sv_cli.py is blocked in v6 episodes
+    r_direct = _run([PY, "scripts/sv_gate.py", "pass", "G1"], cwd=ep_short)
+    assert r_direct.returncode != 0 and "BYPASS_BLOCKED" in (r_direct.stdout + r_direct.stderr), (
+        f"direct sv_gate.py pass must be blocked: {r_direct.stdout} {r_direct.stderr}"
+    )
+
+    # 6. LG-05 phase-aware cross-check:
+    # (a) same-phase design errors in qa/lint.json -> MUST FAIL G4 executor Log-CI
+    (ep_short / "qa" / "lint.json").write_text(json.dumps({"phase": "design", "errors": ["[SE-06] unresolved error"], "warns": []}), encoding="utf-8")
+    r_lg05 = _run([PY, "scripts/sv_cli.py", "ci", "log", "--stage", "G4", "--role", "executor", "--json"], cwd=ep_short)
+    d_lg05 = json.loads(r_lg05.stdout)
+    assert r_lg05.returncode == 2 and any("[LG-05]" in e for e in d_lg05["errors"]), f"LG-05 must catch same-phase design lint errors: {d_lg05}"
+
+    # (b) cross-phase loophole: leftover phase='design', errors=[] MUST NOT satisfy a fake G5 ('shots') executor run without ci_lint pass
+    (ep_short / "qa" / "lint.json").write_text(json.dumps({"phase": "design", "errors": [], "warns": []}), encoding="utf-8")
+    sh_skill = str(SUITE / "skills" / "sv-short-production" / "SKILL.md")
+    r_fake_g5 = _log_init(ep_short, "executor", "exec-fake-g5", "G5", "Fake shots CI")
+    _log_step(ep_short, r_fake_g5, "read_skill", target=sh_skill, note="Read Short production skill before shots")
+    _log_step(ep_short, r_fake_g5, "run_tool", target="shots", cmd="sv_cli.py ci shots", exit_code=0, note="Claimed shots CI passed without running it")
+    _log_complete(ep_short, r_fake_g5, "pass", "src/episode/shotlist.ts", "Completed shotlist")
+    r_lg05_mm = _run([PY, "scripts/sv_cli.py", "ci", "log", "--stage", "G5", "--role", "executor", "--actor", "exec-fake-g5", "--json"], cwd=ep_short)
+    d_lg05_mm = json.loads(r_lg05_mm.stdout)
+    assert r_lg05_mm.returncode == 2 and any("[LG-05]" in e and "phase" in e for e in d_lg05_mm["errors"]), (
+        f"LG-05 must reject leftover phase='design' qa/lint.json for G5 shots: {d_lg05_mm}"
+    )
+
+    # (c) cross-phase non-regression: once ci_lint.jsonl has a genuine passing 'design' record, later G5 phase='shots' errors in qa/lint.json MUST NOT break G4 Log-CI
+    d_skill = str(SUITE / "skills" / "sv-short-design" / "SKILL.md")
+    r_g4_cur = _log_init(ep_short, "executor", "exec-design-v61", "G4", "Re-log G4 on current sets.tsx")
+    _log_step(ep_short, r_g4_cur, "read_skill", target=d_skill, note="Read Short design skill for G4 verification")
+    _log_step(ep_short, r_g4_cur, "run_tool", target="design", cmd="sv_cli.py ci design", exit_code=0, note="Design CI passed cleanly on current sets")
+    _log_complete(ep_short, r_g4_cur, "pass", "src/episode/sets.tsx", "Locked current sets.tsx SHA")
+    ci_lint_p = ep_short / "logs" / "ci_lint.jsonl"
+    _run(
+        [PY, "-c", "import sys; sys.path.insert(0, 'scripts'); import sv_log as L; from pathlib import Path; L.log_ci_event(Path('.'), stage='G4', domain='design', actor_id='sv-ci', command='lint design', exit_code=0, metrics={}, note='design CI PASS')"],
+        cwd=ep_short,
+    )
+    assert ci_lint_p.is_file()
+    (ep_short / "qa" / "lint.json").write_text(json.dumps({"phase": "shots", "errors": ["[SH-02] later G5 shot error"], "warns": []}), encoding="utf-8")
+    r_lg05_g4_ok = _run([PY, "scripts/sv_cli.py", "ci", "log", "--stage", "G4", "--role", "executor", "--actor", "exec-design-v61", "--json"], cwd=ep_short)
+    d_lg05_g4_ok = json.loads(r_lg05_g4_ok.stdout)
+    assert r_lg05_g4_ok.returncode == 0 and d_lg05_g4_ok["ok"], (
+        f"G4 executor Log-CI should stay green when ci_lint recorded design PASS even after G5 overwrote qa/lint.json: {d_lg05_g4_ok}"
+    )
+    (ep_short / "qa" / "lint.json").write_text(json.dumps({"phase": "all", "errors": [], "warns": []}), encoding="utf-8")
+
+    g4_rev = ep_short / "gates" / "G4.review.md"
+    saved_g4 = g4_rev.read_text(encoding="utf-8")
+    g4_rev.unlink()
+    r_lg11 = _run([PY, "scripts/sv_cli.py", "ci", "log", "--stage", "G4", "--role", "orchestrator", "--json"], cwd=ep_short)
+    d_lg11 = json.loads(r_lg11.stdout)
+    assert r_lg11.returncode == 2 and any("[LG-11]" in e for e in d_lg11["errors"]), f"LG-11 must fail when G4.review.md is missing: {d_lg11}"
+    g4_rev.write_text(saved_g4, encoding="utf-8")
+
+    print("[PASS] Test 11: Anti-bypass hardening (H1/H2/H4/H6 + direct sv_gate block + LG-05/LG-11 disk cross-checks) verified")
+
+
 def main() -> int:
     t0 = time.perf_counter()
     test_1_validate_skills()
@@ -636,6 +990,8 @@ def main() -> int:
         test_7_general_physics_and_partial_body_ci(ep_short)
         test_8_blind_pack_continuity(ep_short)
         test_9_long_unit_gate_cli_and_lg10(ep_long)
+        test_10_v61_raster_plate_and_squash_stretch(ep_short)
+        test_11_anti_bypass_hardening(ep_short, tmp)
     finally:
         for sub in ("ep-short", "ep-long"):
             nm = tmp / sub / "node_modules"
@@ -647,7 +1003,7 @@ def main() -> int:
         shutil.rmtree(tmp, ignore_errors=True)
 
     dt = time.perf_counter() - t0
-    print(f"\nALL 9/9 v6.0.0 END-TO-END VERIFICATION TESTS PASSED in {dt:.2f}s!")
+    print(f"\nALL 11/11 v6.1.0 END-TO-END VERIFICATION TESTS PASSED in {dt:.2f}s!")
     return 0
 
 

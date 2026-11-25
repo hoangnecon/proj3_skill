@@ -94,6 +94,8 @@ const fontStub = {
         ? 'export const loadFont = () => ({fontFamily: "Be Vietnam Pro"});'
         : `export const AbsoluteFill = () => null;
 export const Audio = () => null;
+export const OffthreadVideo = () => null;
+export const Loop = ({children}) => children ?? null;
 export const staticFile = (s) => s;
 export const useCurrentFrame = () => 0;
 export const useVideoConfig = () => ({fps: 30, width: 1080, height: 1920, durationInFrames: 900});

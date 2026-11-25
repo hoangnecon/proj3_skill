@@ -313,13 +313,94 @@ if (phase !== 'shots') {
       if (st.shapes < TH.insertShapes) err('SE-06', `${id} (insert): ${st.shapes} shapes < ${TH.insertShapes}`);
       if (st.texts < 1) err('SE-07', `${id} (insert): no diegetic text`);
     } else {
-      if (st.shapes < TH.shapes) err('SE-06', `${id}: ${st.shapes} shapes < ${TH.shapes} (exemplar median). Add fixtures, clutter, wear — see sets.md §Detail budget`);
-      if (st.colours < TH.colours) err('SE-08', `${id}: ${st.colours} distinct colours < ${TH.colours}`);
-      if (st.texts < TH.texts) err('SE-07', `${id}: ${st.texts} diegetic texts < ${TH.texts} (signs, labels, notices — one must be a gag)`);
-      if (st.halftone < TH.halftone) err('SE-09', `${id}: halftone texture used ${st.halftone}× < ${TH.halftone} (walls/floor/shade side)`);
+      let latestPlateSrcMtime = fs.statSync('src/episode/sets.tsx').mtimeMs;
+      const isBakedPlate = Boolean(d.rasterPlate || d.videoPlate);
+      const bw = Array.isArray(d.bounds) && d.bounds.length === 4 ? Math.max(1, d.bounds[2] - d.bounds[0]) : W;
+      const bh = Array.isArray(d.bounds) && d.bounds.length === 4 ? Math.max(1, d.bounds[3] - d.bounds[1]) : H;
+      if (d.videoPlate) {
+        const vp = d.videoPlate;
+        const rawSrc = String(vp?.src ?? '').trim();
+        if (!rawSrc) {
+          err('SE-06', `${id} (videoPlate): videoPlate.src is empty`);
+        } else if (/^(?:https?:|data:)/i.test(rawSrc)) {
+          err('SE-06', `${id} (videoPlate): external or inline URL "${rawSrc}" is forbidden — store baked loop locally under public/`);
+        } else if (!/\.(?:mp4|webm)$/i.test(rawSrc.split(/[?#]/)[0])) {
+          err('SE-06', `${id} (videoPlate): "${rawSrc}" must be a .mp4 or .webm loop (use rasterPlate: true + <image> for static PNG/JPG/WebP)`);
+        } else {
+          const cleanRel = decodeURIComponent(rawSrc.split(/[?#]/)[0]).replace(/^\/+/, '').replace(/^public[\\/]+/, '');
+          const diskPath = path.resolve('public', cleanRel);
+          const pubRoot = path.resolve('public');
+          if (!diskPath.startsWith(pubRoot + path.sep) || !fs.existsSync(diskPath) || !fs.statSync(diskPath).isFile()) {
+            err('SE-06', `${id} (videoPlate): videoPlate.src "${rawSrc}" missing on disk at public/${cleanRel} — bake the loop before passing design CI`);
+          } else {
+            const stFile = fs.statSync(diskPath);
+            if (stFile.size < 1024) {
+              err('SE-06', `${id} (videoPlate): public/${cleanRel} is only ${stFile.size} bytes (< 1024 B placeholder) — bake a real loop MP4/WebM`);
+            }
+            if (stFile.mtimeMs > latestPlateSrcMtime) latestPlateSrcMtime = stFile.mtimeMs;
+          }
+        }
+        if (!((vp?.width ?? 0) >= bw * 0.85 && (vp?.height ?? 0) >= bh * 0.85)) {
+          err('SE-06', `${id} (videoPlate): videoPlate size (${vp?.width ?? 0}x${vp?.height ?? 0}) covers < 85% of set bounds (${Math.round(bw)}x${Math.round(bh)} px)`);
+        }
+        if (vp?.dur !== undefined && !(Number.isFinite(vp.dur) && vp.dur >= 0.5 && vp.dur <= 30)) {
+          err('SE-06', `${id} (videoPlate): videoPlate.dur=${vp.dur} must be between 0.5 and 30 seconds`);
+        }
+      }
+      if (d.rasterPlate && !d.videoPlate) {
+        const imgTags = Array.isArray(st.imageTags) ? st.imageTags : [];
+        if ((st.images ?? 0) < 1 || imgTags.length < 1) {
+          err('SE-06', `${id} (rasterPlate): renders 0 <image> elements — mount the pre-baked plate via <image href={staticFile(...)} /> or remove rasterPlate: true`);
+        } else {
+          let hasFullBackdrop = false;
+          for (const im of imgTags) {
+            const rawHref = String(im.href ?? '').trim();
+            if (!rawHref) {
+              err('SE-06', `${id} (rasterPlate): <image> has empty href`);
+              continue;
+            }
+            if (/^https?:/i.test(rawHref)) {
+              err('SE-06', `${id} (rasterPlate): external URL "${rawHref}" is forbidden — bake and store plate locally under public/`);
+              continue;
+            }
+            const cleanBase = rawHref.split(/[?#]/)[0];
+            if (/\.(?:mp4|webm|mov)$/i.test(cleanBase)) {
+              err('SE-06', `${id} (rasterPlate): SVG <image href="${rawHref}"> cannot play video in Chromium — use SetDef.videoPlate: {src, x, y, width, height, dur} instead`);
+              continue;
+            }
+            if (!/^data:/i.test(rawHref)) {
+              const cleanRel = decodeURIComponent(cleanBase).replace(/^\/+/, '').replace(/^public[\\/]+/, '');
+              const diskPath = path.resolve('public', cleanRel);
+              const pubRoot = path.resolve('public');
+              if (!diskPath.startsWith(pubRoot + path.sep) || !fs.existsSync(diskPath) || !fs.statSync(diskPath).isFile()) {
+                err('SE-06', `${id} (rasterPlate): <image href="${rawHref}"> missing on disk at public/${cleanRel} — bake the plate before passing design CI`);
+              } else {
+                const stFile = fs.statSync(diskPath);
+                if (stFile.size < 512) {
+                  err('SE-06', `${id} (rasterPlate): public/${cleanRel} is only ${stFile.size} bytes (< 512 B placeholder) — bake a real high-res plate`);
+                }
+                if (stFile.mtimeMs > latestPlateSrcMtime) latestPlateSrcMtime = stFile.mtimeMs;
+              }
+            } else if (rawHref.length < 600) {
+              err('SE-06', `${id} (rasterPlate): inline data: <image> is too small (${rawHref.length} chars) — cannot use a 1x1 pixel stub to bypass SE-06`);
+            }
+            if ((im.width ?? 0) >= bw * 0.85 && (im.height ?? 0) >= bh * 0.85) {
+              hasFullBackdrop = true;
+            }
+          }
+          if (!hasFullBackdrop) {
+            err('SE-06', `${id} (rasterPlate): no <image> covers >= 85% of set bounds (${Math.round(bw)}x${Math.round(bh)} px) — a tiny icon cannot substitute for a full stage plate`);
+          }
+        }
+      } else if (!isBakedPlate) {
+        if (st.shapes < TH.shapes) err('SE-06', `${id}: ${st.shapes} shapes < ${TH.shapes} (exemplar median). Add fixtures, clutter, wear — see sets.md §Detail budget`);
+        if (st.colours < TH.colours) err('SE-08', `${id}: ${st.colours} distinct colours < ${TH.colours}`);
+        if (st.texts < TH.texts) err('SE-07', `${id}: ${st.texts} diegetic texts < ${TH.texts} (signs, labels, notices — one must be a gag)`);
+        if (st.halftone < TH.halftone) err('SE-09', `${id}: halftone texture used ${st.halftone}× < ${TH.halftone} (walls/floor/shade side)`);
+      }
       const pl = plateStats[id];
       if (!pl) err('SE-13', `${id}: plate not measured yet — run node scripts/design.mjs`);
-      else if ((pl.measured ?? pl.mtime) * 1000 < fs.statSync('src/episode/sets.tsx').mtimeMs) err('SE-13', `${id}: plate is older than src/episode/sets.tsx — re-render with node scripts/design.mjs --only set:${id}`);
+      else if ((pl.measured ?? pl.mtime) * 1000 < latestPlateSrcMtime) err('SE-13', `${id}: plate is older than src/episode/sets.tsx or public/ plate image — re-render with node scripts/design.mjs --only set:${id}`);
       else if (pl.empty_mid > 8) err('SE-13', `${id}: ${pl.empty_mid} empty 180-px cells in the visible middle of the plate (max 8; rows ${pl.rows}) — detail must be IN FRAME, not off-screen. Fill the wall band: notices, fixtures, clutter (sets.md §3)`);
       else if (pl.empty_mid > 5) warn('SE-13', `${id}: ${pl.empty_mid} empty cells in the middle of the plate (rows ${pl.rows}) — look for bare wall`);
       // SE-16: Perceptual Visual Quality Gate from plate_stats.json (v4.3 fields; graceful no-op if absent)
@@ -345,7 +426,7 @@ if (phase !== 'shots') {
         }
       }
       if (!st.moves) warn('SE-12', `${id}: nothing in the set changes over time — add life driven by o.t (LED pulse, fan, smoke, leaves, clock; sets.md §7)`);
-      if (st.glow < TH.glow) err('SE-10', `${id}: no light source glow (url(#glowY)) — every location has a visible light source`);
+      if (!isBakedPlate && st.glow < TH.glow) err('SE-10', `${id}: no light source glow (url(#glowY)) — every location has a visible light source`);
       // SE-14: diegetic sign clipped on set plate camera
       if (!lineWaived(setsSrc, 'SE-14', id)) {
         const cam = d.plateCam ?? [W / 2, H / 2 + 190, 1];
@@ -364,7 +445,7 @@ if (phase !== 'shots') {
         }
       }
       // SE-19: Anti-Clone-Stamp Botanical & Prop Variety Guard
-      if (!lineWaived(setsSrc, 'SE-19', id)) {
+      if (!isBakedPlate && !lineWaived(setsSrc, 'SE-19', id)) {
         const L = d.render({t: 1, ...(d.plateOpts ?? {})});
         const setSvg = renderToStaticMarkup(
           React.createElement('svg', null, L.far, L.back, ...(L.mid ?? []).map((m) => React.createElement('g', {key: m.key}, m.node)), L.fg),
@@ -771,6 +852,8 @@ if (phase !== 'design') {
       for (const k of ['p', 'e', 'view', 'face', 'legs', 'arms']) if (Array.isArray(a[k])) a[k].forEach(([, tt]) => visitTT(tt, `${at}.${k}`));
       for (const [x, y] of a.talk ?? []) { visitTT(x, at + '.talk'); visitTT(y, at + '.talk'); }
       for (const r of a.reach ?? []) visitTT(r.at, at + '.reach');
+      for (const lp of a.leap ?? []) visitTT(lp.at, at + '.leap');
+      for (const pp of a.pop ?? []) visitTT(pp.at, at + '.pop');
       for (const w of a.path ?? []) visitTT(w[2], at + '.path');
       visitTT(a.enter, at + '.enter'); visitTT(a.exit, at + '.exit');
       if (a.ride && !(s.actors ?? []).some((c) => c.id === a.ride)) err('MO-07', `${at}: rides '${a.ride}' who is not in the shot`);
@@ -828,6 +911,8 @@ if (phase !== 'design') {
       if (A.pushTarget) n += 1;
       if (A.ride) n += 1;
       if (Array.isArray(A.reach) && A.reach.length) n += A.reach.length;
+      if (Array.isArray(A.leap) && A.leap.length) n += A.leap.length;
+      if (Array.isArray(A.pop) && A.pop.length) n += A.pop.length;
       for (const k of ['p', 'e', 'view', 'face', 'legs', 'arms']) {
         if (Array.isArray(A[k]) && A[k].length >= 2) n += 1;
       }
@@ -1030,7 +1115,7 @@ if (phase !== 'design') {
       err('CA-04', `${tag}: first shot in '${r.set}' is not an establishing frame (zoom ${Math.min(k0, k1)} > 1.2)`);
     // something must change in every shot (actor motion, camera move, set state, talk, expression, overlay)
     const lives = r.cam2 || (Array.isArray(s.camKeys) && s.camKeys.length >= 2) || (s.keys && Object.keys(s.keys).length) || (s.over ?? []).length || s.of || s.punch ||
-      (s.actors ?? []).some((A) => A.path || A.reach || A.talk || A.hop || A.shake || A.pant || A.ride || A.arcH || A.mount || A.pushTarget || (A.fx && A.fx.length) || A.wind || ['p', 'e', 'legs', 'arms', 'view'].some((k) => Array.isArray(A[k]))) ||
+      (s.actors ?? []).some((A) => A.path || A.reach || (A.leap && A.leap.length) || (A.pop && A.pop.length) || A.talk || A.hop || A.shake || A.pant || A.ride || A.arcH || A.mount || A.pushTarget || (A.fx && A.fx.length) || A.wind || ['p', 'e', 'legs', 'arms', 'view'].some((k) => Array.isArray(A[k]))) ||
       (s.extras ?? []).some((E) => (E.path && E.path.length > 1) || Array.isArray(E.pose) || Array.isArray(E.expr));
     if (!lives && !waived('MO-08', r.name)) warn('MO-08', `${tag}: nothing moves or changes for ${dur.toFixed(1)} s — add a camera drift, an expression key or a gesture`);
     // MO-16: Long-Shot Choreography Density Guard (long_16x9 rich multi-beat shots > 5.0 s)
@@ -1124,6 +1209,64 @@ if (phase !== 'design') {
         for (const t of tt) strips.push({name: `s${String(i).padStart(2, '0')}_${a.id}_legs`, t0: +Math.max(r.t0, t - 0.5).toFixed(2), t1: +Math.min(r.t1, t + 0.9).toFixed(2), n: 8, why: 'sit/stand'});
       }
       if (A.ride) strips.push({name: `s${String(i).padStart(2, '0')}_${a.id}_ride`, t0: r.t0, t1: +Math.min(r.t1, r.t0 + 2.5).toFixed(2), n: 8, why: 'piggyback'});
+      if (Array.isArray(A.leap) && A.leap.length > 0) {
+        if (A.leap.length > 2 && !waived('MO-17', r.name)) {
+          warn('MO-17', `${tag}: actor '${a.id}' has ${A.leap.length} leaps in one ${dur.toFixed(1)}s shot (max 2 recommended) — avoid bouncy slapstick spam`);
+          markHot(r.i, 'MO-17');
+        }
+        const resolvedLeaps = [];
+        for (const [li, lp] of A.leap.entries()) {
+          let lt = NaN;
+          try { lt = typeof lp.at === 'number' ? r.t0 + lp.at : P.tAt(lp.at); } catch {}
+          if (!Number.isFinite(lt)) continue;
+          const lh = lp.h ?? 70;
+          const ldur = lp.dur ?? 0.9;
+          if (lt < r.t0 - 0.05 || lt > r.t1 - 0.1) {
+            err('KY-01', `${tag}: actor '${a.id}' leap[${li}] fires at ${lt.toFixed(2)}s outside shot window [${r.t0.toFixed(2)}..${r.t1.toFixed(2)}]s`);
+          }
+          if (!(lh >= 12 && lh <= 220) || !(ldur >= 0.25 && ldur <= 1.8)) {
+            err('MO-17', `${tag}: actor '${a.id}' leap[${li}] has out-of-bounds physics (h=${lh}, dur=${ldur}; expected h in 12..220 px, dur in 0.25..1.8 s)`);
+          }
+          const curExpr = scalarKeyAt(A.e, 'neutral', r, P, lt + 0.1);
+          if ((curExpr === 'sad' || curExpr === 'cry' || curExpr === 'deadpan') && !waived('MO-15', r.name)) {
+            warn('MO-15', `${tag}: actor '${a.id}' triggers cartoon leap while expression is '${curExpr}' — verify story-motivation restraint (actor-api.md)`);
+            markHot(r.i, 'MO-15');
+          }
+          resolvedLeaps.push({li, lt, ldur});
+          strips.push({name: `s${String(i).padStart(2, '0')}_${a.id}_leap${li ? li + 1 : ''}`, t0: +Math.max(r.t0, lt - 0.1).toFixed(2), t1: +Math.min(r.t1, lt + Math.max(0.25, ldur) + 0.15).toFixed(2), n: 8, why: 'leap'});
+        }
+        resolvedLeaps.sort((p, q) => p.lt - q.lt);
+        let prevEnd = -Infinity;
+        for (const item of resolvedLeaps) {
+          if (item.lt < prevEnd && !waived('MO-17', r.name)) {
+            err('MO-17', `${tag}: actor '${a.id}' leap[${item.li}] at ${item.lt.toFixed(2)}s overlaps another leap ending at ${prevEnd.toFixed(2)}s`);
+          }
+          prevEnd = Math.max(prevEnd, item.lt + Math.max(0.25, item.ldur) * 0.85);
+        }
+      }
+      if (Array.isArray(A.pop) && A.pop.length > 0) {
+        if (A.pop.length > 2 && !waived('MO-15', r.name)) {
+          warn('MO-15', `${tag}: actor '${a.id}' triggers ${A.pop.length} pop impulses in one ${dur.toFixed(1)}s shot (max 2 recommended) — never bounce calm dialogue`);
+          markHot(r.i, 'MO-15');
+        }
+        for (const [pi, pp] of A.pop.entries()) {
+          let pt = NaN;
+          try { pt = typeof pp.at === 'number' ? r.t0 + pp.at : P.tAt(pp.at); } catch {}
+          if (!Number.isFinite(pt)) continue;
+          const pamp = pp.amp ?? 0.12;
+          if (pt < r.t0 - 0.05 || pt > r.t1 - 0.1) {
+            err('KY-01', `${tag}: actor '${a.id}' pop[${pi}] fires at ${pt.toFixed(2)}s outside shot window [${r.t0.toFixed(2)}..${r.t1.toFixed(2)}]s`);
+          }
+          if (!(pamp >= 0.02 && pamp <= 0.22)) {
+            err('MO-15', `${tag}: actor '${a.id}' pop[${pi}] amp=${pamp} outside restrained range [0.02..0.22] (recommended 0.08..0.14)`);
+          }
+          const curExpr = scalarKeyAt(A.e, 'neutral', r, P, pt + 0.05);
+          if (pamp >= 0.10 && (curExpr === 'sad' || curExpr === 'cry' || curExpr === 'deadpan') && !waived('MO-15', r.name)) {
+            warn('MO-15', `${tag}: actor '${a.id}' triggers squash-pop (amp=${pamp}) on '${curExpr}' expression — verify story-motivation restraint`);
+            markHot(r.i, 'MO-15');
+          }
+        }
+      }
       if (A.seatH !== undefined && !waived('MO-12', r.name)) {
         const bed = P.SETS[r.set]?.bed;
         const hasSeatProp = (s.extras ?? []).some((e) => /bench|stool|chair|desk/i.test(e.k));

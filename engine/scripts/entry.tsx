@@ -23,14 +23,27 @@ export const setStats = (id: string) => {
     return {L, html: renderToStaticMarkup(<svg>{L.far}{L.back}{L.mid.map((m) => <g key={m.key}>{m.node}</g>)}{L.fg}</svg>)};
   };
   const {L, html} = mk(1);
-  // "something always moves": the plate must differ between two moments 1.37 s apart
-  const moves = html !== mk(2.37).html;
+  // "something always moves": the plate must differ between two moments 1.37 s apart (or run a looped videoPlate)
+  const moves = Boolean(def.videoPlate) || html !== mk(2.37).html;
   const count = (re: RegExp) => (html.match(re) ?? []).length;
   const fills = new Set((html.match(/fill="(#[0-9a-fA-F]{3,8})"/g) ?? []).map((x) => x.toLowerCase()));
   const texts = [...html.matchAll(/<text[^>]*>([^<]*)</g)].map((m) => m[1]).filter((s) => s.trim().length > 0);
+  const imageTags = [...html.matchAll(/<image\b([^>]*?)>/g)].map((m) => {
+    const attrs = m[1] ?? '';
+    const getAttr = (re: RegExp) => re.exec(attrs)?.[1] ?? null;
+    const href = getAttr(/\b(?:xlink:)?href="([^"]*)"/);
+    const num = (k: string) => {
+      const v = getAttr(new RegExp(`\\b${k}="([^"]*)"`));
+      return v !== null && Number.isFinite(Number(v)) ? Number(v) : null;
+    };
+    return {href, x: num('x'), y: num('y'), width: num('width'), height: num('height')};
+  });
   return {
     id,
     shapes: count(/<(path|rect|circle|ellipse|polygon|line|text)\b/g),
+    images: imageTags.length,
+    imageTags,
+    videoPlate: def.videoPlate ?? null,
     colours: fills.size,
     texts: texts.length,
     textSamples: texts.slice(0, 12),

@@ -139,6 +139,21 @@ def main() -> None:
             else:
                 report["episode_node_modules"] = "missing"
                 issues.append(f"episode node_modules missing in {ep} — run: npm install (or re-run new_episode.py)")
+    # Optional atmospheric-plate baker dependencies (non-blocking; required only when using SetDef.rasterPlate/videoPlate baker)
+    rp_candidates = [
+        Path(os.environ["SV_ROUGH_PIXI_MODULES"]) if os.environ.get("SV_ROUGH_PIXI_MODULES") else None,
+        Path(os.environ["SV_NODE_MODULES"]) if os.environ.get("SV_NODE_MODULES") else None,
+        (Path(args.episode_dir) / "node_modules") if args.episode_dir else None,
+    ]
+    has_rp = any(
+        c is not None and (c / "roughjs").exists() and (c / "pixi.js").exists() and (c / "pixi-filters").exists()
+        for c in rp_candidates
+    )
+    report["atmospheric_plates_kit"] = (
+        "installed"
+        if has_rp
+        else "optional (install roughjs pixi.js pixi-filters or set SV_ROUGH_PIXI_MODULES only if baking rasterPlate/videoPlate)"
+    )
 
     # 3. FFmpeg / FFprobe
     ff_dir = find_ffmpeg_dir()
